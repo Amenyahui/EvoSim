@@ -1,0 +1,169 @@
+extends: ../config.yaml
+simulation_metadata:
+  num_steps_per_episode: 200
+parameters:
+  plant_sizes:
+  - 50
+  - 50
+  insect_sizes:
+  - 10
+  n: 2
+  record_every: 1
+  seed: 20261021
+  mutation_rate: 0.01
+  mutation_sd: 0.05
+  mu_A: 0.01
+  sigma_A: 0.05
+  mu_Z: 0.01
+  sigma_Z: 0.05
+  plant_cost: 0.125
+  insect_cost: 0.125
+  sP0: 0.1
+  sI0: 0.0
+  candidate_size: 8
+  olfaction_mode: template
+  shuffle_voc: false
+  mapping: identity
+  B:
+  - - 1.0
+    - 0.0
+  - - 0.0
+    - 1.0
+  weights:
+  - 0.5
+  - 0.5
+  sigma: 0.2
+  b: 1.0
+  tau: 1.0
+  outside_utility: 0.0
+  unmatched_insect_fitness: 0.0
+  rho_voc: 0.5
+  voc_cost: 0.05
+  voc_init_mode: matched
+  choice_mode: outside
+  plant_centers: null
+  initial_spread: 0.1
+  insect_initial_max: 0.4
+  insect_I_initial_max: null
+  insect_A_initial_bounds: null
+  resource_capacity:
+    P1: 1.0
+    P2: 1.0
+  max_feeding_demand:
+    H1: 1.0
+  insect_life_history: obligate_host_larval_feeding
+  resource_unit: normalized_edible_dry_biomass
+  demand_unit: normalized_edible_dry_biomass
+  feeding_window: one_generation_larval_feeding
+  demand_window: one_generation_larval_feeding
+  model_version: '1.6'
+  life_history: nonoverlapping_generations_obligate_host_larva
+  plant_offspring_lambda:
+    P1: 2.0
+    P2: 2.0
+  insect_offspring_lambda:
+    H1: 2.0
+  plant_competition_alpha:
+    P1:
+      P1: 0.02
+      P2: 0.005
+    P2:
+      P1: 0.005
+      P2: 0.02
+  demography:
+    plant_survival: bernoulli
+    insect_survival: bernoulli
+    offspring_distribution_given_survival: poisson
+    plant_density_stage: offspring_recruitment
+    insect_independent_density_factor: false
+    immigration: false
+    seed_bank: false
+    overlapping_generations: false
+  illustrative_only: true
+  study_site: theoretical periodic 10x10 habitat patches; no empirical cell length
+  max_individuals_safety: 5000
+  parameter_provenance:
+    plant_offspring_lambda:
+      P1:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+      P2:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+    insect_offspring_lambda:
+      H1:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+    plant_competition_alpha:
+      P1:
+        P1:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+        P2:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+      P2:
+        P1:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+        P2:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+    resources:
+      kind: theoretical_placeholder
+      source: docs/host_network.md; alpha is per individual in the specified local
+        neighborhood, not an empirical/global estimate
+    inherited_ecology:
+      kind: theoretical_placeholder
+      source: docs/host_network.md; alpha is per individual in the specified local
+        neighborhood, not an empirical/global estimate
+  evolve_plants: true
+  evolve_insects: true
+  record_observations: true
+  founder_traits:
+    D:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+    plant_voc_independent_trait:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+    I:
+    - - 0.2
+      - 0.6
+    A:
+    - - 0.2
+      - 0.6
+  spatial:
+    grid_shape:
+    - 10
+    - 10
+    boundary: periodic
+    search_radius: 2
+    competition_radius: 1
+    plant_dispersal_radius: 1
+    insect_dispersal_radius: 1
+    initial_plant_cells: null
+    initial_insect_cells: null
+batch:
+  purpose: 'Pre-specified 200-generation descriptive extension of network_emergence.json:
+    same traits, spatial rules, demography, treatments and four paired seeds; only
+    generations change from 10 to 200. Illustrative, not calibrated.'
+  replicates: 4
+  cases:
+  - name: evolving
+    overrides: {}
+  - name: frozen
+    overrides:
+      evolve_plants: false
+      evolve_insects: false

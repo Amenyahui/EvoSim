@@ -1,0 +1,1521 @@
+extends: ../config.yaml
+simulation_metadata:
+  num_steps_per_episode: 5
+parameters:
+  plant_sizes:
+  - 20
+  - 20
+  insect_sizes:
+  - 6
+  n: 2
+  record_every: 1
+  seed: 20261021
+  mutation_rate: 0.01
+  mutation_sd: 0.05
+  mu_A: 0.01
+  sigma_A: 0.05
+  mu_Z: 0.01
+  sigma_Z: 0.05
+  plant_cost: 0.125
+  insect_cost: 0.125
+  sP0: 0.1
+  sI0: 0.0
+  candidate_size: 8
+  olfaction_mode: template
+  shuffle_voc: false
+  mapping: identity
+  B:
+  - - 1.0
+    - 0.0
+  - - 0.0
+    - 1.0
+  weights:
+  - 0.5
+  - 0.5
+  sigma: 0.2
+  b: 1.0
+  tau: 1.0
+  outside_utility: 0.0
+  unmatched_insect_fitness: 0.0
+  rho_voc: 0.5
+  voc_cost: 0.05
+  voc_init_mode: matched
+  choice_mode: outside
+  plant_centers: null
+  initial_spread: 0.1
+  insect_initial_max: 0.4
+  insect_I_initial_max: null
+  insect_A_initial_bounds: null
+  resource_capacity:
+    P1: 1.0
+    P2: 1.0
+  max_feeding_demand:
+    H1: 1.0
+  insect_life_history: obligate_host_larval_feeding
+  resource_unit: normalized_edible_dry_biomass
+  demand_unit: normalized_edible_dry_biomass
+  feeding_window: one_generation_larval_feeding
+  demand_window: one_generation_larval_feeding
+  model_version: '1.6'
+  life_history: nonoverlapping_generations_obligate_host_larva
+  plant_offspring_lambda:
+    P1: 2.0
+    P2: 2.0
+  insect_offspring_lambda:
+    H1: 2.0
+  plant_competition_alpha:
+    P1:
+      P1: 0.02
+      P2: 0.005
+    P2:
+      P1: 0.005
+      P2: 0.02
+  demography:
+    plant_survival: bernoulli
+    insect_survival: bernoulli
+    offspring_distribution_given_survival: poisson
+    plant_density_stage: offspring_recruitment
+    insect_independent_density_factor: false
+    immigration: false
+    seed_bank: false
+    overlapping_generations: false
+  illustrative_only: true
+  study_site: theoretical periodic 10x10 habitat patches; no empirical cell length
+  max_individuals_safety: 5000
+  parameter_provenance:
+    plant_offspring_lambda:
+      P1:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+      P2:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+    insect_offspring_lambda:
+      H1:
+        kind: theoretical_placeholder
+        source: docs/host_network.md; alpha is per individual in the specified local
+          neighborhood, not an empirical/global estimate
+    plant_competition_alpha:
+      P1:
+        P1:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+        P2:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+      P2:
+        P1:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+        P2:
+          kind: theoretical_placeholder
+          source: docs/host_network.md; alpha is per individual in the specified local
+            neighborhood, not an empirical/global estimate
+    resources:
+      kind: theoretical_placeholder
+      source: docs/host_network.md; alpha is per individual in the specified local
+        neighborhood, not an empirical/global estimate
+    inherited_ecology:
+      kind: theoretical_placeholder
+      source: docs/host_network.md; alpha is per individual in the specified local
+        neighborhood, not an empirical/global estimate
+  evolve_plants: true
+  evolve_insects: true
+  record_observations: true
+  founder_traits:
+    D:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+    plant_voc_independent_trait:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+    I:
+    - - 0.2
+      - 0.6
+    A:
+    - - 0.2
+      - 0.6
+  spatial:
+    grid_shape:
+    - 10
+    - 10
+    boundary: periodic
+    search_radius: 2
+    competition_radius: 1
+    plant_dispersal_radius: 1
+    insect_dispersal_radius: 1
+    initial_plant_cells: null
+    initial_insect_cells: null
+  genetics:
+    mode: qtl_additive
+    schema_version: qtl-1
+    ploidy: 2
+    inheritance: clonal_diploid_no_recombination
+    background:
+      plant:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+      insect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.0
+    loci:
+    - locus_id: plant_1_1
+      organism: plant
+      functional_module: D
+      targets:
+      - 0
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.02
+      - 0.0
+      - 0.0
+      - 0.0
+    - locus_id: plant_1_2
+      organism: plant
+      functional_module: D
+      targets:
+      - 0
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.02
+      - 0.0
+      - 0.0
+      - 0.0
+    - locus_id: plant_2_1
+      organism: plant
+      functional_module: D
+      targets:
+      - 1
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.02
+      - 0.0
+      - 0.0
+    - locus_id: plant_2_2
+      organism: plant
+      functional_module: D
+      targets:
+      - 1
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.02
+      - 0.0
+      - 0.0
+    - locus_id: plant_3_1
+      organism: plant
+      functional_module: plant_voc_independent_trait
+      targets:
+      - 2
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.02
+      - 0.0
+    - locus_id: plant_3_2
+      organism: plant
+      functional_module: plant_voc_independent_trait
+      targets:
+      - 2
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.02
+      - 0.0
+    - locus_id: plant_4_1
+      organism: plant
+      functional_module: plant_voc_independent_trait
+      targets:
+      - 3
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.02
+    - locus_id: plant_4_2
+      organism: plant
+      functional_module: plant_voc_independent_trait
+      targets:
+      - 3
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.02
+    - locus_id: insect_1_1
+      organism: insect
+      functional_module: I
+      targets:
+      - 0
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.02
+      - 0.0
+      - 0.0
+      - 0.0
+    - locus_id: insect_1_2
+      organism: insect
+      functional_module: I
+      targets:
+      - 0
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.02
+      - 0.0
+      - 0.0
+      - 0.0
+    - locus_id: insect_2_1
+      organism: insect
+      functional_module: I
+      targets:
+      - 1
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.02
+      - 0.0
+      - 0.0
+    - locus_id: insect_2_2
+      organism: insect
+      functional_module: I
+      targets:
+      - 1
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.02
+      - 0.0
+      - 0.0
+    - locus_id: insect_3_1
+      organism: insect
+      functional_module: A
+      targets:
+      - 2
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.02
+      - 0.0
+    - locus_id: insect_3_2
+      organism: insect
+      functional_module: A
+      targets:
+      - 2
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.02
+      - 0.0
+    - locus_id: insect_4_1
+      organism: insect
+      functional_module: A
+      targets:
+      - 3
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.02
+    - locus_id: insect_4_2
+      organism: insect
+      functional_module: A
+      targets:
+      - 3
+      mutation_rate: 0.01
+      mutation_sd:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.02
+    alleles:
+    - allele_id: 0
+      locus_id: plant_1_1
+      effect:
+      - 0.1
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 1
+      locus_id: plant_1_1
+      effect:
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 2
+      locus_id: plant_1_1
+      effect:
+      - 0.3
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 3
+      locus_id: plant_1_1
+      effect:
+      - 0.32
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 4
+      locus_id: plant_1_2
+      effect:
+      - 0.1
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 5
+      locus_id: plant_1_2
+      effect:
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 6
+      locus_id: plant_1_2
+      effect:
+      - 0.3
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 7
+      locus_id: plant_1_2
+      effect:
+      - 0.32
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 8
+      locus_id: plant_2_1
+      effect:
+      - 0.0
+      - 0.3
+      - 0.0
+      - 0.0
+    - allele_id: 9
+      locus_id: plant_2_1
+      effect:
+      - 0.0
+      - 0.32
+      - 0.0
+      - 0.0
+    - allele_id: 10
+      locus_id: plant_2_1
+      effect:
+      - 0.0
+      - 0.1
+      - 0.0
+      - 0.0
+    - allele_id: 11
+      locus_id: plant_2_1
+      effect:
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+    - allele_id: 12
+      locus_id: plant_2_2
+      effect:
+      - 0.0
+      - 0.3
+      - 0.0
+      - 0.0
+    - allele_id: 13
+      locus_id: plant_2_2
+      effect:
+      - 0.0
+      - 0.32
+      - 0.0
+      - 0.0
+    - allele_id: 14
+      locus_id: plant_2_2
+      effect:
+      - 0.0
+      - 0.1
+      - 0.0
+      - 0.0
+    - allele_id: 15
+      locus_id: plant_2_2
+      effect:
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+    - allele_id: 16
+      locus_id: plant_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.1
+      - 0.0
+    - allele_id: 17
+      locus_id: plant_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+    - allele_id: 18
+      locus_id: plant_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.3
+      - 0.0
+    - allele_id: 19
+      locus_id: plant_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.32
+      - 0.0
+    - allele_id: 20
+      locus_id: plant_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.1
+      - 0.0
+    - allele_id: 21
+      locus_id: plant_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+    - allele_id: 22
+      locus_id: plant_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.3
+      - 0.0
+    - allele_id: 23
+      locus_id: plant_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.32
+      - 0.0
+    - allele_id: 24
+      locus_id: plant_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.3
+    - allele_id: 25
+      locus_id: plant_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.32
+    - allele_id: 26
+      locus_id: plant_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.1
+    - allele_id: 27
+      locus_id: plant_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+    - allele_id: 28
+      locus_id: plant_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.3
+    - allele_id: 29
+      locus_id: plant_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.32
+    - allele_id: 30
+      locus_id: plant_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.1
+    - allele_id: 31
+      locus_id: plant_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+    - allele_id: 32
+      locus_id: insect_1_1
+      effect:
+      - 0.1
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 33
+      locus_id: insect_1_1
+      effect:
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 34
+      locus_id: insect_1_2
+      effect:
+      - 0.1
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 35
+      locus_id: insect_1_2
+      effect:
+      - 0.12000000000000001
+      - 0.0
+      - 0.0
+      - 0.0
+    - allele_id: 36
+      locus_id: insect_2_1
+      effect:
+      - 0.0
+      - 0.3
+      - 0.0
+      - 0.0
+    - allele_id: 37
+      locus_id: insect_2_1
+      effect:
+      - 0.0
+      - 0.32
+      - 0.0
+      - 0.0
+    - allele_id: 38
+      locus_id: insect_2_2
+      effect:
+      - 0.0
+      - 0.3
+      - 0.0
+      - 0.0
+    - allele_id: 39
+      locus_id: insect_2_2
+      effect:
+      - 0.0
+      - 0.32
+      - 0.0
+      - 0.0
+    - allele_id: 40
+      locus_id: insect_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.1
+      - 0.0
+    - allele_id: 41
+      locus_id: insect_3_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+    - allele_id: 42
+      locus_id: insect_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.1
+      - 0.0
+    - allele_id: 43
+      locus_id: insect_3_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.12000000000000001
+      - 0.0
+    - allele_id: 44
+      locus_id: insect_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.3
+    - allele_id: 45
+      locus_id: insect_4_1
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.32
+    - allele_id: 46
+      locus_id: insect_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.3
+    - allele_id: 47
+      locus_id: insect_4_2
+      effect:
+      - 0.0
+      - 0.0
+      - 0.0
+      - 0.32
+    founder_frequencies:
+      P1:
+        plant_1_1:
+        - allele_id: 0
+          frequency: 0.5
+        - allele_id: 1
+          frequency: 0.5
+        plant_1_2:
+        - allele_id: 4
+          frequency: 0.5
+        - allele_id: 5
+          frequency: 0.5
+        plant_2_1:
+        - allele_id: 8
+          frequency: 0.5
+        - allele_id: 9
+          frequency: 0.5
+        plant_2_2:
+        - allele_id: 12
+          frequency: 0.5
+        - allele_id: 13
+          frequency: 0.5
+        plant_3_1:
+        - allele_id: 16
+          frequency: 0.5
+        - allele_id: 17
+          frequency: 0.5
+        plant_3_2:
+        - allele_id: 20
+          frequency: 0.5
+        - allele_id: 21
+          frequency: 0.5
+        plant_4_1:
+        - allele_id: 24
+          frequency: 0.5
+        - allele_id: 25
+          frequency: 0.5
+        plant_4_2:
+        - allele_id: 28
+          frequency: 0.5
+        - allele_id: 29
+          frequency: 0.5
+      P2:
+        plant_1_1:
+        - allele_id: 2
+          frequency: 0.5
+        - allele_id: 3
+          frequency: 0.5
+        plant_1_2:
+        - allele_id: 6
+          frequency: 0.5
+        - allele_id: 7
+          frequency: 0.5
+        plant_2_1:
+        - allele_id: 10
+          frequency: 0.5
+        - allele_id: 11
+          frequency: 0.5
+        plant_2_2:
+        - allele_id: 14
+          frequency: 0.5
+        - allele_id: 15
+          frequency: 0.5
+        plant_3_1:
+        - allele_id: 18
+          frequency: 0.5
+        - allele_id: 19
+          frequency: 0.5
+        plant_3_2:
+        - allele_id: 22
+          frequency: 0.5
+        - allele_id: 23
+          frequency: 0.5
+        plant_4_1:
+        - allele_id: 26
+          frequency: 0.5
+        - allele_id: 27
+          frequency: 0.5
+        plant_4_2:
+        - allele_id: 30
+          frequency: 0.5
+        - allele_id: 31
+          frequency: 0.5
+      H1:
+        insect_1_1:
+        - allele_id: 32
+          frequency: 0.5
+        - allele_id: 33
+          frequency: 0.5
+        insect_1_2:
+        - allele_id: 34
+          frequency: 0.5
+        - allele_id: 35
+          frequency: 0.5
+        insect_2_1:
+        - allele_id: 36
+          frequency: 0.5
+        - allele_id: 37
+          frequency: 0.5
+        insect_2_2:
+        - allele_id: 38
+          frequency: 0.5
+        - allele_id: 39
+          frequency: 0.5
+        insect_3_1:
+        - allele_id: 40
+          frequency: 0.5
+        - allele_id: 41
+          frequency: 0.5
+        insect_3_2:
+        - allele_id: 42
+          frequency: 0.5
+        - allele_id: 43
+          frequency: 0.5
+        insect_4_1:
+        - allele_id: 44
+          frequency: 0.5
+        - allele_id: 45
+          frequency: 0.5
+        insect_4_2:
+        - allele_id: 46
+          frequency: 0.5
+        - allele_id: 47
+          frequency: 0.5
+    mutation_enabled:
+      plant: true
+      insect: true
+    max_alleles_safety: 100000
+    max_genotype_values_safety: 1000000
+    provenance:
+      mapping:
+        source_kind: theoretical_placeholder
+        description: Two abstract QTLs per trait coordinate; common zero background,
+          half-copy sum and clip; no molecular calibration.
+      mutation:
+        source_kind: theoretical_placeholder
+        description: Independent per-copy per-locus per-generation probability 0.01;
+          normal SD 0.02 in declared coordinate; distinct from legacy trait rates.
+      founders:
+        source_kind: theoretical_placeholder
+        description: Two configured alleles at frequency 0.5 each; independent copies;
+          positive alternative +0.02 allele effect. Not sequencing data; baseline
+          reference is P1-adapted by design.
+      limits:
+        source_kind: implementation_choice
+        description: Conservative allele reservation and retained genotype scalar
+          count; computational stops, not ecological caps.
+batch:
+  purpose: 'One short implementation example: segregating founders, mutation on/off;
+    no ecological hypothesis test or parameter calibration.'
+  replicates: 1
+  cases:
+  - name: qtl_mutating
+    overrides: {}
+  - name: mutation_off
+    overrides:
+      genetics:
+        mode: qtl_additive
+        schema_version: qtl-1
+        ploidy: 2
+        inheritance: clonal_diploid_no_recombination
+        background:
+          plant:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.0
+          insect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.0
+        loci:
+        - locus_id: plant_1_1
+          organism: plant
+          functional_module: D
+          targets:
+          - 0
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.02
+          - 0.0
+          - 0.0
+          - 0.0
+        - locus_id: plant_1_2
+          organism: plant
+          functional_module: D
+          targets:
+          - 0
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.02
+          - 0.0
+          - 0.0
+          - 0.0
+        - locus_id: plant_2_1
+          organism: plant
+          functional_module: D
+          targets:
+          - 1
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.02
+          - 0.0
+          - 0.0
+        - locus_id: plant_2_2
+          organism: plant
+          functional_module: D
+          targets:
+          - 1
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.02
+          - 0.0
+          - 0.0
+        - locus_id: plant_3_1
+          organism: plant
+          functional_module: plant_voc_independent_trait
+          targets:
+          - 2
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.02
+          - 0.0
+        - locus_id: plant_3_2
+          organism: plant
+          functional_module: plant_voc_independent_trait
+          targets:
+          - 2
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.02
+          - 0.0
+        - locus_id: plant_4_1
+          organism: plant
+          functional_module: plant_voc_independent_trait
+          targets:
+          - 3
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.02
+        - locus_id: plant_4_2
+          organism: plant
+          functional_module: plant_voc_independent_trait
+          targets:
+          - 3
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.02
+        - locus_id: insect_1_1
+          organism: insect
+          functional_module: I
+          targets:
+          - 0
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.02
+          - 0.0
+          - 0.0
+          - 0.0
+        - locus_id: insect_1_2
+          organism: insect
+          functional_module: I
+          targets:
+          - 0
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.02
+          - 0.0
+          - 0.0
+          - 0.0
+        - locus_id: insect_2_1
+          organism: insect
+          functional_module: I
+          targets:
+          - 1
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.02
+          - 0.0
+          - 0.0
+        - locus_id: insect_2_2
+          organism: insect
+          functional_module: I
+          targets:
+          - 1
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.02
+          - 0.0
+          - 0.0
+        - locus_id: insect_3_1
+          organism: insect
+          functional_module: A
+          targets:
+          - 2
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.02
+          - 0.0
+        - locus_id: insect_3_2
+          organism: insect
+          functional_module: A
+          targets:
+          - 2
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.02
+          - 0.0
+        - locus_id: insect_4_1
+          organism: insect
+          functional_module: A
+          targets:
+          - 3
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.02
+        - locus_id: insect_4_2
+          organism: insect
+          functional_module: A
+          targets:
+          - 3
+          mutation_rate: 0.01
+          mutation_sd:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.02
+        alleles:
+        - allele_id: 0
+          locus_id: plant_1_1
+          effect:
+          - 0.1
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 1
+          locus_id: plant_1_1
+          effect:
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 2
+          locus_id: plant_1_1
+          effect:
+          - 0.3
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 3
+          locus_id: plant_1_1
+          effect:
+          - 0.32
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 4
+          locus_id: plant_1_2
+          effect:
+          - 0.1
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 5
+          locus_id: plant_1_2
+          effect:
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 6
+          locus_id: plant_1_2
+          effect:
+          - 0.3
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 7
+          locus_id: plant_1_2
+          effect:
+          - 0.32
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 8
+          locus_id: plant_2_1
+          effect:
+          - 0.0
+          - 0.3
+          - 0.0
+          - 0.0
+        - allele_id: 9
+          locus_id: plant_2_1
+          effect:
+          - 0.0
+          - 0.32
+          - 0.0
+          - 0.0
+        - allele_id: 10
+          locus_id: plant_2_1
+          effect:
+          - 0.0
+          - 0.1
+          - 0.0
+          - 0.0
+        - allele_id: 11
+          locus_id: plant_2_1
+          effect:
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+        - allele_id: 12
+          locus_id: plant_2_2
+          effect:
+          - 0.0
+          - 0.3
+          - 0.0
+          - 0.0
+        - allele_id: 13
+          locus_id: plant_2_2
+          effect:
+          - 0.0
+          - 0.32
+          - 0.0
+          - 0.0
+        - allele_id: 14
+          locus_id: plant_2_2
+          effect:
+          - 0.0
+          - 0.1
+          - 0.0
+          - 0.0
+        - allele_id: 15
+          locus_id: plant_2_2
+          effect:
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+        - allele_id: 16
+          locus_id: plant_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.1
+          - 0.0
+        - allele_id: 17
+          locus_id: plant_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+        - allele_id: 18
+          locus_id: plant_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.3
+          - 0.0
+        - allele_id: 19
+          locus_id: plant_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.32
+          - 0.0
+        - allele_id: 20
+          locus_id: plant_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.1
+          - 0.0
+        - allele_id: 21
+          locus_id: plant_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+        - allele_id: 22
+          locus_id: plant_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.3
+          - 0.0
+        - allele_id: 23
+          locus_id: plant_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.32
+          - 0.0
+        - allele_id: 24
+          locus_id: plant_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.3
+        - allele_id: 25
+          locus_id: plant_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.32
+        - allele_id: 26
+          locus_id: plant_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.1
+        - allele_id: 27
+          locus_id: plant_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+        - allele_id: 28
+          locus_id: plant_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.3
+        - allele_id: 29
+          locus_id: plant_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.32
+        - allele_id: 30
+          locus_id: plant_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.1
+        - allele_id: 31
+          locus_id: plant_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+        - allele_id: 32
+          locus_id: insect_1_1
+          effect:
+          - 0.1
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 33
+          locus_id: insect_1_1
+          effect:
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 34
+          locus_id: insect_1_2
+          effect:
+          - 0.1
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 35
+          locus_id: insect_1_2
+          effect:
+          - 0.12000000000000001
+          - 0.0
+          - 0.0
+          - 0.0
+        - allele_id: 36
+          locus_id: insect_2_1
+          effect:
+          - 0.0
+          - 0.3
+          - 0.0
+          - 0.0
+        - allele_id: 37
+          locus_id: insect_2_1
+          effect:
+          - 0.0
+          - 0.32
+          - 0.0
+          - 0.0
+        - allele_id: 38
+          locus_id: insect_2_2
+          effect:
+          - 0.0
+          - 0.3
+          - 0.0
+          - 0.0
+        - allele_id: 39
+          locus_id: insect_2_2
+          effect:
+          - 0.0
+          - 0.32
+          - 0.0
+          - 0.0
+        - allele_id: 40
+          locus_id: insect_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.1
+          - 0.0
+        - allele_id: 41
+          locus_id: insect_3_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+        - allele_id: 42
+          locus_id: insect_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.1
+          - 0.0
+        - allele_id: 43
+          locus_id: insect_3_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.12000000000000001
+          - 0.0
+        - allele_id: 44
+          locus_id: insect_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.3
+        - allele_id: 45
+          locus_id: insect_4_1
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.32
+        - allele_id: 46
+          locus_id: insect_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.3
+        - allele_id: 47
+          locus_id: insect_4_2
+          effect:
+          - 0.0
+          - 0.0
+          - 0.0
+          - 0.32
+        founder_frequencies:
+          P1:
+            plant_1_1:
+            - allele_id: 0
+              frequency: 0.5
+            - allele_id: 1
+              frequency: 0.5
+            plant_1_2:
+            - allele_id: 4
+              frequency: 0.5
+            - allele_id: 5
+              frequency: 0.5
+            plant_2_1:
+            - allele_id: 8
+              frequency: 0.5
+            - allele_id: 9
+              frequency: 0.5
+            plant_2_2:
+            - allele_id: 12
+              frequency: 0.5
+            - allele_id: 13
+              frequency: 0.5
+            plant_3_1:
+            - allele_id: 16
+              frequency: 0.5
+            - allele_id: 17
+              frequency: 0.5
+            plant_3_2:
+            - allele_id: 20
+              frequency: 0.5
+            - allele_id: 21
+              frequency: 0.5
+            plant_4_1:
+            - allele_id: 24
+              frequency: 0.5
+            - allele_id: 25
+              frequency: 0.5
+            plant_4_2:
+            - allele_id: 28
+              frequency: 0.5
+            - allele_id: 29
+              frequency: 0.5
+          P2:
+            plant_1_1:
+            - allele_id: 2
+              frequency: 0.5
+            - allele_id: 3
+              frequency: 0.5
+            plant_1_2:
+            - allele_id: 6
+              frequency: 0.5
+            - allele_id: 7
+              frequency: 0.5
+            plant_2_1:
+            - allele_id: 10
+              frequency: 0.5
+            - allele_id: 11
+              frequency: 0.5
+            plant_2_2:
+            - allele_id: 14
+              frequency: 0.5
+            - allele_id: 15
+              frequency: 0.5
+            plant_3_1:
+            - allele_id: 18
+              frequency: 0.5
+            - allele_id: 19
+              frequency: 0.5
+            plant_3_2:
+            - allele_id: 22
+              frequency: 0.5
+            - allele_id: 23
+              frequency: 0.5
+            plant_4_1:
+            - allele_id: 26
+              frequency: 0.5
+            - allele_id: 27
+              frequency: 0.5
+            plant_4_2:
+            - allele_id: 30
+              frequency: 0.5
+            - allele_id: 31
+              frequency: 0.5
+          H1:
+            insect_1_1:
+            - allele_id: 32
+              frequency: 0.5
+            - allele_id: 33
+              frequency: 0.5
+            insect_1_2:
+            - allele_id: 34
+              frequency: 0.5
+            - allele_id: 35
+              frequency: 0.5
+            insect_2_1:
+            - allele_id: 36
+              frequency: 0.5
+            - allele_id: 37
+              frequency: 0.5
+            insect_2_2:
+            - allele_id: 38
+              frequency: 0.5
+            - allele_id: 39
+              frequency: 0.5
+            insect_3_1:
+            - allele_id: 40
+              frequency: 0.5
+            - allele_id: 41
+              frequency: 0.5
+            insect_3_2:
+            - allele_id: 42
+              frequency: 0.5
+            - allele_id: 43
+              frequency: 0.5
+            insect_4_1:
+            - allele_id: 44
+              frequency: 0.5
+            - allele_id: 45
+              frequency: 0.5
+            insect_4_2:
+            - allele_id: 46
+              frequency: 0.5
+            - allele_id: 47
+              frequency: 0.5
+        mutation_enabled:
+          plant: false
+          insect: false
+        max_alleles_safety: 100000
+        max_genotype_values_safety: 1000000
+        provenance:
+          mapping:
+            source_kind: theoretical_placeholder
+            description: Two abstract QTLs per trait coordinate; common zero background,
+              half-copy sum and clip; no molecular calibration.
+          mutation:
+            source_kind: theoretical_placeholder
+            description: Independent per-copy per-locus per-generation probability
+              0.01; normal SD 0.02 in declared coordinate; distinct from legacy trait
+              rates.
+          founders:
+            source_kind: theoretical_placeholder
+            description: Two configured alleles at frequency 0.5 each; independent
+              copies; positive alternative +0.02 allele effect. Not sequencing data;
+              baseline reference is P1-adapted by design.
+          limits:
+            source_kind: implementation_choice
+            description: Conservative allele reservation and retained genotype scalar
+              count; computational stops, not ecological caps.

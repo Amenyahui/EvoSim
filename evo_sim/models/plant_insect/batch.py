@@ -1,0 +1,181 @@
+"""Controlled simulation batches; never overwrite an output directory."""
+
+import argparse
+import hashlib
+import json
+import math
+import re
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from evo_sim.core.config import read_config
+from evo_sim.core.helpers import source_hashes
+from evo_sim.core.io import atomic_csv, atomic_text
+
+from .helpers.config import Config
+from .simulator import simulate
+
+ROOT = Path(__file__).resolve().parents[3]
+COLUMNS = {
+    "events": "generation seed insect_id insect_row species species_id host_row host_id plant_species accepted reason candidate_count choice_order q d x g dmax R gamma host_h I_sum W_insect",
+    "plants": "generation plant_id plant_row species species_id R T gamma X h herbivore_load D_sum V_emit_mean defense_cost voc_cost W_plant",
+    "parents": "generation kind species species_id individual_id parent_genotype_id S_i F_i W_i phi_i lambda_s conditional_offspring_mean_mu expected_offspring offspring_variance survived_to_reproduce offspring_count sampling_applied survival_stream offspring_stream",
+    "offspring": "generation kind species offspring_id parent_id parent_genotype_id mutation_stream",
+    "populations": "generation kind species N_start N_survived_to_reproduce N_offspring N_next update_applied extinct_at_generation zero_fitness_count mean_g mean_h total_resource_transfer density_phi population_status",
+    "networks": "generation insect_species plant_species N_accept Q_actual L_per_insect",
+}
+DIAGNOSTIC_COLUMNS = (
+    "generation insect_species reference_plant_species insect_count preference q_unlimited panel"
+)
+
+
+def safe_json(value):
+    if isinstance(value, float) and not math.isfinite(value):
+        return f"NONFINITE:{value}"
+    if isinstance(value, dict):
+        return {k: safe_json(v) for k, v in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [safe_json(v) for v in value]
+    return value
+
+
+def write_json(path, value):
+    atomic_text(path, json.dumps(safe_json(value), indent=2, ensure_ascii=False, allow_nan=False))
+
+
+def save_result(result, out):
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=False)
+    write_json(out / "status.json", result["metadata"]["status"])
+    columns_by_table = dict(COLUMNS)
+    if "diagnostics" in result:
+        columns_by_table["diagnostics"] = DIAGNOSTIC_COLUMNS
+    if "allele_catalog" in result:
+        columns_by_table.update(
+            genetic_loci="locus_id organism functional_module targets mutation_rate mutation_sd",
+            allele_catalog="allele_id locus_id parent_allele_id birth_generation effect",
+            mutations="generation kind species offspring_id locus_id copy parent_allele_id allele_id delta mutation_stream",
+            genetic_summary="generation kind species N record_type locus_id allele_id frequency observed_heterozygosity gene_diversity mutation_count trait mean variance clipped_fraction",
+        )
+    for name, columns in columns_by_table.items():
+        table = pd.DataFrame(result.get(name, []))
+        if table.empty:
+            table = pd.DataFrame(columns=columns.split())
+        atomic_csv(table, out / f"{name}.csv")
+    (out / "snapshots").mkdir()
+    for state in result.get("snapshots", []):
+        np.savez_compressed(out / "snapshots" / f"g{int(state['generation']):06d}.npz", **state)
+    if "allele_catalog" in result:
+        genotypes, phenotypes = {}, {}
+        for state in result["snapshots"]:
+            prefix = f"g{int(state['generation']):06d}_"
+            for key, value in state.items():
+                if key.endswith(("_genotypes", "_ids", "_species")):
+                    genotypes[prefix + key] = value
+                if key in ("D", "I", "A", "plant_voc_independent_trait"):
+                    phenotypes[prefix + key] = value
+        np.savez_compressed(out / "genotypes.npz", **genotypes)
+        np.savez_compressed(out / "phenotypes.npz", **phenotypes)
+    hashes = {
+        f.relative_to(out).as_posix(): hashlib.sha256(f.read_bytes()).hexdigest()
+        for f in out.rglob("*")
+        if f.is_file()
+    }
+    write_json(out / "metadata.json", dict(result["metadata"], output_sha256=hashes))
+
+
+def run(spec, out, *, runtime_config=None):
+    out = Path(out).resolve()
+    out.mkdir(parents=True, exist_ok=False)
+    write_json(
+        out / "settings.json",
+        dict(
+            version=spec.get("base", {}).get("model_version", "unspecified"),
+            purpose=spec.get("purpose", "implementation, boundary and ledger checks only"),
+            spec=spec,
+            source_sha256=source_hashes(),
+            pipeline=runtime_config,
+        ),
+    )
+    (out / "data").mkdir()
+    statuses = []
+    try:
+        if type(spec["replicates"]) is not int or spec["replicates"] < 1:
+            raise ValueError("replicates must be a positive integer")
+        cases = spec["cases"]
+        case_names = [x["name"] for x in cases]
+        if (
+            not cases
+            or len(set(case_names)) != len(case_names)
+            or any(
+                not isinstance(n, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", n) for n in case_names
+            )
+        ):
+            raise ValueError("case names must be unique simple names")
+        for case in cases:
+            for rep in range(spec["replicates"]):
+                args = dict(spec["base"], **case["overrides"])
+                try:
+                    if type(args.get("seed")) is not int:
+                        raise ValueError("explicit integer seed required")
+                    args["seed"] += rep
+                    c = Config(**args)
+                    c.validate()
+                    result = simulate(c, runtime_config=runtime_config)
+                except (ValueError, TypeError, KeyError) as error:
+                    result = dict(
+                        metadata=dict(
+                            version=args.get("model_version", "unspecified"),
+                            config=args,
+                            source_hash=source_hashes(),
+                            status=dict(
+                                status="invalid_parameter", generation=0, message=str(error)
+                            ),
+                        )
+                    )
+                folder = out / "data" / case["name"] / f"rep{rep + 1:02d}"
+                save_result(result, folder)
+                status = dict(
+                    case=case["name"],
+                    replicate=rep + 1,
+                    seed=args.get("seed"),
+                    **result["metadata"]["status"],
+                )
+                statuses.append(status)
+                atomic_csv(pd.DataFrame(statuses), out / "data" / "run_status.csv")
+                print(case["name"], rep + 1, status["status"], status["generation"], flush=True)
+    except (ValueError, TypeError, KeyError) as error:
+        write_json(
+            out / "data" / "status.json", dict(status="invalid_parameter", message=str(error))
+        )
+        return out
+    write_json(
+        out / "data" / "status.json",
+        dict(
+            status="finished",
+            runs=len(statuses),
+            outcome_counts=pd.Series([s["status"] for s in statuses]).value_counts().to_dict(),
+        ),
+    )
+    return out
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    config = read_config(args.config)
+    spec = dict(
+        config["batch"],
+        base=dict(
+            config["parameters"], generations=config["simulation_metadata"]["num_steps_per_episode"]
+        ),
+    )
+    run(spec, args.out, runtime_config=config)
+
+
+if __name__ == "__main__":
+    main()
