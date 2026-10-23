@@ -1,0 +1,6 @@
+extends: sexual_qtl_development.yaml
+simulation_metadata:
+  num_steps_per_episode: 200
+
+batch:
+  replicates: 3

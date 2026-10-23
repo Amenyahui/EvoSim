@@ -21,6 +21,7 @@ state:
       - species
       - resistance
       - preference
+      - sex
       - cells
       - genotypes
 substeps:
@@ -68,7 +69,7 @@ substeps:
     policy:
       plants:
         reproduce:
-          generator: sample_offspring
+          generator: sample_maternal_offspring
           input_variables:
             runtime: environment/runtime
             agents: agents
@@ -79,7 +80,7 @@ substeps:
               taxon: 0
       insects:
         reproduce:
-          generator: sample_offspring
+          generator: sample_maternal_offspring
           input_variables:
             runtime: environment/runtime
             agents: agents
@@ -102,7 +103,7 @@ substeps:
     active_agents: []
     transition:
       inherit:
-        generator: inherit_and_disperse
+        generator: cross_fertilize_and_disperse
         input_variables:
           runtime: environment/runtime
           agents: agents

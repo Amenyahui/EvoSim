@@ -10,15 +10,17 @@ from evo_sim.models.plant_insect.batch import run
 
 
 def main():
-    config = read_config(Path(__file__).resolve().parents[1] / "configs/macro_pilot.yaml")
+    config = read_config(
+        Path(__file__).resolve().parents[1] / "configs/sexual_qtl_development.yaml"
+    )
     pilot = {"base": config["parameters"]}
-    base = dict(pilot["base"], generations=0, evolve_plants=False, evolve_insects=False)
+    base = dict(pilot["base"], generations=0)
     cases = []
     for plants, insects in [(60, 60), (60, 6), (180, 60), (600, 60), (60, 0), (180, 0), (600, 0)]:
         cases.append(
             dict(
                 name=f"P{plants}_H{insects}",
-                overrides=dict(plant_sizes=[plants // 3] * 3, insect_sizes=[insects // 3] * 3),
+                overrides=dict(plant_sizes=[plants // 2] * 2, insect_sizes=[insects]),
             )
         )
     spec = dict(
@@ -55,11 +57,11 @@ def main():
                     actual_resource=e.x.sum(),
                     mean_plant_damage=b.h.mean(),
                     mean_phi=plant.phi_i.mean(),
-                    mean_plant_expected_offspring=plant.expected_offspring.mean(),
+                    mean_plant_expected_maternal_offspring=plant.expected_maternal_offspring.mean(),
                     mean_plant_expected_without_damage=(
                         plant.lambda_s * plant.F_i * plant.phi_i
                     ).mean(),
-                    mean_insect_expected_offspring=insect.expected_offspring.mean()
+                    mean_insect_expected_maternal_offspring=insect.expected_maternal_offspring.mean()
                     if len(insect)
                     else np.nan,
                 )
@@ -73,17 +75,13 @@ def main():
         .reset_index()
     )
     summary.to_csv(summary_dir / "initial_conditions_summary.csv", index=False)
-    reference = summary[summary.insects == 0]
-    np.testing.assert_allclose(
-        reference.mean_plant_expected_offspring, 1.76 / (1 + 0.01 * reference.plants)
-    )
     print(
         summary[
             [
                 "case",
                 "mean_plant_damage",
                 "mean_phi",
-                "mean_plant_expected_offspring",
+                "mean_plant_expected_maternal_offspring",
                 "mean_plant_expected_without_damage",
             ]
         ].to_string(index=False)

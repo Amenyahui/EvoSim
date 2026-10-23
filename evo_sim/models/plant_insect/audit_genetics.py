@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from itertools import combinations
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,7 @@ import pandas as pd
 
 def audit_genetics(path, c, meta):
     spec = c.genetics
-    assert meta["genetics_version"] == "qtl-1"
+    assert meta["genetics_version"] == "sexual-qtl-1"
     assert meta["ecology_rule_version"] == c.model_version
     encoded = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(encoded).hexdigest() == meta["genetic_architecture_sha256"]
@@ -49,9 +50,15 @@ def audit_genetics(path, c, meta):
         assert key in by_locus
         other = list(set(range(effects.shape[1])) - set(by_locus[key]["targets"]))
         assert np.all(effects[i, other] == 0)
+    transmissions = pd.read_csv(path / "gamete_transmissions.csv", float_precision="round_trip")
+    transmission_groups = transmissions.groupby(["generation", "kind"], sort=False).indices
+    assert sum(map(len, transmission_groups.values())) == len(transmissions)
+    seen_transmissions = 0
     children = pd.read_csv(path / "offspring.csv", float_precision="round_trip", low_memory=False)
     summary = pd.read_csv(path / "genetic_summary.csv", float_precision="round_trip")
     summary_groups = summary.groupby(["generation", "species"], sort=False)
+    haplotypes = pd.read_csv(path / "haplotype_summary.csv", float_precision="round_trip")
+    expected_haplotypes = []
     expected_summary_rows = 0
     seen_events = 0
     previous = None
@@ -112,42 +119,100 @@ def audit_genetics(path, c, meta):
                     ].sort_values("offspring_id")
                     assert rows.offspring_id.tolist() == ids.tolist()
                     lookup = {int(x): i for i, x in enumerate(previous[kind + "_ids"])}
-                    parent_indices = np.array([lookup[int(x)] for x in rows.parent_id], dtype=int)
-                    expected = previous[kind + "_genotypes"][parent_indices].copy()
-                    np.testing.assert_array_equal(
-                        previous[kind + "_species"][parent_indices], labels
-                    )
+                    maternal = np.array([lookup[int(x)] for x in rows.maternal_id], dtype=int)
+                    paternal = np.array([lookup[int(x)] for x in rows.paternal_id], dtype=int)
+                    assert np.all(maternal != paternal)
+                    for indices in (maternal, paternal):
+                        np.testing.assert_array_equal(previous[kind + "_species"][indices], labels)
                     selected = events[(events.generation == t) & (events.kind == kind)]
                     seen_events += len(selected)
+                    tx = transmissions.iloc[transmission_groups.get((t, kind), [])]
+                    assert len(tx) == len(ids) * 2 * len(local), (
+                        str(path),
+                        t,
+                        kind,
+                        len(tx),
+                        len(ids),
+                        len(local),
+                    )
+                    assert not tx.duplicated(["offspring_id", "role", "locus_id"]).any()
+                    seen_transmissions += len(tx)
                     child_lookup = {int(x): i for i, x in enumerate(ids)}
                     locus_lookup = {x["locus_id"]: i for i, x in enumerate(local)}
-                    flags = np.zeros((len(ids), effects.shape[1]), bool)
-                    counts = np.zeros(len(ids), int)
-                    for row in selected.itertuples():
-                        i, l, h = (
-                            child_lookup[row.offspring_id],
-                            locus_lookup[row.locus_id],
-                            int(row.copy),
+                    event_lookup = {
+                        (int(r.offspring_id), int(r.copy), r.locus_id): r
+                        for r in selected.itertuples()
+                    }
+                    ancestry = {}
+                    for row in tx.itertuples():
+                        assert row.role in ("maternal", "paternal")
+                        h = 0 if row.role == "maternal" else 1
+                        i, l = child_lookup[row.offspring_id], locus_lookup[row.locus_id]
+                        parent = (maternal if h == 0 else paternal)[i]
+                        assert row.parent_id == previous[kind + "_ids"][parent]
+                        source = int(row.transmitted_homolog_before_mutation)
+                        assert (
+                            source in (0, 1)
+                            and row.crossover_count >= 0
+                            and row.crossover_count == int(row.crossover_count)
                         )
-                        assert row.species == f"{prefix}{labels[i] + 1}"
-                        assert expected[i, h, l] == row.parent_allele_id
-                        expected[i, h, l] = row.allele_id
-                        counts[i] += 1
-                        flags[i, local[l]["targets"]] = True
-                    np.testing.assert_array_equal(g, expected)
-                    if len(rows):
-                        np.testing.assert_array_equal(rows.locus_mutation_count, counts)
-                        offset = 0
-                        for name in names:
-                            for j in range(state[name].shape[1]):
-                                np.testing.assert_array_equal(
-                                    rows[f"{name}_mutated_{j + 1}"].to_numpy(bool),
-                                    flags[:, offset + j],
-                                )
-                            offset += state[name].shape[1]
+                        assert (
+                            row.chromosome_id == local[l]["chromosome_id"]
+                            and row.position_cM == local[l]["position_cM"]
+                        )
+                        assert bool(row.switch_before_locus) == bool(row.crossover_count % 2)
+                        old = previous[kind + "_genotypes"][parent, source, l]
+                        assert old == row.inherited_allele_id and row.child_allele_id == g[i, h, l]
+                        event = event_lookup.get((int(row.offspring_id), h, row.locus_id))
+                        if event is None:
+                            assert pd.isna(row.mutation_event_id) and old == row.child_allele_id
+                        else:
+                            assert (
+                                row.mutation_event_id
+                                == event.event_id
+                                == event.allele_id
+                                == row.child_allele_id
+                            )
+                            assert event.parent_allele_id == old and event.role == row.role
+                        ancestry.setdefault((i, h, row.chromosome_id), []).append(row)
+                    for group in ancestry.values():
+                        group.sort(key=lambda r: r.position_cM)
+                        assert group[0].crossover_count == 0
+                        for prev, curr in zip(group, group[1:]):
+                            assert curr.transmitted_homolog_before_mutation == (
+                                int(prev.transmitted_homolog_before_mutation)
+                                ^ (int(curr.crossover_count) % 2)
+                            )
+                    for i, row in enumerate(rows.itertuples()):
+                        for h, role in enumerate(("maternal", "paternal")):
+                            assert getattr(row, "mutations_" + role) == sum(
+                                key[0] == row.offspring_id and key[1] == h for key in event_lookup
+                            )
                     for locus in local:
                         if spec["mutation_enabled"][kind] and locus["mutation_rate"] == 1:
                             assert (selected.locus_id == locus["locus_id"]).sum() == 2 * len(ids)
+                groups = {}
+                for l, locus in enumerate(local):
+                    groups.setdefault(locus["chromosome_id"], []).append(l)
+                for indices in groups.values():
+                    indices.sort(key=lambda l: local[l]["position_cM"])
+                    for left, right in combinations(indices, 2):
+                        for species in range(len(sizes)):
+                            copies = g[labels == species][:, :, [left, right]].reshape(-1, 2)
+                            pairs, counts = np.unique(copies, axis=0, return_counts=True)
+                            for pair, count in zip(pairs, counts):
+                                expected_haplotypes.append(
+                                    dict(
+                                        generation=t,
+                                        kind=kind,
+                                        species=f"{prefix}{species + 1}",
+                                        locus_left=local[left]["locus_id"],
+                                        locus_right=local[right]["locus_id"],
+                                        allele_left=int(pair[0]),
+                                        allele_right=int(pair[1]),
+                                        frequency=float(count / len(copies)),
+                                    )
+                                )
                 for s in range(len(sizes)):
                     mask = labels == s
                     n = int(mask.sum())
@@ -160,6 +225,11 @@ def audit_genetics(path, c, meta):
                             rows = ss[(ss.record_type == "trait") & (ss.trait == f"{name}_{j + 1}")]
                             assert len(rows) == 1, (str(path), t, kind, s, name, j, len(rows))
                             expected_count += 1
+                            np.testing.assert_allclose(
+                                rows.raw_mean,
+                                raw[mask, offset + j].mean() if n else np.nan,
+                                equal_nan=True,
+                            )
                             x = state[name][mask, j]
                             unbounded = raw[mask, offset + j]
                             expected = (
@@ -211,12 +281,19 @@ def audit_genetics(path, c, meta):
             previous = state
         assert set(exported_g.files) == expected_g and set(exported_p.files) == expected_p
     assert seen_events == len(events) and expected_summary_rows == len(summary)
+    assert seen_transmissions == len(transmissions)
+    if expected_haplotypes:
+        pd.testing.assert_frame_equal(
+            haplotypes, pd.DataFrame(expected_haplotypes), check_exact=False, rtol=1e-12, atol=1e-14
+        )
+    else:
+        assert haplotypes.empty
     return dict(genetic_audit=True, alleles_checked=len(alleles), mutations_checked=len(events))
 
 
 def genetic_limit(c, states, populations):
     """Independently check a reported genetic allocation stop."""
-    if c.genetics is None or c.genetics.get("mode") != "qtl_additive":
+    if c.genetics is None or c.genetics.get("mode") != "sexual_qtl":
         return False
     g = c.genetics
     n_loci = [sum(x["organism"] == kind for x in g["loci"]) for kind in ("plant", "insect")]

@@ -14,9 +14,7 @@ def validate_spatial(c):
         "insect_dispersal_radius",
         "initial_plant_cells",
     }
-    required.add(
-        "initial_host_by_insect_species" if c.model_version == "1.5" else "initial_insect_cells"
-    )
+    required.add("initial_insect_cells")
     if not isinstance(s, dict) or set(s) != required:
         raise ValueError(f"spatial requires exactly {sorted(required)}")
     shape = s["grid_shape"]
@@ -36,20 +34,10 @@ def validate_spatial(c):
     ):
         if type(s[name]) is not int or not 0 <= s[name] <= max(shape):
             raise ValueError(f"{name} must be an integer between 0 and max(grid_shape)")
-    if c.model_version == "1.5":
-        hosts = s["initial_host_by_insect_species"]
-        if not isinstance(hosts, dict) or set(hosts) != {
-            f"H{i + 1}" for i in range(len(c.insect_sizes))
-        }:
-            raise ValueError("Explicit initial host required for every insect species")
-        for i, n in enumerate(c.insect_sizes):
-            value = hosts[f"H{i + 1}"]
-            keys = [f"P{p + 1}" for p in range(len(c.plant_sizes))]
-            if value not in keys or (n > 0 and c.plant_sizes[keys.index(value)] == 0):
-                raise ValueError("Initial insect host must name an initially present plant species")
-    cell_fields = [("initial_plant_cells", sum(c.plant_sizes))]
-    if c.model_version == "1.6":
-        cell_fields.append(("initial_insect_cells", sum(c.insect_sizes)))
+    cell_fields = [
+        ("initial_plant_cells", sum(c.plant_sizes)),
+        ("initial_insect_cells", sum(c.insect_sizes)),
+    ]
     for name, count in cell_fields:
         cells = s[name]
         if cells is not None:
@@ -76,24 +64,15 @@ def initial_positions(c, plant_species, insect_species):
         if cells is None
         else np.asarray(cells, int).reshape(-1, 2).copy()
     )
-    if c.model_version == "1.6":
-        insect_cells = c.spatial["initial_insect_cells"]
-        insects = (
-            np.random.default_rng(np.random.SeedSequence([c.seed, 150, 2])).integers(
-                0, shape, size=(len(insect_species), 2)
-            )
-            if insect_cells is None
-            else np.asarray(insect_cells, int).reshape(-1, 2).copy()
+    insect_cells = c.spatial["initial_insect_cells"]
+    insects = (
+        np.random.default_rng(np.random.SeedSequence([c.seed, 150, 2])).integers(
+            0, shape, size=(len(insect_species), 2)
         )
-        return plants, insects, None
-    hosts = np.empty(len(insect_species), int)
-    for h in range(len(c.insect_sizes)):
-        p = int(c.spatial["initial_host_by_insect_species"][f"H{h + 1}"][1:]) - 1
-        available = np.flatnonzero(plant_species == p)
-        index = np.flatnonzero(insect_species == h)
-        if len(index):
-            hosts[index] = rng.choice(available, len(index), replace=len(index) > len(available))
-    return plants, plants[hosts].copy(), hosts
+        if insect_cells is None
+        else np.asarray(insect_cells, int).reshape(-1, 2).copy()
+    )
+    return plants, insects
 
 
 def candidate_pools(plant_cells, insect_cells, c):

@@ -1,3 +1,4 @@
+import copy
 import json
 
 import numpy as np
@@ -18,17 +19,23 @@ class ObserveCues(SubstepObservation):
         runtime.stage = "ecology"
         snapshot = community.snapshot(state["current_step"])
         runtime.result["snapshots"].append(snapshot)
-        if runtime.genetic is not None:
-            runtime.stored_genotype_values += (
-                community.plants.genotypes.size + community.insects.genotypes.size
+        runtime.stored_genotype_values += (
+            community.plants.genotypes.size + community.insects.genotypes.size
+        )
+        runtime.result["genetic_summary"].extend(
+            runtime.genetic.summary(
+                community,
+                state["current_step"],
+                (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes)),
             )
-            runtime.result["genetic_summary"].extend(
-                runtime.genetic.summary(
-                    community,
-                    state["current_step"],
-                    (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes)),
-                )
+        )
+        runtime.result["haplotype_summary"].extend(
+            runtime.genetic.haplotype_summary(
+                community,
+                state["current_step"],
+                (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes)),
             )
+        )
         D = community.plants.defense
         V_emit = voc.map_voc(D, community.plants.voc_trait, runtime.B, runtime.c.rho_voc)
         V_cue = (
@@ -49,7 +56,6 @@ class ChooseHosts(SubstepAction):
                 candidate_pools=spatial.candidate_pools(
                     community.plants.cells, community.insects.cells, runtime.c
                 ),
-                initial_hosts=runtime.initial_hosts if state["current_step"] == 0 else None,
             )
         choice = shared.choose_hosts(
             community.insects.preference,
@@ -119,6 +125,11 @@ class SettleFeeding(SubstepTransition):
                 [mean_or_na(runtime.plant_phi[pl == s]) for s in range(len(runtime.c.plant_sizes))]
             )
         runtime.update = state["current_step"] < runtime.c.generations and len(pl) + len(hl) > 0
+        runtime.reproduction_checkpoint = (
+            (copy.deepcopy(runtime.rng), copy.deepcopy(runtime.spatial_rng))
+            if runtime.update
+            else None
+        )
         runtime.start = len(runtime.result["populations"])
         for kind, labels, sizes, fitness, gain, damage, amount, phis in [
             (
@@ -154,6 +165,12 @@ class SettleFeeding(SubstepTransition):
                         kind=kind,
                         species=name,
                         N_start=int(mask.sum()),
+                        N_female=int(((community.insects.sex == 0) & mask).sum())
+                        if kind == "insect"
+                        else None,
+                        N_male=int(((community.insects.sex == 1) & mask).sum())
+                        if kind == "insect"
+                        else None,
                         N_survived_to_reproduce=None,
                         N_offspring=None,
                         N_next=None,
@@ -205,9 +222,7 @@ class SettleFeeding(SubstepTransition):
                     search_col=int(community.insects.cells[i, 1]),
                     host_cell_row=int(community.plants.cells[p, 0]) if p >= 0 else -1,
                     host_cell_col=int(community.plants.cells[p, 1]) if p >= 0 else -1,
-                    host_assignment="prescribed_initial"
-                    if runtime.c.model_version == "1.5" and state["current_step"] == 0
-                    else "local_choice",
+                    host_assignment="local_choice",
                 )
                 row["candidate_plant_ids"] = json.dumps(
                     community.plants.ids[runtime.e["candidate_rows"][i]].tolist()

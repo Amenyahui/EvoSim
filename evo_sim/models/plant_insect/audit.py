@@ -20,7 +20,7 @@ if not __debug__:
 
 
 def report_directory(batch):
-    return ROOT / "tests" / "reports" / Path(batch).resolve().name
+    return Path(batch).resolve() / "audits"
 
 
 def close(a, b):
@@ -58,8 +58,10 @@ def audit_run(path):
         raise AssertionError("invalid_parameter record has valid configuration")
     c = Config(**cfg)
     c.validate()
+    encoded = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(encoded).hexdigest() == meta["config_sha256"]
     genetic_checks = {}
-    if c.genetics is not None and c.genetics.get("mode") == "qtl_additive":
+    if c.genetics is not None and c.genetics.get("mode") == "sexual_qtl":
         from .audit_genetics import audit_genetics
 
         genetic_checks = audit_genetics(path, c, meta)
@@ -97,7 +99,7 @@ def audit_run(path):
     first_extinct = {}
     seen_ids = [set(), set()]
     assert [int(s["generation"]) for s in states] == list(range(len(states)))
-    if c.model_version == "1.6":
+    if c.model_version == "0.1.1":
         first = states[0]
         for kind, name, stream in (
             ("plant", "initial_plant_cells", 0),
@@ -249,29 +251,57 @@ def audit_run(path):
             close(par.phi_i, factor)
             close(par.lambda_s, lam)
             mu = lam * F * factor
-            close(par.conditional_offspring_mean_mu, mu)
-            close(par.expected_offspring, S * mu)
-            close(par.offspring_variance, S * mu + S * (1 - S) * mu**2)
+            close(par.conditional_mu, mu)
+            valid = np.ones(len(ids), bool) if k == 0 else ev.host_row.to_numpy(int) >= 0
+            cells = state[kind + "_cells"].copy()
+            if k == 1:
+                cells[valid] = state["plant_cells"][ev.host_row.to_numpy(int)[valid]]
+            mother = valid & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0)
+            donor = (
+                valid & (F > 0) & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1)
+            )
+            radius = c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
+            pools = []
+            for i in range(len(ids)):
+                near = wrapped_distance(cells[i], cells, c.spatial["grid_shape"]) <= radius
+                eligible = donor & (labels == labels[i]) & near
+                eligible[i] = False
+                pools.append(np.flatnonzero(eligible) if mother[i] else np.empty(0, int))
+            q = np.array([1 - np.prod(1 - S[pool]) for pool in pools])
+            probability = S * q
+            close(par.mate_probability, q)
+            close(par.expected_maternal_offspring, np.where(mother, probability * mu, np.nan))
+            close(
+                par.maternal_offspring_variance,
+                np.where(
+                    mother, probability * mu + probability * (1 - probability) * mu**2, np.nan
+                ),
+            )
             births = np.zeros(len(labels), dtype=np.int64)
             survived = np.zeros(len(labels), bool)
             sampling = flags(par.sampling_applied)
             if sampling.any():
                 assert sampling.all()
-                survived = flags(par.survived_to_reproduce)
-                births = par.offspring_count.to_numpy(float)
+                survived = flags(par.survived_to_mating_stage)
+                births = par.offspring_count_as_mother.to_numpy(float)
                 assert (
                     np.isfinite(births).all()
                     and (births >= 0).all()
                     and (births == np.floor(births)).all()
                 )
-                assert (
-                    np.all(births[~survived] == 0)
-                    and not survived[S == 0].any()
-                    and survived[S == 1].all()
-                )
-                assert np.all(births[mu == 0] == 0)
+                assert not survived[S == 0].any() and survived[S == 1].all()
+                pools = [pool[survived[pool]] for pool in pools]
+                counts = np.array([len(pool) for pool in pools])
+                close(par.candidate_mate_count, counts)
+                assert np.array_equal(flags(par.has_mate), counts > 0)
+                assert np.array_equal(flags(par.eligible_as_mother), mother & survived)
+                assert np.array_equal(flags(par.eligible_as_donor), donor & survived)
+                assert np.all(births[~mother | ~survived | (counts == 0) | (mu == 0)] == 0)
             else:
-                assert par.offspring_count.isna().all() and par.survived_to_reproduce.isna().all()
+                assert (
+                    par.offspring_count_as_mother.isna().all()
+                    and par.survived_to_mating_stage.isna().all()
+                )
             for s, name in enumerate(species_keys):
                 mask = labels == s
                 row = pop[pop.species == name].iloc[0]
@@ -319,24 +349,34 @@ def audit_run(path):
                     assert (next_labels == species_id).sum() == int(
                         pop[pop.species == name].iloc[0].N_next
                     )
-                counts = child.parent_id.value_counts().to_dict()
+                counts = child.maternal_id.value_counts().to_dict()
                 assert [int(counts.get(int(i), 0)) for i in ids] == births.astype(int).tolist()
                 lookup = {int(v): i for i, v in enumerate(ids)}
-                indices = child.parent_id.map(lookup)
+                indices = child.maternal_id.map(lookup)
                 assert indices.notna().all()
                 indices = indices.to_numpy(int)
                 assert child.species.tolist() == [species_keys[s] for s in next_labels]
                 assert np.array_equal(labels[indices], next_labels)
-                prefix = "P" if k == 0 else "H"
-                assert child.parent_genotype_id.tolist() == [f"{prefix}:{v}" for v in ids[indices]]
+                father_indices = child.paternal_id.map(lookup)
+                assert father_indices.notna().all()
+                father_indices = father_indices.to_numpy(int)
+                assert np.array_equal(labels[father_indices], next_labels)
+                for m, f in zip(indices, father_indices):
+                    assert survived[m] and f in pools[m]
+                sired = child.paternal_id.value_counts().to_dict()
+                close(par.offspring_count_sired, [sired.get(int(i), 0) for i in ids])
+                if k == 1:
+                    assert np.all(state["insect_sex"][indices] == 0) and np.all(
+                        state["insect_sex"][father_indices] == 1
+                    )
+                    assert np.isin(nxt["insect_sex"], [0, 1]).all()
+                    close(child.offspring_sex, nxt["insect_sex"])
                 if len(child):
-                    for key in ("D", "plant_voc_independent_trait") if k == 0 else ("I", "A"):
-                        for col in range(nxt[key].shape[1]):
-                            close(child[f"{key}_{col + 1}"], nxt[key][:, col])
-                            mutated = flags(child[f"{key}_mutated_{col + 1}"])
-                            assert np.array_equal(
-                                nxt[key][~mutated, col], state[key][indices[~mutated], col]
-                            )
+                    close(np.array([json.loads(v) for v in child.maternal_cell]), cells[indices])
+                    close(
+                        np.array([json.loads(v) for v in child.paternal_cell]),
+                        cells[father_indices],
+                    )
             else:
                 descendants = tables["offspring"]
                 assert descendants[
@@ -355,12 +395,17 @@ def audit_run(path):
         if end.N_offspring.notna().any():
             from .audit_genetics import genetic_limit
 
-            if c.genetics is not None and c.genetics.get("mode") == "qtl_additive":
+            if c.genetics is not None and c.genetics.get("mode") == "sexual_qtl":
                 end.attrs["allele_count"] = len(pd.read_csv(path / "allele_catalog.csv"))
-            assert (
-                end.N_offspring.sum() > c.max_individuals_safety or genetic_limit(c, states, end)
-            ) and not flags(end.update_applied).any()
-    if c.model_version in ("1.4", "1.5", "1.6"):
+            assert not flags(end.update_applied).any()
+            if meta["status"].get("stage") == "offspring_allocation":
+                assert end.N_offspring.sum() > c.max_individuals_safety or genetic_limit(
+                    c, states, end
+                )
+            else:
+                # Runtime memory/sampler errors are recorded, not independently reproducible proofs.
+                assert meta["status"].get("message")
+    if c.model_version == "0.1.1":
         audit_extensions(path, c, meta, states, tables)
     return dict(
         status=status,
@@ -408,7 +453,6 @@ def audit_space_events(state, ev, c, meta):
             candidates
         )
         rows = np.array([lookup[k] for k in candidates], int)
-        initial = int(state["generation"]) == 0
         origin = state["insect_cells"][i]
         near = (
             wrapped_distance(origin, state["plant_cells"], c.spatial["grid_shape"])
@@ -416,24 +460,14 @@ def audit_space_events(state, ev, c, meta):
         )
         assert near[rows].all()
         host = int(event["host_row"])
-        if initial and c.model_version == "1.5":
-            h = f"H{int(state['insect_species'][i]) + 1}"
-            target = c.spatial["initial_host_by_insect_species"][h]
-            assert event["plant_species"] == target and len(rows) == 1
-            assert (
-                event["host_assignment"] == "prescribed_initial"
-                and event["reason"] == "initial_host"
-            )
-            assert np.array_equal(state["plant_cells"][rows[0]], origin)
+        assert len(rows) == min(int(near.sum()), c.candidate_size)
+        assert event["host_assignment"] == "local_choice"
+        if not len(rows):
+            assert event["reason"] == "no_candidate" and host == -1
+        elif host >= 0:
+            assert event["reason"] == "accepted"
         else:
-            assert len(rows) == min(int(near.sum()), c.candidate_size)
-            assert event["host_assignment"] == "local_choice"
-            if not len(rows):
-                assert event["reason"] == "no_candidate" and host == -1
-            elif host >= 0:
-                assert event["reason"] == "accepted"
-            else:
-                assert event["reason"] == "rejected"
+            assert event["reason"] == "rejected"
         if host >= 0:
             assert host in rows
             close([event["host_cell_row"], event["host_cell_col"]], state["plant_cells"][host])
@@ -461,7 +495,7 @@ def audit_dispersal(state, nxt, events, children, kind, c):
     if len(children):
         close(children[["cell_row", "cell_col"]], cells)
     lookup = {int(v): i for i, v in enumerate(state[kind + "_ids"])}
-    indices = np.array([lookup[int(v)] for v in children.parent_id], int)
+    indices = np.array([lookup[int(v)] for v in children.maternal_id], int)
     if kind == "plant":
         origins = state["plant_cells"][indices]
     else:
@@ -473,28 +507,8 @@ def audit_dispersal(state, nxt, events, children, kind, c):
 
 
 def audit_extensions(path, c, meta, states, tables):
-    """Recompute frozen traits, recorded exposure and reference-panel diagnostics."""
-    founders = c.founder_traits
-    if founders is None:
-        return
-    for state in states:
-        for kind, evolve, keys in (
-            ("plant", c.evolve_plants, ("D", "plant_voc_independent_trait")),
-            ("insect", c.evolve_insects, ("I", "A")),
-        ):
-            if (c.genetics is None or c.genetics.get("mode") != "qtl_additive") and (
-                int(state["generation"]) == 0 or not evolve
-            ):
-                for key in keys:
-                    assert np.array_equal(
-                        state[key], np.asarray(founders[key])[state[kind + "_species"]]
-                    )
-            if not evolve:
-                offspring = tables["offspring"][tables["offspring"].kind == kind]
-                for key in keys:
-                    for col in range(np.asarray(founders[key]).shape[1]):
-                        if len(offspring):
-                            assert not flags(offspring[f"{key}_mutated_{col + 1}"]).any()
+    """Recompute recorded exposure and fixed reference-panel diagnostics."""
+    founders = c.observation_reference_traits
     if not c.record_observations:
         return
     diagnostics = pd.read_csv(path / "diagnostics.csv", float_precision="round_trip")
@@ -566,19 +580,39 @@ def audit_extensions(path, c, meta, states, tables):
     assert len(diagnostics) == expected_rows
 
 
-def audit(out, report_dir=None):
+def audit(out, report_dir=None, allow_plot_source_drift=False):
     out = Path(out)
     settings = json.loads((out / "settings.json").read_text(encoding="utf-8"))
     report_dir = Path(report_dir) if report_dir is not None else report_directory(out)
     report_dir.mkdir(parents=True, exist_ok=True)
     status = pd.read_csv(out / "data" / "run_status.csv")
     rows = []
+    source_differences = []
+    allowed_drift = (
+        {
+            "models/plant_insect/analysis/plot_diagnostics.py",
+            "models/plant_insect/analysis/plot_genetics.py",
+            "models/plant_insect/analysis/summarize_qtl_run.py",
+        }
+        if allow_plot_source_drift
+        else set()
+    )
     assert len(status) == len(settings["spec"]["cases"]) * settings["spec"]["replicates"]
     for case in settings["spec"]["cases"]:
         for rep in range(1, settings["spec"]["replicates"] + 1):
             path = out / "data" / case["name"] / f"rep{rep:02d}"
             meta = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
-            assert meta["source_hash"] == settings["source_sha256"]
+            differences = {
+                key: {
+                    "batch": settings["source_sha256"].get(key),
+                    "run": meta["source_hash"].get(key),
+                }
+                for key in set(settings["source_sha256"]) | set(meta["source_hash"])
+                if settings["source_sha256"].get(key) != meta["source_hash"].get(key)
+            }
+            assert set(differences) <= allowed_drift, differences
+            if differences:
+                source_differences.append(dict(case=case["name"], replicate=rep, files=differences))
             expected = dict(settings["spec"]["base"], **case["overrides"])
             expected["seed"] += rep - 1
             if meta["status"]["status"] != "invalid_parameter":
@@ -594,6 +628,8 @@ def audit(out, report_dir=None):
     pd.DataFrame(rows).to_csv(report_dir / "development_checks.csv", index=False)
     summary = dict(
         runs=len(rows),
+        allow_plot_source_drift=allow_plot_source_drift,
+        batch_run_source_differences=source_differences,
         outcomes=pd.Series([r["status"] for r in rows]).value_counts().to_dict(),
         batch=str(out.resolve()),
         source_matches_current=settings["source_sha256"] == source_hashes(),
@@ -620,7 +656,13 @@ def audit(out, report_dir=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
-    audit(parser.parse_args().input)
+    parser.add_argument(
+        "--allow-plot-source-drift",
+        action="store_true",
+        help="Record and allow only the explicitly listed historical analysis-script changes",
+    )
+    args = parser.parse_args()
+    audit(args.input, allow_plot_source_drift=args.allow_plot_source_drift)
 
 
 if __name__ == "__main__":

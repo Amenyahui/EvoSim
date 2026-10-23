@@ -1,24 +1,18 @@
 extends: ../config.yaml
 simulation_metadata:
-  num_steps_per_episode: 200
+  num_steps_per_episode: 5
 parameters:
   plant_sizes:
-  - 20
-  - 20
+  - 200
+  - 200
   insect_sizes:
-  - 6
+  - 40
   n: 2
   record_every: 1
   seed: 20261021
-  mutation_rate: 0.01
-  mutation_sd: 0.05
-  mu_A: 0.01
-  sigma_A: 0.05
-  mu_Z: 0.01
-  sigma_Z: 0.05
   plant_cost: 0.125
   insect_cost: 0.125
-  sP0: 0.1
+  sP0: 0.5
   sI0: 0.0
   candidate_size: 8
   olfaction_mode: template
@@ -39,13 +33,7 @@ parameters:
   unmatched_insect_fitness: 0.0
   rho_voc: 0.5
   voc_cost: 0.05
-  voc_init_mode: matched
   choice_mode: outside
-  plant_centers: null
-  initial_spread: 0.1
-  insect_initial_max: 0.4
-  insect_I_initial_max: null
-  insect_A_initial_bounds: null
   resource_capacity:
     P1: 1.0
     P2: 1.0
@@ -56,13 +44,13 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_larval_feeding
   demand_window: one_generation_larval_feeding
-  model_version: '1.6'
-  life_history: nonoverlapping_generations_obligate_host_larva
+  model_version: 0.1.1
+  life_history: nonoverlapping_sexual_generations
   plant_offspring_lambda:
     P1: 2.0
     P2: 2.0
   insect_offspring_lambda:
-    H1: 2.0
+    H1: 4.0
   plant_competition_alpha:
     P1:
       P1: 0.02
@@ -86,64 +74,45 @@ parameters:
     plant_offspring_lambda:
       P1:
         kind: theoretical_placeholder
-        source: docs/host_network.md; alpha is per individual in the specified local
+        source: docs/model.md; alpha is per individual in the specified local
           neighborhood, not an empirical/global estimate
       P2:
         kind: theoretical_placeholder
-        source: docs/host_network.md; alpha is per individual in the specified local
+        source: docs/model.md; alpha is per individual in the specified local
           neighborhood, not an empirical/global estimate
     insect_offspring_lambda:
       H1:
         kind: theoretical_placeholder
-        source: docs/host_network.md; alpha is per individual in the specified local
-          neighborhood, not an empirical/global estimate
+        source: docs/model.md; lambda=4 per female, not per individual; exploratory
+          sexual-demography correction, not empirically calibrated
     plant_competition_alpha:
       P1:
         P1:
           kind: theoretical_placeholder
-          source: docs/host_network.md; alpha is per individual in the specified local
+          source: docs/model.md; alpha is per individual in the specified local
             neighborhood, not an empirical/global estimate
         P2:
           kind: theoretical_placeholder
-          source: docs/host_network.md; alpha is per individual in the specified local
+          source: docs/model.md; alpha is per individual in the specified local
             neighborhood, not an empirical/global estimate
       P2:
         P1:
           kind: theoretical_placeholder
-          source: docs/host_network.md; alpha is per individual in the specified local
+          source: docs/model.md; alpha is per individual in the specified local
             neighborhood, not an empirical/global estimate
         P2:
           kind: theoretical_placeholder
-          source: docs/host_network.md; alpha is per individual in the specified local
+          source: docs/model.md; alpha is per individual in the specified local
             neighborhood, not an empirical/global estimate
     resources:
       kind: theoretical_placeholder
-      source: docs/host_network.md; alpha is per individual in the specified local
+      source: docs/model.md; alpha is per individual in the specified local
         neighborhood, not an empirical/global estimate
     inherited_ecology:
       kind: theoretical_placeholder
-      source: docs/host_network.md; alpha is per individual in the specified local
+      source: docs/model.md; alpha is per individual in the specified local
         neighborhood, not an empirical/global estimate
-  evolve_plants: true
-  evolve_insects: true
   record_observations: true
-  founder_traits:
-    D:
-    - - 0.2
-      - 0.6
-    - - 0.6
-      - 0.2
-    plant_voc_independent_trait:
-    - - 0.2
-      - 0.6
-    - - 0.6
-      - 0.2
-    I:
-    - - 0.2
-      - 0.6
-    A:
-    - - 0.2
-      - 0.6
   spatial:
     grid_shape:
     - 10
@@ -156,10 +125,10 @@ parameters:
     initial_plant_cells: null
     initial_insect_cells: null
   genetics:
-    mode: qtl_additive
-    schema_version: qtl-1
+    mode: sexual_qtl
+    schema_version: sexual-qtl-1
     ploidy: 2
-    inheritance: clonal_diploid_no_recombination
+    inheritance: biparental_meiosis
     background:
       plant:
       - 0.0
@@ -183,6 +152,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.0
+      chromosome_id: plant_LG01
+      position_cM: 0.0
     - locus_id: plant_1_2
       organism: plant
       functional_module: D
@@ -194,6 +165,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.0
+      chromosome_id: plant_LG02
+      position_cM: 0.0
     - locus_id: plant_2_1
       organism: plant
       functional_module: D
@@ -205,6 +178,8 @@ parameters:
       - 0.02
       - 0.0
       - 0.0
+      chromosome_id: plant_LG03
+      position_cM: 0.0
     - locus_id: plant_2_2
       organism: plant
       functional_module: D
@@ -216,6 +191,8 @@ parameters:
       - 0.02
       - 0.0
       - 0.0
+      chromosome_id: plant_LG04
+      position_cM: 0.0
     - locus_id: plant_3_1
       organism: plant
       functional_module: plant_voc_independent_trait
@@ -227,6 +204,8 @@ parameters:
       - 0.0
       - 0.02
       - 0.0
+      chromosome_id: plant_LG05
+      position_cM: 0.0
     - locus_id: plant_3_2
       organism: plant
       functional_module: plant_voc_independent_trait
@@ -238,6 +217,8 @@ parameters:
       - 0.0
       - 0.02
       - 0.0
+      chromosome_id: plant_LG06
+      position_cM: 0.0
     - locus_id: plant_4_1
       organism: plant
       functional_module: plant_voc_independent_trait
@@ -249,6 +230,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.02
+      chromosome_id: plant_LG07
+      position_cM: 0.0
     - locus_id: plant_4_2
       organism: plant
       functional_module: plant_voc_independent_trait
@@ -260,6 +243,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.02
+      chromosome_id: plant_LG08
+      position_cM: 0.0
     - locus_id: insect_1_1
       organism: insect
       functional_module: I
@@ -271,6 +256,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.0
+      chromosome_id: insect_LG09
+      position_cM: 0.0
     - locus_id: insect_1_2
       organism: insect
       functional_module: I
@@ -282,6 +269,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.0
+      chromosome_id: insect_LG10
+      position_cM: 0.0
     - locus_id: insect_2_1
       organism: insect
       functional_module: I
@@ -293,6 +282,8 @@ parameters:
       - 0.02
       - 0.0
       - 0.0
+      chromosome_id: insect_LG11
+      position_cM: 0.0
     - locus_id: insect_2_2
       organism: insect
       functional_module: I
@@ -304,6 +295,8 @@ parameters:
       - 0.02
       - 0.0
       - 0.0
+      chromosome_id: insect_LG12
+      position_cM: 0.0
     - locus_id: insect_3_1
       organism: insect
       functional_module: A
@@ -315,6 +308,8 @@ parameters:
       - 0.0
       - 0.02
       - 0.0
+      chromosome_id: insect_LG13
+      position_cM: 0.0
     - locus_id: insect_3_2
       organism: insect
       functional_module: A
@@ -326,6 +321,8 @@ parameters:
       - 0.0
       - 0.02
       - 0.0
+      chromosome_id: insect_LG14
+      position_cM: 0.0
     - locus_id: insect_4_1
       organism: insect
       functional_module: A
@@ -337,6 +334,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.02
+      chromosome_id: insect_LG15
+      position_cM: 0.0
     - locus_id: insect_4_2
       organism: insect
       functional_module: A
@@ -348,6 +347,8 @@ parameters:
       - 0.0
       - 0.0
       - 0.02
+      chromosome_id: insect_LG16
+      position_cM: 0.0
     alleles:
     - allele_id: 0
       locus_id: plant_1_1
@@ -813,7 +814,7 @@ parameters:
       plant: true
       insect: true
     max_alleles_safety: 100000
-    max_genotype_values_safety: 16080000
+    max_genotype_values_safety: 4000000
     provenance:
       mapping:
         source_kind: theoretical_placeholder
@@ -832,10 +833,38 @@ parameters:
         source_kind: implementation_choice
         description: Conservative allele reservation and retained genotype scalar
           count; computational stops, not ecological caps.
+      genome_map:
+        source_kind: theoretical_placeholder
+        description: Eight independent abstract linkage groups per taxon; not physical
+          chromosomes.
+    recombination_model: haldane_poisson_no_interference
+  observation_reference_traits:
+    D:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+    plant_voc_independent_trait:
+    - - 0.2
+      - 0.6
+    - - 0.6
+      - 0.2
+  sexual_reproduction:
+    plant_mating_system: hermaphroditic_obligate_outcrossing
+    plant_selfing: false
+    insect_mating_system: dioecious
+    insect_founder_female_probability: 0.5
+    insect_offspring_female_probability: 0.5
+    pollen_radius: 1
+    insect_mate_radius: 2
+    father_sampling: uniform_with_replacement
+    provenance:
+      source_kind: theoretical_placeholder
+      description: Strict outcrossing, equal sex probabilities, insect mate radius 2;
+        exploratory demographic correction, not calibrated.
 batch:
-  purpose: 200-generation descriptive extension of qtl_development.json; identical
-    two treatments, initial state, single paired seed and biological parameters. Only
-    duration and retained-genotype allocation ceiling change.
+  purpose: Sexual QTL implementation checks; not hypothesis testing or calibrated
+    prediction.
   replicates: 1
   cases:
   - name: qtl_mutating
@@ -843,10 +872,10 @@ batch:
   - name: mutation_off
     overrides:
       genetics:
-        mode: qtl_additive
-        schema_version: qtl-1
+        mode: sexual_qtl
+        schema_version: sexual-qtl-1
         ploidy: 2
-        inheritance: clonal_diploid_no_recombination
+        inheritance: biparental_meiosis
         background:
           plant:
           - 0.0
@@ -870,6 +899,8 @@ batch:
           - 0.0
           - 0.0
           - 0.0
+          chromosome_id: plant_LG01
+          position_cM: 0.0
         - locus_id: plant_1_2
           organism: plant
           functional_module: D
@@ -881,6 +912,8 @@ batch:
           - 0.0
           - 0.0
           - 0.0
+          chromosome_id: plant_LG02
+          position_cM: 0.0
         - locus_id: plant_2_1
           organism: plant
           functional_module: D
@@ -892,6 +925,8 @@ batch:
           - 0.02
           - 0.0
           - 0.0
+          chromosome_id: plant_LG03
+          position_cM: 0.0
         - locus_id: plant_2_2
           organism: plant
           functional_module: D
@@ -903,6 +938,8 @@ batch:
           - 0.02
           - 0.0
           - 0.0
+          chromosome_id: plant_LG04
+          position_cM: 0.0
         - locus_id: plant_3_1
           organism: plant
           functional_module: plant_voc_independent_trait
@@ -914,6 +951,8 @@ batch:
           - 0.0
           - 0.02
           - 0.0
+          chromosome_id: plant_LG05
+          position_cM: 0.0
         - locus_id: plant_3_2
           organism: plant
           functional_module: plant_voc_independent_trait
@@ -925,6 +964,8 @@ batch:
           - 0.0
           - 0.02
           - 0.0
+          chromosome_id: plant_LG06
+          position_cM: 0.0
         - locus_id: plant_4_1
           organism: plant
           functional_module: plant_voc_independent_trait
@@ -936,6 +977,8 @@ batch:
           - 0.0
           - 0.0
           - 0.02
+          chromosome_id: plant_LG07
+          position_cM: 0.0
         - locus_id: plant_4_2
           organism: plant
           functional_module: plant_voc_independent_trait
@@ -947,6 +990,8 @@ batch:
           - 0.0
           - 0.0
           - 0.02
+          chromosome_id: plant_LG08
+          position_cM: 0.0
         - locus_id: insect_1_1
           organism: insect
           functional_module: I
@@ -958,6 +1003,8 @@ batch:
           - 0.0
           - 0.0
           - 0.0
+          chromosome_id: insect_LG09
+          position_cM: 0.0
         - locus_id: insect_1_2
           organism: insect
           functional_module: I
@@ -969,6 +1016,8 @@ batch:
           - 0.0
           - 0.0
           - 0.0
+          chromosome_id: insect_LG10
+          position_cM: 0.0
         - locus_id: insect_2_1
           organism: insect
           functional_module: I
@@ -980,6 +1029,8 @@ batch:
           - 0.02
           - 0.0
           - 0.0
+          chromosome_id: insect_LG11
+          position_cM: 0.0
         - locus_id: insect_2_2
           organism: insect
           functional_module: I
@@ -991,6 +1042,8 @@ batch:
           - 0.02
           - 0.0
           - 0.0
+          chromosome_id: insect_LG12
+          position_cM: 0.0
         - locus_id: insect_3_1
           organism: insect
           functional_module: A
@@ -1002,6 +1055,8 @@ batch:
           - 0.0
           - 0.02
           - 0.0
+          chromosome_id: insect_LG13
+          position_cM: 0.0
         - locus_id: insect_3_2
           organism: insect
           functional_module: A
@@ -1013,6 +1068,8 @@ batch:
           - 0.0
           - 0.02
           - 0.0
+          chromosome_id: insect_LG14
+          position_cM: 0.0
         - locus_id: insect_4_1
           organism: insect
           functional_module: A
@@ -1024,6 +1081,8 @@ batch:
           - 0.0
           - 0.0
           - 0.02
+          chromosome_id: insect_LG15
+          position_cM: 0.0
         - locus_id: insect_4_2
           organism: insect
           functional_module: A
@@ -1035,6 +1094,8 @@ batch:
           - 0.0
           - 0.0
           - 0.02
+          chromosome_id: insect_LG16
+          position_cM: 0.0
         alleles:
         - allele_id: 0
           locus_id: plant_1_1
@@ -1500,7 +1561,7 @@ batch:
           plant: false
           insect: false
         max_alleles_safety: 100000
-        max_genotype_values_safety: 16080000
+        max_genotype_values_safety: 4000000
         provenance:
           mapping:
             source_kind: theoretical_placeholder
@@ -1520,3 +1581,8 @@ batch:
             source_kind: implementation_choice
             description: Conservative allele reservation and retained genotype scalar
               count; computational stops, not ecological caps.
+          genome_map:
+            source_kind: theoretical_placeholder
+            description: Eight independent abstract linkage groups per taxon; not
+              physical chromosomes.
+        recombination_model: haldane_poisson_no_interference

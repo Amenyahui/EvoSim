@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from evo_sim import __version__
 from evo_sim.core.config import read_config
 from evo_sim.core.helpers import source_hashes
 from evo_sim.core.io import atomic_csv, atomic_text
@@ -21,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[3]
 COLUMNS = {
     "events": "generation seed insect_id insect_row species species_id host_row host_id plant_species accepted reason candidate_count choice_order q d x g dmax R gamma host_h I_sum W_insect",
     "plants": "generation plant_id plant_row species species_id R T gamma X h herbivore_load D_sum V_emit_mean defense_cost voc_cost W_plant",
-    "parents": "generation kind species species_id individual_id parent_genotype_id S_i F_i W_i phi_i lambda_s conditional_offspring_mean_mu expected_offspring offspring_variance survived_to_reproduce offspring_count sampling_applied survival_stream offspring_stream",
-    "offspring": "generation kind species offspring_id parent_id parent_genotype_id mutation_stream",
+    "parents": "generation kind species species_id individual_id S_i F_i W_i phi_i lambda_s conditional_mu expected_maternal_offspring maternal_offspring_variance survived_to_mating_stage offspring_count_as_mother offspring_count_sired mate_probability sampling_applied survival_stream offspring_stream",
+    "offspring": "generation kind species offspring_id maternal_id paternal_id mutations_maternal mutations_paternal offspring_sex",
     "populations": "generation kind species N_start N_survived_to_reproduce N_offspring N_next update_applied extinct_at_generation zero_fitness_count mean_g mean_h total_resource_transfer density_phi population_status",
     "networks": "generation insect_species plant_species N_accept Q_actual L_per_insect",
 }
@@ -54,7 +55,9 @@ def save_result(result, out):
         columns_by_table["diagnostics"] = DIAGNOSTIC_COLUMNS
     if "allele_catalog" in result:
         columns_by_table.update(
-            genetic_loci="locus_id organism functional_module targets mutation_rate mutation_sd",
+            haplotype_summary="generation kind species locus_left locus_right allele_left allele_right frequency",
+            genetic_loci="locus_id organism functional_module chromosome_id position_cM targets mutation_rate mutation_sd",
+            gamete_transmissions="generation kind offspring_id role parent_id chromosome_id locus_id position_cM inherited_allele_id child_allele_id transmitted_homolog_before_mutation crossover_count switch_before_locus mutation_event_id",
             allele_catalog="allele_id locus_id parent_allele_id birth_generation effect",
             mutations="generation kind species offspring_id locus_id copy parent_allele_id allele_id delta mutation_stream",
             genetic_summary="generation kind species N record_type locus_id allele_id frequency observed_heterozygosity gene_diversity mutation_count trait mean variance clipped_fraction",
@@ -86,9 +89,26 @@ def save_result(result, out):
     write_json(out / "metadata.json", dict(result["metadata"], output_sha256=hashes))
 
 
-def run(spec, out, *, runtime_config=None):
-    out = Path(out).resolve()
-    out.mkdir(parents=True, exist_ok=False)
+def create_output_directory(out=None):
+    if out is not None:
+        path = Path(out).resolve()
+        path.mkdir(parents=True, exist_ok=False)
+        return path
+    root = ROOT / "results" / f"results_v{__version__}"
+    root.mkdir(parents=True, exist_ok=True)
+    numbers = [int(p.name[3:]) for p in root.iterdir() if re.fullmatch(r"run[0-9]+", p.name)]
+    number = max(numbers, default=0) + 1
+    while True:
+        path = root / f"run{number}"
+        try:
+            path.mkdir()
+            return path
+        except FileExistsError:
+            number += 1
+
+
+def run(spec, out=None, *, runtime_config=None):
+    out = create_output_directory(out)
     write_json(
         out / "settings.json",
         dict(
@@ -165,7 +185,7 @@ def run(spec, out, *, runtime_config=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--out", type=Path, help="Default: results/results_v<version>/run<N>")
     args = parser.parse_args()
     config = read_config(args.config)
     spec = dict(
@@ -174,7 +194,8 @@ def main():
             config["parameters"], generations=config["simulation_metadata"]["num_steps_per_episode"]
         ),
     )
-    run(spec, args.out, runtime_config=config)
+    output = run(spec, args.out, runtime_config=config)
+    print(f"Output: {output}")
 
 
 if __name__ == "__main__":

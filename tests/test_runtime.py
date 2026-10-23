@@ -4,12 +4,14 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
 import numpy as np
 import pandas as pd
+
 from evo_sim.core.config import read_config
 from evo_sim.models.plant_insect import get_runner, simulate
 from evo_sim.models.plant_insect.helpers.config import Config
-from tests.test_acceptance import tiny
+from tests.support import config as tiny
 
 
 def same_results(actual, expected):

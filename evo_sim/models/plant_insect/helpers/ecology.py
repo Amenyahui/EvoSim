@@ -74,57 +74,7 @@ def allocate_resources(host, q, capacity, dmax):
     )
 
 
-def initialize(c, B, rng_p, rng_Z, rng_H, initial=None):
-    p_labels = np.repeat(np.arange(len(c.plant_sizes)), c.plant_sizes)
-    h_labels = np.repeat(np.arange(len(c.insect_sizes)), c.insect_sizes)
-    if initial is None:
-        D = rng_p.uniform(0, c.initial_spread, (len(p_labels), c.n))
-        if c.plant_centers is not None:
-            D = np.clip(np.asarray(c.plant_centers)[p_labels] + D - c.initial_spread / 2, 0, 1)
-        Z = (
-            traits.map_voc(D, B)
-            if c.voc_init_mode == "matched"
-            else rng_Z.uniform(0, 1, (len(D), len(B)))
-        )
-        I = np.empty((len(h_labels), c.n))
-        A = np.empty((len(h_labels), len(B)))
-        for s in range(len(c.insect_sizes)):
-            mask = h_labels == s
-            maximum = (
-                c.insect_initial_max
-                if c.insect_I_initial_max is None
-                else c.insect_I_initial_max[s]
-            )
-            lower, upper = (
-                (0.0, 1.0) if c.insect_A_initial_bounds is None else c.insect_A_initial_bounds[s]
-            )
-            I[mask] = rng_H[s].uniform(0, maximum, (mask.sum(), c.n))
-            A[mask] = rng_H[s].uniform(lower, upper, (mask.sum(), len(B)))
-    else:
-        if len(initial) != 4:
-            raise ValueError("v1.2 initial state is explicitly (D,I,A,Z)")
-        D, I, A, Z = (np.array(x, float, copy=True) for x in initial)
-    for value, shape in zip(
-        (D, I, A, Z),
-        (
-            (len(p_labels), c.n),
-            (len(h_labels), c.n),
-            (len(h_labels), len(B)),
-            (len(p_labels), len(B)),
-        ),
-    ):
-        if (
-            value.shape != shape
-            or not np.isfinite(value).all()
-            or ((value < 0) | (value > 1)).any()
-        ):
-            raise ValueError("initial traits must have correct shapes and values in [0,1]")
-    return D, I, A, Z, p_labels, h_labels
-
-
-def choose_hosts(
-    A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_pools=None, initial_hosts=None
-):
+def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_pools=None):
     """The pool is fixed during choice: acceptance never removes a plant."""
     host = np.full(len(A), -1, int)
     reason = np.full(len(A), "rejected", dtype="<U12")
@@ -139,11 +89,7 @@ def choose_hosts(
         rank[i] = order
         rng = rng_H[h_labels[i]]
         available = pool if candidate_pools is None else candidate_pools[i]
-        candidates = (
-            np.array([initial_hosts[i]], int)
-            if initial_hosts is not None
-            else traits.encounter_candidates(available, c.candidate_size, rng)
-        )
+        candidates = traits.encounter_candidates(available, c.candidate_size, rng)
         candidate_count[i] = len(candidates)
         if recorded_candidates is not None:
             recorded_candidates[i] = candidates.copy()
@@ -161,13 +107,9 @@ def choose_hosts(
             mask = p_labels[candidates] == s
             candidate_share[i, s] = mask.mean()
             conditional_share[i, s] = conditional[mask].sum()
-        host[i] = (
-            int(initial_hosts[i])
-            if initial_hosts is not None
-            else traits.draw_host(candidates, probabilities, rng)
-        )
+        host[i] = traits.draw_host(candidates, probabilities, rng)
         if host[i] >= 0:
-            reason[i] = "initial_host" if initial_hosts is not None else "accepted"
+            reason[i] = "accepted"
     result = dict(
         host=host,
         host_found=host >= 0,

@@ -31,6 +31,8 @@ class InsectPopulation:
     cells: np.ndarray | None = None
     genotypes: np.ndarray | None = None
 
+    sex: np.ndarray | None = None  # 0=female, 1=male; assigned once at birth
+
     def __len__(self):
         return len(self.ids)
 
@@ -39,6 +41,29 @@ class InsectPopulation:
 class CommunityState:
     plants: PlantPopulation
     insects: InsectPopulation
+
+    def validate(self):
+        for pop in (self.plants, self.insects):
+            if (
+                len(np.unique(pop.ids)) != len(pop)
+                or pop.genotypes.shape[:2] != (len(pop), 2)
+                or pop.cells.shape != (len(pop), 2)
+                or len(pop.species) != len(pop)
+            ):
+                raise ValueError("unaligned population state")
+        if (
+            self.insects.sex.shape != (len(self.insects),)
+            or not np.isin(self.insects.sex, [0, 1]).all()
+        ):
+            raise ValueError("insect sex must be aligned female=0/male=1")
+        for name, values in self.arrays().items():
+            n = (
+                len(self.plants)
+                if name in ("D", "plant_voc_independent_trait") or name.startswith("plant_")
+                else len(self.insects)
+            )
+            if len(values) != n:
+                raise ValueError(f"unaligned {name}")
 
     def arrays(self):
         """Stable v1.3 on-disk names; no copying or random draws."""
@@ -51,6 +76,7 @@ class CommunityState:
             insect_species=self.insects.species,
             plant_ids=self.plants.ids,
             insect_ids=self.insects.ids,
+            insect_sex=self.insects.sex,
         )
         if self.plants.cells is not None:
             values["plant_cells"] = self.plants.cells
@@ -85,5 +111,6 @@ class CommunityState:
                 values["A"],
                 values.get("insect_cells"),
                 values.get("insect_genotypes"),
+                values["insect_sex"],
             ),
         )

@@ -46,10 +46,6 @@ class _TraitConfig:
     generations: int = 200
     record_every: int = 10
     seed: int = 20261019
-    mutation_rate: float = 1e-5
-    mutation_sd: float = 0.2
-    mu_A: float = 1e-5
-    sigma_A: float = 0.2
     plant_cost: float = 0.125
     insect_cost: float = 0.125
     sP0: float = 0.1
@@ -66,9 +62,6 @@ class _TraitConfig:
     outside_utility: float = 0.0
     unmatched_insect_fitness: float = 0.0
     # Optional explicit species centers; None retains Speed's U(0,.01) start.
-    plant_centers: object = None
-    initial_spread: float = 0.01
-    insect_initial_max: float = 0.01
 
     def validate(self):
         for name in ("insect_pop", "n", "generations", "record_every", "candidate_size"):
@@ -83,17 +76,13 @@ class _TraitConfig:
             if isinstance(value, float) and not np.isfinite(value):
                 raise ValueError(f"{name} must be finite")
         for name in (
-            "mutation_rate",
-            "mu_A",
             "sP0",
             "sI0",
             "unmatched_insect_fitness",
-            "initial_spread",
-            "insect_initial_max",
         ):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be in [0,1]")
-        for name in ("mutation_sd", "sigma_A", "plant_cost", "insect_cost", "tau"):
+        for name in ("plant_cost", "insect_cost", "tau"):
             if getattr(self, name) < 0:
                 raise ValueError(f"{name} must be nonnegative")
         if self.sigma <= 0 or self.olfaction_mode not in ("template", "neutral"):
@@ -129,35 +118,22 @@ class _TraitConfig:
             or not np.isclose(w.sum(), 1)
         ):
             raise ValueError("weights must be nonnegative, length L and sum to 1")
-        if self.plant_centers is not None:
-            centers = np.asarray(self.plant_centers, float)
-            if (
-                centers.shape != (len(self.plant_sizes), self.n)
-                or not np.isfinite(centers).all()
-                or ((centers < 0) | (centers > 1)).any()
-            ):
-                raise ValueError("plant_centers must be species by K, in [0,1]")
         return B, w / w.sum()
 
 
 @dataclass
 class _VOCConfig(_TraitConfig):
     rho_voc: float = 1.0
-    mu_Z: float = 1e-5
-    sigma_Z: float = 0.2
     voc_cost: float = 0.0
-    voc_init_mode: str = "matched"
     choice_mode: str = "outside"
 
     def validate(self):
         B, w = super().validate()
-        for name in ("rho_voc", "mu_Z"):
+        for name in ("rho_voc",):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must be in [0,1]")
-        if self.sigma_Z < 0 or self.voc_cost < 0:
+        if self.voc_cost < 0:
             raise ValueError("sigma_Z and voc_cost must be nonnegative")
-        if self.voc_init_mode not in ("matched", "independent"):
-            raise ValueError("voc_init_mode must be matched or independent")
         if self.choice_mode not in ("outside", "forced"):
             raise ValueError("choice_mode must be outside or forced")
         return B, w
@@ -169,8 +145,6 @@ class _CommunityConfig(_VOCConfig):
     insect_sizes: tuple = (80, 80)
     resource_capacity: object = 1.0
     max_feeding_demand: object = 1.0
-    insect_I_initial_max: object = None
-    insect_A_initial_bounds: object = None
 
     def validate(self):
         if not self.insect_sizes or any(type(x) is not int or x < 1 for x in self.insect_sizes):
@@ -186,31 +160,6 @@ class _CommunityConfig(_VOCConfig):
         species_units(self.max_feeding_demand, self.insect_sizes, "max_feeding_demand")
         if self.unmatched_insect_fitness != 0:
             raise ValueError("v1.2 retains zero fitness for unmatched insects")
-        maximum = (
-            np.full(len(self.insect_sizes), self.insect_initial_max)
-            if self.insect_I_initial_max is None
-            else np.asarray(self.insect_I_initial_max, float)
-        )
-        if (
-            maximum.shape != (len(self.insect_sizes),)
-            or not np.isfinite(maximum).all()
-            or ((maximum < 0) | (maximum > 1)).any()
-        ):
-            raise ValueError("insect_I_initial_max must give one [0,1] maximum per insect species")
-        bounds = (
-            np.tile([0.0, 1.0], (len(self.insect_sizes), 1))
-            if self.insect_A_initial_bounds is None
-            else np.asarray(self.insect_A_initial_bounds, float)
-        )
-        if (
-            bounds.shape != (len(self.insect_sizes), 2)
-            or not np.isfinite(bounds).all()
-            or ((bounds < 0) | (bounds > 1)).any()
-            or (bounds[:, 0] > bounds[:, 1]).any()
-        ):
-            raise ValueError(
-                "insect_A_initial_bounds must be one valid [lower,upper] pair per species"
-            )
         return B, w
 
 
@@ -301,12 +250,11 @@ class Config(_ResourceConfig):
     parameter_provenance: object = None
     study_site: object = None
     max_individuals_safety: object = None
-    evolve_plants: bool = True
-    evolve_insects: bool = True
-    founder_traits: object = None
     record_observations: bool = True
     spatial: object = None
     genetics: object = None
+    sexual_reproduction: object = None
+    observation_reference_traits: object = None
 
     def validate(self):
         for sizes in (self.plant_sizes, self.insect_sizes):
@@ -323,10 +271,10 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in ("1.3", "1.4", "1.5", "1.6")
-            or self.life_history != "nonoverlapping_generations_obligate_host_larva"
+            self.model_version != "0.1.1"
+            or self.life_history != "nonoverlapping_sexual_generations"
         ):
-            raise ValueError("explicit v1.3 and nonoverlapping obligate-host life history required")
+            raise ValueError("explicit 0.1.1 and nonoverlapping_sexual_generations required")
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
         ):
@@ -391,49 +339,27 @@ class Config(_ResourceConfig):
             generations=max(1, self.generations),
         )
         B, w = _ResourceConfig(**args).validate()
-        for name in ("evolve_plants", "evolve_insects", "record_observations"):
-            if type(getattr(self, name)) is not bool:
-                raise ValueError(f"{name} must be a boolean")
-        if self.model_version == "1.3" and (
-            not self.evolve_plants or not self.evolve_insects or self.founder_traits is not None
-        ):
-            raise ValueError("Evolution interventions require model_version=1.4")
-        if not (self.evolve_plants and self.evolve_insects) and self.founder_traits is None:
-            raise ValueError("Frozen controls require explicit homogeneous founder_traits")
-        if self.founder_traits is not None:
-            shapes = {
-                "D": (len(ps), self.n),
-                "I": (len(hs), self.n),
-                "A": (len(hs), len(B)),
-                "plant_voc_independent_trait": (len(ps), len(B)),
-            }
-            if not isinstance(self.founder_traits, dict) or set(self.founder_traits) != set(shapes):
-                raise ValueError("founder_traits requires D, I, A, plant_voc_independent_trait")
+        if type(self.record_observations) is not bool:
+            raise ValueError("record_observations must be boolean")
+        if self.record_observations:
+            panel = self.observation_reference_traits
+            shapes = {"D": (len(ps), self.n), "plant_voc_independent_trait": (len(ps), len(B))}
+            if not isinstance(panel, dict) or set(panel) != set(shapes):
+                raise ValueError("observation_reference_traits requires a fixed D/Z panel")
             for name, shape in shapes.items():
-                values = np.asarray(self.founder_traits[name])
+                values = np.asarray(panel[name])
                 if (
                     values.dtype.kind not in "iuf"
                     or values.shape != shape
                     or not np.isfinite(values).all()
                     or ((values < 0) | (values > 1)).any()
                 ):
-                    raise ValueError(
-                        f"founder_traits {name} requires finite [0,1] values of shape {shape}"
-                    )
-        if (
-            self.model_version in ("1.4", "1.5", "1.6")
-            and self.record_observations
-            and self.founder_traits is None
-        ):
-            raise ValueError(
-                "Standardized observations require explicit founder_traits reference panel"
-            )
-        if self.model_version in ("1.5", "1.6"):
-            from .spatial import validate_spatial
+                    raise ValueError("invalid observation reference panel")
+        from .demography import validate_sexual
+        from .spatial import validate_spatial
 
-            validate_spatial(self)
-        elif self.spatial is not None:
-            raise ValueError("Spatial configuration requires model_version=1.5 or 1.6")
+        validate_spatial(self)
+        validate_sexual(self)
         from .genetics import validate
 
         validate(self, len(B))
@@ -450,13 +376,5 @@ class Config(_ResourceConfig):
 
 
 def config_payload(c):
-    """Preserve the v1.3 serialization schema for unmodified legacy runs."""
-    values = asdict(c)
-    if c.genetics is None or c.genetics == {"mode": "direct_trait_legacy"}:
-        values.pop("genetics")
-    if c.model_version not in ("1.5", "1.6"):
-        values.pop("spatial")
-    if c.model_version == "1.3":
-        for name in ("evolve_plants", "evolve_insects", "founder_traits", "record_observations"):
-            values.pop(name)
-    return values
+    """Serialize the sole current model contract."""
+    return asdict(c)

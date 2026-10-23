@@ -55,11 +55,3 @@ def fecundity(D, V_emit, c):
         else np.maximum(0, 1 - defense_cost - voc_cost)
     )
     return fp, defense_cost, voc_cost
-
-
-def mutate_Z(Z, c, rng):
-    result = Z.copy()
-    mask = rng.random(result.shape) < c.mu_Z
-    changed = (result[mask] + rng.normal(0, c.sigma_Z, int(mask.sum()))) % 2
-    result[mask] = np.where(changed <= 1, changed, 2 - changed)
-    return result, int(mask.sum())

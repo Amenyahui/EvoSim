@@ -51,12 +51,3 @@ def draw_host(candidates, probabilities, rng):
 def consumption(D, I):
     ratios = np.divide(I, D, out=np.full_like(D, np.inf, dtype=float), where=D > 0)
     return np.minimum(1, ratios.min(axis=-1))
-
-
-def mutate(values, rate, sd, rng):
-    result = values.copy()
-    # Exactly independent Bernoulli loci, equivalent to old binomial+distinct sites.
-    mask = rng.random(result.shape) < rate
-    changed = (result[mask] + rng.normal(0, sd, int(mask.sum()))) % 2
-    result[mask] = np.where(changed <= 1, changed, 2 - changed)
-    return result

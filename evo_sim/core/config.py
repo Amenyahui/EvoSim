@@ -18,7 +18,7 @@ def read_config(path, _parents=()):
         return config
     base = read_config(path.parent / parent, (*_parents, path))
     for key, value in config.items():
-        if key in ("simulation_metadata", "parameters"):
+        if key in ("simulation_metadata", "parameters", "batch"):
             base[key] = {**base.get(key, {}), **value}
         else:
             base[key] = deepcopy(value)

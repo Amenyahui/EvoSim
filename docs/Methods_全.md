@@ -1,0 +1,709 @@
+# 材料与方法
+
+## 1 模型总体框架
+
+### 1.1 模型目的与生态—进化联系
+
+本研究构建了空间显式的植物—植食性昆虫个体基础模型，用于研究植物化学性状与昆虫寄主利用性状共同变化时的种群动态和遗传变化。模型将植物防御与气味、昆虫抗性与嗅觉偏好、寄主选择、资源竞争以及有性繁殖纳入同一生活史框架。模型描述遵循 ODD 协议，明确交代模型实体、时空尺度、状态变量、初始化条件及生物学过程的执行顺序<sup>1</sup>。模型的生物学基础是植物防御与植食者适应之间的相互选择<sup>2</sup>：植物性状影响昆虫能否接受寄主及其取食收益，昆虫取食又影响植物的存活和繁殖。性状所依赖的等位基因通过双亲遗传进入下一代，使当代生态相互作用能够改变后续世代的遗传组成。显式遗传的多物种模拟为研究这一生态—进化反馈提供了方法框架<sup>3</sup>。
+
+### 1.2 生活史与过程顺序
+
+模型以植物和昆虫个体为基本单元。每个个体具有固定的物种身份、空间位置、二倍体基因型和由基因型决定的功能性状，昆虫另具有性别属性。两类群均采用离散、非重叠世代。每一代依次完成植物气味生成、昆虫局部寄主遭遇与选择、取食资源分配、个体存活、局部配偶筛选、子代产生、双亲遗传与突变以及子代扩散。更新结束后，全部亲代退出种群，实际产生的子代构成下一代。因此，种群数量由个体的存活和繁殖结果共同决定。一个世代表示抽象的完整生活史周期，不对应固定的自然时间长度。
+
+### 1.3 模型假设与适用范围
+
+模型中的物种身份在整个模拟过程中保持不变，不包含种间杂交、物种形成、迁入、种子库或个体学习。化学性状表示归一化的功能维度，数量性状位点（quantitative trait loci，QTL）表示控制这些性状的抽象遗传单元，二者均不对应特定化合物浓度、DNA 序列或已测定的分子功能。参数用于定义理论情景，未依据独立实测数据进行标定。下文以 \(p\) 表示植物个体，以 \(i\) 表示昆虫个体，以 \(s,r\) 表示物种。寄主选择以当代个体性状和候选寄主集合为条件，存活与繁殖以本代取食结束后的生态状态为条件。
+
+## 2 个体状态与功能性状
+
+### 2.1 种群集合与个体属性
+
+令 \(t=0,\ldots,T\)，当前 \(T=200\)。\(\mathcal P_t,\mathcal H_t\) 分别为第 \(t\) 代的植物与昆虫个体集合，以 \(K\in\{P,H\}\) 区分类群，个体 \(u\) 的物种身份与空间坐标分别为 \(s(u)\) 和 \(\boldsymbol x_u\)，\(\mathbf1(\cdot)\) 为指示函数。物种 \(s\) 的植物与昆虫子群体及其丰度定义为
+
+\[
+\mathcal P_{s,t}=\{p\in\mathcal P_t:s(p)=s\}
+\tag{1}
+\]
+
+\[
+\mathcal H_{s,t}=\{i\in\mathcal H_t:s(i)=s\}
+\tag{2}
+\]
+
+\[
+N^P_{s,t}=|\mathcal P_{s,t}|
+\tag{3}
+\]
+
+\[
+N^H_{s,t}=|\mathcal H_{s,t}|
+\tag{4}
+\]
+
+### 2.2 功能性状及其取值范围
+
+植物与昆虫的性状向量分别为
+
+\[
+\boldsymbol T_p^P=(D_{p1},D_{p2},Z_{p1},Z_{p2})
+\tag{5}
+\]
+
+\[
+\boldsymbol T_i^H=(I_{i1},I_{i2},A_{i1},A_{i2})
+\tag{6}
+\]
+
+其中，\(D\) 表示植物在两个化学防御维度上的防御水平，\(Z\) 表示由独立遗传位点控制的气味性状。\(I\) 表示昆虫应对相应植物防御的抗性水平，\(A\) 表示昆虫偏好的气味组合，即嗅觉偏好模板。偏好模板的数值规定昆虫对何种气味组合赋予较高接受概率，其大小本身不表示嗅觉能力的强弱。植物防御与昆虫抗性共同决定潜在取食能力，植物气味与昆虫偏好共同决定寄主接受概率。下文分别以 \(\nu_u\)、\(\mu_\ell\)、\(q_{ip}\) 和 \(\pi_u\) 表示条件平均子代数、突变概率、取食匹配程度和配偶可获得概率。
+
+所有性状坐标经截断函数
+
+\[
+\operatorname{clip}_{[0,1]}(z)=\min\{1,\max(0,z)\}
+\tag{7}
+\]
+
+映射到 \([0,1]\)，对向量逐坐标应用。除特别说明外，后文期望与概率均以当前代生态状态为条件。
+
+## 3 空间环境与种群初始化
+
+### 3.1 空间结构与初始群落
+
+模型初始化同时规定群落组成、个体空间分布和创始遗传变异。个体位置独立地从均匀分布中抽取，因此总体上不存在预设的空间偏好，但有限数量个体仍可形成局部密度差异。创始等位基因也按给定概率随机抽样，使种群在模拟开始时具有个体间遗传差异。空间采用周期边界，越过一侧边界的个体从相对一侧进入，从而避免栅格边缘对局部搜寻、竞争和交配造成额外限制。
+
+模拟空间为 \(L_1\times L_2\) 的二维栅格，每一格表示一个抽象生境斑块。第 \(a\) 个坐标轴的取值范围为 \(0,\ldots,L_a-1\)。局部相互作用采用周期切比雪夫距离，即先计算各坐标方向上跨越或不跨越边界的最短距离，再取两方向距离的较大值：
+
+\[
+d_{\mathrm{per}}(\boldsymbol x,\boldsymbol y)=
+\max_{a=1,2}\min\{|x_a-y_a|,L_a-|x_a-y_a|\}
+\tag{8}
+\]
+
+若未指定初始坐标，则
+
+\[
+X_{u,a}(0)\sim\operatorname{DiscreteUniform}\{0,\ldots,L_a-1\}, \;a=1,2
+\tag{9}
+\]
+
+本研究设置 \(L_1=L_2=10\)，共包含 100 个生境斑块。每格可容纳多个植物和昆虫个体，栅格本身不规定个体容量上限。初始群落由两个植物物种 P1、P2 和一个昆虫物种 H1 构成，P1、P2 各有 200 个个体，H1 有 40 个个体。
+
+### 3.2 创始基因型与昆虫性别
+
+植物和昆虫均具有 \(L_K=8\) 个 QTL，每个位点包含两份同源拷贝。模型逐个体记录每份拷贝的等位基因身份，从而追踪双亲遗传和新突变。设 \(f^0_{s\ell a}\) 为物种 \(s\) 在位点 \(\ell\) 上等位基因 \(a\) 的初始抽样权重。初始化时，各位点和同源拷贝独立地按归一化权重抽取等位基因：
+
+\[
+G^K_{u,h,\ell}(0)\sim
+\operatorname{Categorical}\left(
+\left\{\frac{f^0_{s\ell a}}{\sum_b f^0_{s\ell b}}\right\}_{a}
+\right), \;h=1,2
+\tag{10}
+\]
+
+当前每物种每位点有两个可用等位基因，配置概率各为 0.5，有限种群中的实现频率不必恰为 0.5。昆虫性别在初始化时抽样，\(\chi_i=1\) 表示雌性、0 表示雄性：
+
+\[
+\chi_i(0)\sim\operatorname{Bernoulli}(p_f^0)
+\tag{11}
+\]
+
+\[
+p_f^0=0.5
+\tag{12}
+\]
+
+### 3.3 基因型到表型的映射
+
+植物防御化学谱和挥发物组成具有遗传基础<sup>4,5</sup>，据此将防御和气味设置为可遗传性状。本研究采用 8 个 QTL 和纯加性效应描述遗传结构，这些位点数目及效应大小属于理论设定。每个等位基因对指定性状提供一个功能效应，个体表型由两份同源拷贝的效应累加获得。这里的功能效应是模型直接规定的遗传贡献，应与从群体数据估计的统计遗传效应区分<sup>6</sup>。设 \(e_{a,q}\) 为等位基因 \(a\) 对性状坐标 \(q\) 的效应，\(b_q^K\) 为类群 \(K\) 的性状背景值，则截断前、后的表型分别为
+
+\[
+T^{K,\mathrm{raw}}_{u,q}
+=b_q^K+\frac12\sum_{\ell=1}^{L_K}\sum_{h=1}^{2}
+e_{G^K_{u,h,\ell},q}
+\tag{13}
+\]
+
+\[
+T^K_{u,q}=\operatorname{clip}_{[0,1]}(T^{K,\mathrm{raw}}_{u,q})
+\tag{14}
+\]
+
+式（13）中的系数 \(1/2\) 对每个位点的两份等位效应取平均，再将不同位点的贡献相加。本研究将全部背景值设为 0，每个性状坐标由两个位点共同控制。对于初始低水平性状，两个控制位点的可用等位效应均为 0.10 和 0.12；对于初始高水平性状，则均为 0.30 和 0.32。在两种等位基因等概率抽样时，低水平和高水平性状的期望分别为 0.22 和 0.62。因此，创始性状向量的期望为
+
+\[
+E[\boldsymbol T^P_{P1}(0)]=(0.22,0.62,0.22,0.62)
+\tag{15}
+\]
+
+\[
+E[\boldsymbol T^P_{P2}(0)]=(0.62,0.22,0.62,0.22)
+\tag{16}
+\]
+
+\[
+E[\boldsymbol T^H_{H1}(0)]=(0.22,0.62,0.22,0.62)
+\tag{17}
+\]
+
+植物 P1 的两个防御维度及两个独立气味维度均设置为低—高组合，P2 设置为高—低组合。昆虫 H1 的抗性与嗅觉偏好同样设置为低—高组合，使其初始功能性状更接近 P1。该差异是预设的初始条件。各位点仅影响指定的性状坐标，模型不包含显性效应、上位性或环境引起的表型噪声。物种身份不直接参与表型计算，物种间的初始性状差异由其创始等位基因组成决定。
+
+## 4 植物气味与昆虫寄主选择
+
+### 4.1 植物气味的形成
+
+昆虫的寄主识别与嗅觉受体和神经环路有关<sup>7</sup>。模型将这一过程概括为植物气味与昆虫嗅觉偏好模板的匹配，不显式模拟受体动力学、风向或挥发物在空气中的扩散。植物气味由两部分构成：一部分随植物防御性状变化，另一部分由独立的气味性状决定。采用列向量表示时，植物发射的气味为
+
+\[
+\boldsymbol V_p^{\mathrm{emit}}
+=\operatorname{clip}_{[0,1]}
+\{\rho\boldsymbol B\boldsymbol D_p+(1-\rho)\boldsymbol Z_p\}
+\tag{18}
+\]
+
+其中，映射矩阵 \(\boldsymbol B\) 将植物防御转换为气味空间中的对应成分，\(\rho\in[0,1]\) 规定防御相关成分所占的权重。本研究取 \(\boldsymbol B\) 为二阶单位矩阵，\(\rho=0.5\)，即防御相关成分与独立气味成分等权贡献。昆虫在遇见植物后直接感知该植株的气味。该设定允许防御变化同时改变寄主识别线索，也允许独立气味性状发生变化而不必同步改变防御。参数 \(\rho\) 表示模型中的功能耦合程度，并非群体中实测的相关系数。当 \(\rho=1\) 时，气味完全由防御映射决定：
+
+\[
+\boldsymbol V_p^{\mathrm{emit}}=\operatorname{clip}_{[0,1]}(\boldsymbol B\boldsymbol D_p)
+\tag{19}
+\]
+
+本研究中，昆虫感知的气味与所遇植株发射的气味相同，即 \(\boldsymbol V_p^{\mathrm{cue}}=\boldsymbol V_p^{\mathrm{emit}}\)。
+
+### 4.2 局部遭遇与候选寄主抽样
+
+昆虫获得寄主需要依次经历局部遭遇和寄主接受。局部遭遇规定个体能够接触哪些植物，寄主接受决定其是否利用已经遇见的植物。每只昆虫以本代搜寻位置为中心，将搜寻半径内的全部植物纳入可遭遇集合：
+
+\[
+\mathcal A_i=\{p\in\mathcal P_t:
+d_{\mathrm{per}}(\boldsymbol x_i,\boldsymbol x_p)\le r_{\mathrm{search}}\}
+\tag{20}
+\]
+
+再从中均匀、无放回地抽取至多 8 株构成候选集 \(\mathcal C_i\)，
+
+\[
+m_i=\min(M,|\mathcal A_i|)
+\tag{21}
+\]
+
+本研究设置搜寻半径 \(r_{\mathrm{search}}=2\) 格，候选植物数量上限 \(M=8\) 株。局部植物不足 8 株时，全部进入候选集；不存在植物时，昆虫本代无法获得寄主。抽样以植物个体为单位，因此局部数量较多的植物物种通常具有更多遭遇机会。模型不对植物物种等额分配候选名额。给定可遭遇集合 \(\mathcal A_i\)，从中抽得任一大小为 \(m_i\) 的候选集的概率相同：
+
+\[
+P(\mathcal C_i=C\mid\mathcal A_i)
+={|\mathcal A_i|\choose m_i}^{-1}, \;C\subseteq\mathcal A_i,\ |C|=m_i
+\tag{22}
+\]
+
+所有个体的候选池基于相同的代初状态，不因其他昆虫已选择某株植物而缩减。
+
+### 4.3 气味匹配与寄主接受得分
+
+昆虫比较候选植物气味与自身嗅觉偏好模板的差异。两者越接近，植物的寄主接受得分越高。模型先计算两个气味维度上的加权平方距离，再将该距离转换为高斯型匹配惩罚：
+
+\[
+\delta_{ip}^2=\sum_{k=1}^{2}w_k(V^{\mathrm{cue}}_{pk}-A_{ik})^2
+\tag{23}
+\]
+
+\[
+u_{ip}=b-\frac{\delta_{ip}^2}{2\sigma^2}
+\tag{24}
+\]
+
+两维权重各为 0.5，匹配宽度 \(\sigma\) 为 0.2，寄主得分截距 \(b\) 为 1；宽度越大，相同距离造成的惩罚越弱。这是对感官匹配的理论近似，而非由嗅觉实验直接拟合的反应函数。
+
+### 4.4 寄主接受与拒绝概率
+
+每只昆虫在全部候选植物与“不选择寄主”之间进行一次随机选择。本研究采用带外部选项的多项 logit 模型<sup>8</sup>，将寄主得分转化为选择概率。因此，昆虫即使遇见植物，也可能拒绝全部候选寄主。记 \(J_i=0\) 为本代未选择寄主，\(J_i=p\) 为选择植物 \(p\)，则
+
+\[
+P(J_i=p\mid\mathcal C_i)=
+\frac{\exp(\tau u_{ip})}{\exp(u_0)+\sum_{j\in\mathcal C_i}\exp(\tau u_{ij})}
+\tag{25}
+\]
+
+\[
+P(J_i=0\mid\mathcal C_i)=
+\frac{\exp(u_0)}{\exp(u_0)+\sum_{j\in\mathcal C_i}\exp(\tau u_{ij})}
+\tag{26}
+\]
+
+选择强度 \(\tau\) 为 1，外部选项得分 \(u_0\) 为 0，且 \(u_0\) 已是外部选项的 logit，不再乘以 \(\tau\)。空候选集直接令 \(J_i=0\)，不进行抽样。
+
+## 5 防御匹配与取食资源分配
+
+### 5.1 防御—抗性匹配与潜在取食需求
+
+昆虫选择寄主后，能否有效取食取决于其抗性对植物防御的适应程度。解毒蛋白在底物利用上的差异为区分多个抗性维度提供了生物学背景<sup>9</sup>。本模型进一步假设，各防御维度构成不可相互补偿的取食限制：昆虫在一个维度上的高抗性不能弥补另一维度上的抗性不足。因此，以各维度抗性与防御比值中的最小值表示取食匹配程度，并将其上限设为 1。对于已经选择植物 \(p\) 的昆虫 \(i\)，有
+
+\[
+r_{ipk}=
+\begin{cases}
+I_{ik}/D_{pk},&D_{pk}>0,\\
++\infty,&D_{pk}=0,
+\end{cases}
+\tag{27}
+\]
+
+\[
+q_{ip}=\min\{1,\min_k r_{ipk}\}
+\tag{28}
+\]
+
+其中，\(q_{ip}=1\) 表示昆虫抗性足以应对各维度的植物防御，可达到最大取食需求；\(0<q_{ip}<1\) 表示至少一个防御维度限制取食；\(q_{ip}=0\) 表示潜在取食量为零。若某一维度的防御为零，则该维度不构成限制。最小比值规则是本研究采用的理论假设，未显式描述不同化合物之间的协同、拮抗或替代作用。植物在全部维度上均无防御时，规定
+
+\[
+q_{ip}=1
+\tag{29}
+\]
+
+对于已选择寄主的个体，将最大取食需求 \(d_i^{\max}\) 乘以取食匹配程度，得到在尚未考虑资源竞争时的潜在取食需求 \(d_i\)。未选择寄主时，需求为 0：
+
+\[
+d_i=
+\begin{cases}
+d_i^{\max}q_{iJ_i},&J_i\ne0,\\
+0,&J_i=0.
+\end{cases}
+\tag{30}
+\]
+
+### 5.2 共享寄主上的资源竞争
+
+同一植株可能被多只昆虫同时选择，因而需要在共同取食者之间分配有限资源。若单株资源足以满足全部潜在需求，各昆虫获得其全部需求量；若总需求超过资源容量，则按各自需求所占比例分配资源。所有昆虫共同参与本次分配，不设置到达顺序或先到者优先权，也不模拟直接干扰。共同取食者的总需求越大，资源不足时每个个体获得的需求满足比例越低，从而形成寄主资源介导的密度制约。记选择植物 \(p\) 的昆虫集合为
+
+\[
+\mathcal H_p=\{i:J_i=p\}
+\tag{31}
+\]
+
+设单株资源为 \(R_p>0\)，
+
+\[
+D_p^{\mathrm{tot}}=\sum_{i\in\mathcal H_p}d_i
+\tag{32}
+\]
+
+\[
+\gamma_p=
+\begin{cases}
+1,&D_p^{\mathrm{tot}}\le R_p,\\
+R_p/D_p^{\mathrm{tot}},&D_p^{\mathrm{tot}}>R_p.
+\end{cases}
+\tag{33}
+\]
+
+根据单株资源分配系数 \(\gamma_p\)，计算每只昆虫的实际摄取量 \(x_i\) 和每株植物的总损失量 \(X_p\)。昆虫资源满足度 \(g_i\) 为实际摄取量与最大需求的比值，植物受食比例 \(h_p\) 为总损失量与可用资源的比值。两者由同一次资源转移计算，分别作为昆虫和植物后续存活过程的输入：
+
+\[
+x_i=\begin{cases}\gamma_{J_i}d_i,&J_i\ne0,\\0,&J_i=0,\end{cases}
+\tag{34}
+\]
+
+\[
+X_p=\sum_{i\in\mathcal H_p}x_i
+\tag{35}
+\]
+
+\[
+g_i=\frac{x_i}{d_i^{\max}}
+\tag{36}
+\]
+
+\[
+h_p=\frac{X_p}{R_p}
+\tag{37}
+\]
+
+精确算术下满足
+
+\[
+X_p=\min(D_p^{\mathrm{tot}},R_p)
+\tag{38}
+\]
+
+\[
+0\le g_i\le1
+\tag{39}
+\]
+
+\[
+0\le h_p\le1
+\tag{40}
+\]
+
+\[
+\sum_pX_p=\sum_ix_i
+\tag{41}
+\]
+
+本研究将单株资源容量和单只昆虫的最大需求均设为 1，单位为一个世代取食窗口内的归一化可食干生物量。\(g_i\) 同时反映植物防御造成的取食限制和同一寄主上资源共享造成的竞争限制。\(h_p\) 则表示植株当代资源被消耗的程度。
+
+## 6 个体存活与有性繁殖
+
+### 6.1 性状投入的繁殖成本
+
+植物防御能够通过限制昆虫取食降低受食损伤，昆虫抗性能够通过提高取食匹配增加资源获取。与此同时，维持防御、抗性和气味性状会消耗可用于繁殖的投入。模型以线性成本表示这一收益与代价之间的权衡<sup>2</sup>。防御成本系数和抗性成本系数均设为 0.125，气味成本系数设为 0.05。防御和抗性成本按对应性状之和计算，气味成本按发射气味的维度均值计算，嗅觉偏好不设额外的直接成本。各项成本仅降低繁殖因子 \(F\)。因此，性状提高带来的存活收益能否转化为更多子代，还取决于繁殖成本、配偶供给和密度制约。各项成本定义为
+
+\[
+C_p^D=c_D\sum_kD_{pk}
+\tag{42}
+\]
+
+\[
+C_p^V=c_V\frac1n\sum_kV^{\mathrm{emit}}_{pk}
+\tag{43}
+\]
+
+\[
+C_i^I=c_I\sum_kI_{ik}
+\tag{44}
+\]
+
+### 6.2 繁殖因子与取食后的存活
+
+其中，气味维度数 \(n=2\)，气味成本依据植株自身的发射气味计算。植物繁殖因子扣除防御与气味成本，昆虫繁殖因子扣除抗性成本，并将低于 0 的结果截为 0。存活概率则由本代取食结果决定：植物随受食比例升高而降低存活概率，昆虫随资源满足度提高而增加存活概率。具体为
+
+\[
+F_p^P=\max(0,1-C_p^D-C_p^V)
+\tag{45}
+\]
+
+\[
+F_i^H=\max(0,1-C_i^I)
+\tag{46}
+\]
+
+\[
+S_p^P=s_{P0}+(1-s_{P0})(1-h_p)
+\tag{47}
+\]
+
+\[
+S_i^H=g_i
+\tag{48}
+\]
+
+\[
+Y_u^K\sim\operatorname{Bernoulli}(S_u^K)
+\tag{49}
+\]
+
+\(Y_u^K=1\) 表示个体存活至本代交配阶段。植物最低存活参数设置为 \(s_{P0}=0.5\)，因此未受食植株的存活概率为 1，资源被全部消耗时仍以 0.5 的概率存活。昆虫存活概率等于资源满足度，获得最大需求量时为 1，未摄取资源时为 0。这一设定将当代取食收益直接连接到进入繁殖阶段的机会，不包含体内储备、年龄差异或跨代资源结转。
+
+### 6.3 植物子代补充的局部密度制约
+
+植物子代进入下一代的数量还受母株周围植物密度限制。本研究以 Beverton–Holt 型有理函数的局部扩展<sup>10</sup>概括植物之间的拥挤效应，将其作用于子代补充阶段。该过程代表局部植物竞争对后代建立的综合影响，不显式区分光、水分或养分竞争。以母株 \(p\) 为中心建立半径为 \(r_c\) 的邻域 \(\mathcal N_p\)，统计各植物物种的代初数量，包括母株自身：
+
+\[
+N_r(\mathcal N_p)=\sum_{v\in\mathcal P_t}
+\mathbf1(s(v)=r)\mathbf1\{d_{\mathrm{per}}(\boldsymbol x_p,\boldsymbol x_v)\le r_c\}
+\tag{50}
+\]
+
+\[
+\phi_p=\left[1+\sum_r\alpha_{s(p),r}N_r(\mathcal N_p)\right]^{-1}
+\tag{51}
+\]
+
+邻域计数采用本代存活抽样之前的植物数量，周期边界下每个格点仅计数一次。竞争半径设置为 \(r_c=1\) 格，种内竞争系数为 0.02，种间竞争系数为 0.005。局部加权植物密度越高，\(\phi_p\) 越低，母株的条件平均子代数受到的抑制越强。区分种内和种间竞争与共存理论关注的竞争差异一致<sup>11</sup>，但这些系数的大小本身不足以判定群落能否稳定共存。昆虫不另设独立的密度制约因子：
+
+\[
+\phi_i=1
+\tag{52}
+\]
+
+其密度反馈通过寄主资源共享与局部配偶可获得性产生。
+
+### 6.4 交配系统与局部配偶筛选
+
+植物设置为两性花并严格异交。每株存活植物均可作为母本，但必须在交配邻域内找到另一株存活且繁殖因子大于 0 的同种植物作为花粉父本。植物自身不能进入其父本候选集。该设定使植物繁殖同时受局部同种个体分布和存活状况限制，符合交配系统与空间、种群环境相互联系的生物学背景<sup>12</sup>。
+
+昆虫设置为雌雄异体，两性均经历寄主选择、取食和存活过程，只有雌虫能够作为母方产生子代。昆虫的交配位置取其本代所选寄主的位置，因此寄主选择也决定了繁殖阶段的空间位置。存活雌虫在局部寻找存活、繁殖因子大于 0 的同种雄虫。以 \(M_u\) 表示个体能否承担母方角色，以 \(D_u^{\mathrm{donor}}\) 表示存活筛选之前的父方资格，以 \(\boldsymbol z_u\) 表示交配位置：
+
+\[
+M_p=1
+\tag{53}
+\]
+
+\[
+D_p^{\mathrm{donor}}=\mathbf1(F_p^P>0)
+\tag{54}
+\]
+
+\[
+\boldsymbol z_p=\boldsymbol x_p
+\tag{55}
+\]
+
+\[
+M_i=\mathbf1(J_i\ne0)\chi_i
+\tag{56}
+\]
+
+\[
+D_i^{\mathrm{donor}}=\mathbf1(J_i\ne0)(1-\chi_i)\mathbf1(F_i^H>0)
+\tag{57}
+\]
+
+\[
+\boldsymbol z_i=
+\begin{cases}\boldsymbol x_{J_i},&J_i\ne0,\\\boldsymbol x_i,&J_i=0.\end{cases}
+\tag{58}
+\]
+
+未匹配昆虫保留自身坐标，但不因此获得交配资格。个体 \(u\) 的潜在父方池为
+
+\[
+\mathcal M_u^0=
+\{v\ne u:s(v)=s(u),\
+D_v^{\mathrm{donor}}=1,\
+d_{\mathrm{per}}(\boldsymbol z_u,\boldsymbol z_v)\le r_m^K\}
+\tag{59}
+\]
+
+仅在 \(M_u=1\) 时构建，否则为空集；植物配偶半径为 1 格、昆虫为 2 格，排除自身实现植物的严格异交。存活后的实际配偶池与母方可繁殖事件为
+
+\[
+\mathcal M_u=\{v\in\mathcal M_u^0:Y_v=1\}
+\tag{60}
+\]
+
+\[
+Z_u=M_uY_u\mathbf1(|\mathcal M_u|>0)
+\tag{61}
+\]
+
+母方繁殖因子为 0 时，即使 \(Z_u=1\) 其条件出生均值仍为 0；父方则必须满足 \(F>0\)。
+
+### 6.5 配偶可获得性与子代数抽样
+
+个体必须依次通过存活和配偶可获得性两个条件，才进入子代数抽样。即使满足这两个条件，泊松抽样仍可能产生零个子代。因此，零繁殖既可能来自死亡或配偶缺失，也可能来自繁殖阶段的随机性。在给定本代生态状态时，各个体的存活抽样相互独立，且父方候选池排除了母方自身，故至少有一个父方存活的概率及母方进入繁殖抽样的概率分别为
+
+\[
+\pi_u=P(|\mathcal M_u|>0)=
+1-\prod_{v\in\mathcal M_u^0}(1-S_v)
+\tag{62}
+\]
+
+\[
+p_u=S_u\pi_u, \;(M_u=1)
+\tag{63}
+\]
+
+空配偶池给出 \(\pi_u=0\)。条件平均出生数为
+
+\[
+\nu_p=\lambda_{s(p)}^PF_p^P\phi_p
+\tag{64}
+\]
+
+\[
+\nu_i=\lambda_{s(i)}^HF_i^H
+\tag{65}
+\]
+
+植物繁殖系数 \(\lambda^P\) 为 2，昆虫每雌繁殖系数 \(\lambda^H\) 为 4；存活与配偶缺失已通过 \(Z_u\) 处理，不在 \(\nu_u\) 中重复乘入。具母方角色的个体出生数为
+
+\[
+B_u=
+\begin{cases}
+\operatorname{Poisson}(\nu_u),&Z_u=1,\\
+0,&Z_u=0.
+\end{cases}
+\tag{66}
+\]
+
+在这一生活史过程中，母方的期望子代数由存活概率、配偶可获得概率和条件平均子代数共同决定。雄虫通过父方贡献传递遗传物质，不作为母方产生子代。
+
+### 6.6 父方选择与繁殖贡献
+
+确定母方的子代数后，为每个子代分别选择父方。父方从母方的实际配偶池中等概率、有放回地抽取，因此同一母方的不同子代可以具有不同父方，同一父方也可以贡献多个子代。模型不限制花粉数量或雄性交配次数。植物个体可在不同繁殖事件中分别承担母方和父方角色。对于母方 \(u\) 的子代 \(o\)，有
+
+\[
+P(F_o=v\mid\mathcal M_u,B_u)=|\mathcal M_u|^{-1}, \;v\in\mathcal M_u
+\tag{67}
+\]
+
+\[
+M_o=u
+\tag{68}
+\]
+
+局部配偶限制使低密度或性别偏斜下的繁殖失败成为可能；是否由此产生种群尺度 Allee 效应及其阈值取决于其他过程，本文不将配偶限制的存在视为该效应的证据。
+
+## 7 遗传传递、突变与子代扩散
+
+### 7.1 配子形成与独立分离
+
+有性繁殖通过配子形成和受精将亲本的等位基因传递给子代。每个子代在每个位点分别获得来自母方和父方的一份拷贝，孟德尔分离使亲本已有等位基因在子代间重新组合。性状影响存活和繁殖机会，从而使相应等位基因受到选择；有限种群中的随机存活、繁殖和遗传传递还会引起遗传漂变。本研究将每个 QTL 分别置于一个独立连锁群，因此采用独立分离，不发生连锁群内部的多位点交换。
+
+对亲本 \(v\) 的连锁群 \(c\)，以 \(\ell_1\) 表示其中唯一的 QTL。配子在该位点以相等概率获得亲本两份同源拷贝中的一份：
+
+\[
+H_{v,c,1}\sim\operatorname{Bernoulli}(1/2)
+\tag{69}
+\]
+
+\[
+M_{v,\ell_1}=G_{v,H_{v,c,1},\ell_1}
+\tag{70}
+\]
+
+此处 \(H\) 为 0/1 拷贝索引，对应式（10）中 1/2 的同源拷贝标签；不同连锁群相互独立。配子符号 \(M\) 带亲本与位点下标，区别于母方角色指示与子代的母方身份；每个子代重新形成双亲配子，下式省略子代索引，并非同一亲本对所有子代使用同一配子。
+
+### 7.2 双亲配子的结合
+
+子代的两份同源拷贝分别来自母方与父方配子，保留双亲来源而非对双亲表型取平均：
+
+\[
+G^{\mathrm{pre}}_{o,1,\ell}=M_{M_o,\ell}
+\tag{71}
+\]
+
+\[
+G^{\mathrm{pre}}_{o,2,\ell}=M_{F_o,\ell}
+\tag{72}
+\]
+
+母方和父方独立形成配子，双亲必须为不同的同种个体。
+
+### 7.3 新突变与等位效应变化
+
+突变发生在子代遗传拷贝形成时，为种群提供新的可遗传等位效应。每一份传递给子代的 QTL 拷贝独立地按指定位点突变率发生突变。突变后，以原等位效应为中心叠加均值为零的正态增量，生成新的等位基因。因此，新效应可以增大或减小相应性状，不预设适应方向。该突变率针对抽象 QTL 拷贝定义，不对应核苷酸位点突变率。设 \(\epsilon_K\in\{0,1\}\) 表示类群 \(K\) 是否开启新突变，则
+
+\[
+U_{o,h,\ell}\sim\operatorname{Bernoulli}(\epsilon_K\mu_\ell)
+\tag{73}
+\]
+
+\[
+\Delta\boldsymbol e_{o,h,\ell}\sim
+\mathcal N\{\boldsymbol0,\operatorname{diag}(\boldsymbol\sigma_\ell^2)\}
+\tag{74}
+\]
+
+\[
+G_{o,h,\ell}=
+\begin{cases}
+G^{\mathrm{pre}}_{o,h,\ell},&U_{o,h,\ell}=0,\\
+a_{\mathrm{new}},&U_{o,h,\ell}=1,
+\end{cases}
+\tag{75}
+\]
+
+\[
+\boldsymbol e_{a_{\mathrm{new}}}
+=\boldsymbol e_{G^{\mathrm{pre}}_{o,h,\ell}}+\Delta\boldsymbol e_{o,h,\ell}
+\tag{76}
+\]
+
+每次突变产生新的等位基因，其效应为原等位效应与突变增量之和。各位点突变率均为 0.01，所控制性状坐标的突变效应标准差为 0.02，其余坐标的标准差为 0。等位效应本身不进行截断，子代完成遗传和突变后再按式（13—14）计算表型。因此，超出表型边界的遗传效应仍可保留和传递。每个子代的新突变数及其期望和发生概率为
+
+\[
+M_o^{\mathrm{new}}=\sum_{h=1}^2\sum_{\ell=1}^{L_K}U_{o,h,\ell}
+\tag{77}
+\]
+
+\[
+E[M_o^{\mathrm{new}}]=2\epsilon_K\sum_\ell\mu_\ell
+\tag{78}
+\]
+
+\[
+P(M_o^{\mathrm{new}}>0)=1-\prod_\ell(1-\epsilon_K\mu_\ell)^2
+\tag{79}
+\]
+
+允许新突变时，各位点具有相同突变率，因此
+
+\[
+E[M_o^{\mathrm{new}}]=0.16
+\tag{80}
+\]
+
+至少一次新突变的概率为
+
+\[
+P(M_o^{\mathrm{new}}>0)=1-0.99^{16}\approx0.14854
+\tag{81}
+\]
+
+该概率不等于出现可观测表型变化的概率，因为存在表型截断。
+
+### 7.4 子代性别与局部扩散
+
+昆虫子代的性别以雌性概率 0.5 独立抽样。模型不强制每代雌雄数量相等，使有限种群中的随机性比偏移能够影响后续配偶供给。植物子代以母株所在格点为扩散起点，昆虫子代以母虫本代所选寄主的格点为扩散起点。后一规则将母代寄主选择与子代下一代的搜寻位置相联系。子代分别在两个坐标方向上抽取离散位移，越界时按周期边界回绕：
+
+\[
+\chi_o\sim\operatorname{Bernoulli}(p_f^{\mathrm{offspring}})
+\tag{82}
+\]
+
+\[
+p_f^{\mathrm{offspring}}=0.5
+\tag{83}
+\]
+
+\[
+\boldsymbol x_o^{\mathrm{origin}}=
+\begin{cases}
+\boldsymbol x_{M_o},&K=P,\\
+\boldsymbol x_{J_{M_o}},&K=H,
+\end{cases}
+\tag{84}
+\]
+
+\[
+\Delta x_{o,a}\sim\operatorname{DiscreteUniform}\{-r_d^K,\ldots,r_d^K\}
+\tag{85}
+\]
+
+\[
+x_{o,a}=(x_{o,a}^{\mathrm{origin}}+\Delta x_{o,a})\bmod L_a
+\tag{86}
+\]
+
+植物和昆虫的扩散半径 \(r_d^K\) 均设为 1 格，两个方向的位移相互独立，每个方向可取 −1、0 或 1。因此，子代可到达起点及周围八个格点，九种位置组合等概率出现，留在起点的概率为 1/9。扩散后的格点作为下一代局部相互作用的空间位置。
+
+## 8 世代替换与种群灭绝
+
+本代繁殖结束后，全部亲代退出种群，实际产生并完成遗传和扩散的子代共同构成下一代。存活到繁殖阶段的亲代也不跨代保留。模型不按固定数量重新抽样子代，因而种群可增长、下降或灭绝。由于无迁入、补种或种子库，一旦某物种的数量降至零，后续世代中该物种持续缺失。单个物种的灭绝不终止其他物种的更新。种群数量的更新关系为
+
+\[
+N^K_{s,t+1}=\sum_{u\in\mathcal K_{s,t}}B_u
+\tag{87}
+\]
+
+其中，\(\mathcal K_{t+1}\) 表示类群 \(K\) 在本代繁殖中产生的全部子代。物种一旦灭绝，后续世代中其数量持续为零，即
+
+\[
+N^K_{s,t}=0\Longrightarrow N^K_{s,t'}=0, \;(t'>t)
+\tag{88}
+\]
+
+## 参考文献
+
+1. Grimm, V., Railsback, S. F., Vincenot, C. E., Berger, U., Gallagher, C., DeAngelis, D. L., Edmonds, B., Ge, J., Giske, J., Groeneveld, J., et al. (2020). The ODD protocol for describing agent-based and other simulation models: A second update to improve clarity, replication, and structural realism. *J. Artif. Soc. Soc. Simul.* **23**, 7. https://doi.org/10.18564/jasss.4259
+
+2. Speed, M. P., Fenton, A., Jones, M. G., Ruxton, G. D., and Brockhurst, M. A. (2015). Coevolution can explain defensive secondary metabolite diversity in plants. *New Phytol.* **208**, 1251–1263. https://doi.org/10.1111/nph.13560
+
+3. Haller, B. C., and Messer, P. W. (2023). SLiM 4: Multispecies eco-evolutionary modeling. *Am. Nat.* **201**, E127–E139. https://doi.org/10.1086/723601
+
+4. Kliebenstein, D. J., Kroymann, J., Brown, P., Figuth, A., Pedersen, D., Gershenzon, J., and Mitchell-Olds, T. (2001). Genetic control of natural variation in *Arabidopsis* glucosinolate accumulation. *Plant Physiol.* **126**, 811–825. https://doi.org/10.1104/pp.126.2.811
+
+5. Köllner, T. G., Schnee, C., Gershenzon, J., and Degenhardt, J. (2004). The variability of sesquiterpenes emitted from two *Zea mays* cultivars is controlled by allelic variation of two terpene synthase genes encoding stereoselective multiple product enzymes. *Plant Cell* **16**, 1115–1131. https://doi.org/10.1105/tpc.019877
+
+6. Chu, T. T., Kristensen, P. S., and Jensen, J. (2024). Simulation of functional additive and non-additive genetic effects using statistical estimates from quantitative genetic models. *Heredity* **133**, 33–42. https://doi.org/10.1038/s41437-024-00690-5
+
+7. Auer, T. O., Khallaf, M. A., Silbering, A. F., Zappia, G., Ellis, K., Álvarez-Ocaña, R., Arguello, J. R., Hansson, B. S., Jefferis, G. S. X. E., Caron, S. J. C., et al. (2020). Olfactory receptor and circuit evolution promote host specialization. *Nature* **579**, 402–408. https://doi.org/10.1038/s41586-020-2073-7
+
+8. McFadden, D. (1974). Conditional logit analysis of qualitative choice behavior. In *Frontiers in Econometrics*, P. Zarembka (ed), pp. 105–142. North-Holland, Amsterdam. https://eml.berkeley.edu/reprints/mcfadden/zarembka.pdf
+
+9. Li, X., Baudry, J., Berenbaum, M. R., and Schuler, M. A. (2004). Structural and functional divergence of insect CYP6B proteins: From specialist to generalist cytochrome P450. *Proc. Natl. Acad. Sci. USA* **101**, 2939–2944. https://doi.org/10.1073/pnas.0308691101
+
+10. Beverton, R. J. H., and Holt, S. J. (1957). *On the Dynamics of Exploited Fish Populations*. Fisheries Investigations, Series II, Vol. 19. HMSO, London. https://doi.org/10.1007/978-94-011-2106-4
+
+11. Chesson, P. (2000). Mechanisms of maintenance of species diversity. *Annu. Rev. Ecol. Syst.* **31**, 343–366. https://doi.org/10.1146/annurev.ecolsys.31.1.343
+
+12. Barrett, S. C. H., and Harder, L. D. (2017). The ecology of mating and its evolutionary consequences in seed plants. *Annu. Rev. Ecol. Evol. Syst.* **48**, 135–157. https://doi.org/10.1146/annurev-ecolsys-110316-023021

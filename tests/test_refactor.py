@@ -2,7 +2,7 @@
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.helpers.agents import CommunityState
-from tests.test_acceptance import tiny
+from tests.support import config as tiny
 
 
 def test_snapshot_independence():

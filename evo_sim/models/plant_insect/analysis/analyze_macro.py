@@ -9,7 +9,6 @@ import pandas as pd
 from evo_sim.models.plant_insect.analysis.common import (
     Batch,
     batch_parser,
-    pyplot,
     read_settings,
     run_path,
     sha256,
@@ -30,8 +29,7 @@ def edge_turnover(before, after):
     return 1 - len(before & after) / len(union) if union else np.nan
 
 
-def analyze(batch, output=None):
-    batch = Batch.open(batch, output)
+def analyze(batch: Batch):
     settings = read_settings(batch.path)
     generation_rows, runs, extinctions, growth = [], [], [], []
     for record in batch.status.itertuples():
@@ -43,15 +41,7 @@ def analyze(batch, output=None):
             replicate=record.replicate,
             seed=record.seed,
             insect_lambda=c["insect_offspring_lambda"]["H1"],
-            mode=(
-                "both"
-                if c["evolve_plants"] and c["evolve_insects"]
-                else "plants_only"
-                if c["evolve_plants"]
-                else "insects_only"
-                if c["evolve_insects"]
-                else "frozen"
-            ),
+            mode=record.case,
         )
         valid = record.status in ("completed", "all_species_extinct")
         if not valid:
@@ -68,7 +58,7 @@ def analyze(batch, output=None):
         pop = pd.read_csv(folder / "populations.csv")
         net = pd.read_csv(folder / "networks.csv")
         diag = pd.read_csv(folder / "diagnostics.csv")
-        parents = pd.read_csv(folder / "parents.csv")
+        parents = pd.read_csv(folder / "parents.csv", low_memory=False)
         initial = parents[parents.generation == 0]
         for (kind, species), group in initial.groupby(["kind", "species"]):
             growth.append(
@@ -76,7 +66,7 @@ def analyze(batch, output=None):
                     context,
                     kind=kind,
                     species=species,
-                    initial_expected_offspring=group.expected_offspring.mean(),
+                    initial_expected_maternal_offspring=group.expected_maternal_offspring.mean(),
                     initial_survival=group.S_i.mean(),
                     initial_fecundity=group.F_i.mean(),
                 )
@@ -169,39 +159,7 @@ def analyze(batch, output=None):
     )
     for name, frame in frames.items():
         frame.to_csv(batch.summary_dir / f"{name}.csv", index=False)
-    paired = []
-    metrics = [
-        "first_species_loss",
-        "plant_richness_end",
-        "insect_richness_end",
-        "observed_population_updates",
-    ]
     runframe = frames["runs"]
-    for (lam, seed), group in runframe.groupby(["insect_lambda", "seed"]):
-        ref = group[group["mode"] == "frozen"].iloc[0]
-        for row in group.to_dict("records"):
-            if row["mode"] == "frozen":
-                continue
-            for metric in metrics:
-                paired.append(
-                    dict(
-                        insect_lambda=lam,
-                        seed=seed,
-                        mode=row["mode"],
-                        metric=metric,
-                        difference=row.get(metric, np.nan) - ref.get(metric, np.nan)
-                        if row["biologically_resolved"] and ref["biologically_resolved"]
-                        else np.nan,
-                    )
-                )
-    paired = pd.DataFrame(paired)
-    paired.to_csv(batch.summary_dir / "paired_differences.csv", index=False)
-    grouped = (
-        paired.groupby(["insect_lambda", "mode", "metric"])
-        .difference.agg(["count", "mean", "std"])
-        .reset_index()
-    )
-    grouped.to_csv(batch.summary_dir / "paired_summary.csv", index=False)
     manifest = dict(
         batch=str(batch.path.resolve()),
         source_hash=sha256(Path(__file__)),
@@ -214,71 +172,11 @@ def analyze(batch, output=None):
         extinct_extension="Plots show absorbing zero states through requested horizon; raw tables retain observed times",
     )
     write_json(batch.summary_dir / "analyze_macro_metadata.json", manifest)
-    plot(frames, batch.out)
+
     print(json.dumps(manifest, indent=2))
     return frames
 
 
-def plot(frames, output):
-    plt = pyplot()
-
-    fig, axes = plt.subplots(2, 3, figsize=(12, 6), sharex=True, sharey="row")
-    colors = {
-        "both": "#0072B2",
-        "plants_only": "#009E73",
-        "insects_only": "#D55E00",
-        "frozen": "#777777",
-    }
-    for col, lam in enumerate(sorted(frames["runs"].insect_lambda.unique())):
-        for (mode, rep), group in frames["generations"][
-            frames["generations"].insect_lambda == lam
-        ].groupby(["mode", "replicate"]):
-            run = (
-                frames["runs"]
-                .query("insect_lambda==@lam and mode==@mode and replicate==@rep")
-                .iloc[0]
-            )
-            times = group.generation.to_list()
-            for row, metric in enumerate(("plant_richness", "insect_richness")):
-                values = group[metric].to_list()
-                if run.status == "all_species_extinct" and times[-1] < run.requested_generations:
-                    x = times + [run.requested_generations]
-                    y = values + [0]
-                else:
-                    x, y = times, values
-                axes[row, col].plot(
-                    x,
-                    y,
-                    color=colors[mode],
-                    alpha=0.45,
-                    lw=1.4,
-                    label=mode if rep == 1 and row == 0 and col == 0 else None,
-                )
-                axes[row, col].set_ylim(-0.1, 3.2)
-                axes[row, col].set_yticks(range(4))
-                axes[row, col].grid(alpha=0.15)
-        axes[0, col].set_title(f"Insect recruitment lambda = {lam:g}")
-        axes[1, col].set_xlabel("Generation")
-    axes[0, 0].set_ylabel("Plant species")
-    axes[1, 0].set_ylabel("Insect species")
-    fig.legend(loc="upper center", bbox_to_anchor=(0.5, 0.94), ncol=4, frameon=False)
-    fig.suptitle("Finite-horizon pilot: all 48 trajectories", y=0.99)
-    for axis in axes.flat:
-        axis.set_xlim(0, 8)
-        axis.set_xticks(range(0, 9, 2))
-    fig.text(
-        0.5,
-        0.01,
-        "Early dynamics shown; absorbing zero states continue through generation 40.",
-        ha="center",
-        fontsize=9,
-    )
-    fig.tight_layout(rect=(0, 0.035, 1, 0.89))
-    fig.savefig(output / "richness.png", dpi=180, bbox_inches="tight")
-    fig.savefig(output / "richness.pdf", bbox_inches="tight")
-    plt.close(fig)
-
-
 if __name__ == "__main__":
     args = batch_parser(__doc__).parse_args()
-    analyze(args.input, args.out)
+    analyze(Batch.open(args.input))

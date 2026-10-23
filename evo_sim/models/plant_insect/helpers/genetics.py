@@ -1,9 +1,10 @@
-"""Explicit clonal diploid QTLs; project conventions are recorded in evidence_ledger.csv."""
+"""Explicit sexual diploid QTLs; project conventions are recorded in evidence_ledger.csv."""
 
 import copy
 import json
 from collections import Counter
 from dataclasses import asdict, dataclass
+from itertools import combinations
 
 import numpy as np
 
@@ -13,8 +14,57 @@ KINDS = ("plant", "insect")
 TRAITS = {"plant": ("D", "plant_voc_independent_trait"), "insect": ("I", "A")}
 
 
-def enabled(c):
-    return c.genetics is not None and c.genetics.get("mode") == "qtl_additive"
+def validate_genome_map(loci):
+    groups = {}
+    for i, locus in enumerate(loci):
+        group, position = locus.get("chromosome_id"), locus.get("position_cM")
+        if (
+            not isinstance(group, str)
+            or not group.strip()
+            or type(position) not in (int, float)
+            or not np.isfinite(position)
+            or position < 0
+        ):
+            raise ValueError("nonempty chromosome_id and finite nonnegative position_cM required")
+        groups.setdefault(group, []).append(i)
+    for indices in groups.values():
+        indices.sort(key=lambda i: loci[i]["position_cM"])
+        positions = [loci[i]["position_cM"] for i in indices]
+        if len(set(positions)) != len(positions):
+            raise ValueError("duplicate position within linkage group")
+    return groups
+
+
+def interval_crossovers(distance_morgan, size, rng):
+    if not np.isfinite(distance_morgan) or distance_morgan < 0:
+        raise ValueError("finite nonnegative genetic interval required")
+    try:
+        return rng.poisson(distance_morgan, size=size)
+    except ValueError as error:
+        raise ComputationalLimit("genetic interval exceeds Poisson sampler capacity") from error
+
+
+def form_gametes(parents, loci, rng):
+    """Haldane: independent Poisson intervals; odd counts switch ancestry."""
+    if parents.ndim != 3 or parents.shape[1:] != (2, len(loci)):
+        raise ValueError("parents must have shape (N,2,L)")
+    groups = validate_genome_map(loci)
+    n = len(parents)
+    gametes = np.empty((n, len(loci)), dtype=parents.dtype)
+    homolog = np.empty((n, len(loci)), dtype=np.int8)
+    counts = np.zeros((n, len(loci)), dtype=np.int64)
+    for indices in groups.values():
+        source = rng.integers(0, 2, size=n)
+        previous = indices[0]
+        for j, l in enumerate(indices):
+            if j:
+                d = (loci[l]["position_cM"] - loci[previous]["position_cM"]) / 100
+                counts[:, l] = interval_crossovers(d, n, rng)
+                source = source ^ (counts[:, l] % 2)
+            homolog[:, l] = source
+            gametes[:, l] = parents[np.arange(n), source, l]
+            previous = l
+    return gametes, homolog, counts
 
 
 def vector(value, width, name):
@@ -26,13 +76,12 @@ def vector(value, width, name):
 
 def validate(c, K):
     g = c.genetics
-    if g is None or g == {"mode": "direct_trait_legacy"}:
-        return
     required = {
         "mode",
         "schema_version",
         "ploidy",
         "inheritance",
+        "recombination_model",
         "background",
         "loci",
         "alleles",
@@ -45,15 +94,14 @@ def validate(c, K):
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
-        g["mode"] != "qtl_additive"
-        or g["schema_version"] != "qtl-1"
+        g["mode"] != "sexual_qtl"
+        or g["schema_version"] != "sexual-qtl-1"
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
-        or g["inheritance"] != "clonal_diploid_no_recombination"
+        or g["inheritance"] != "biparental_meiosis"
+        or g["recombination_model"] != "haldane_poisson_no_interference"
     ):
-        raise ValueError("only qtl-1 clonal diploid inheritance is implemented")
-    if not (c.evolve_plants and c.evolve_insects):
-        raise ValueError("QTL controls use mutation_enabled; legacy evolve flags must be true")
+        raise ValueError("only sexual-qtl-1 biparental meiosis is implemented")
     width = c.n + K
     if set(g["background"]) != set(KINDS) or set(g["mutation_enabled"]) != set(KINDS):
         raise ValueError("background/mutation_enabled require plant and insect")
@@ -66,6 +114,7 @@ def validate(c, K):
             raise ValueError(f"{name}: positive int64 count required")
     if not isinstance(g["provenance"], dict) or set(g["provenance"]) != {
         "mapping",
+        "genome_map",
         "mutation",
         "founders",
         "limits",
@@ -88,6 +137,8 @@ def validate(c, K):
             "locus_id",
             "organism",
             "functional_module",
+            "chromosome_id",
+            "position_cM",
             "targets",
             "mutation_rate",
             "mutation_sd",
@@ -117,6 +168,8 @@ def validate(c, K):
         targets = {j for x in loci.values() if x["organism"] == kind for j in x["targets"]}
         if targets != set(range(width)):
             raise ValueError("all trait dimensions require declared QTL coverage")
+    for kind in KINDS:
+        validate_genome_map([x for x in loci.values() if x["organism"] == kind])
     alleles = g["alleles"]
     if not alleles or len(alleles) > g["max_alleles_safety"]:
         raise ValueError("nonempty founder allele catalog within safety limit required")
@@ -183,12 +236,13 @@ class GeneticState:
             for a in self.spec["alleles"]
         ]
         self.events = []
+        self.transmissions = []
         self.rng = {
             (phase, kind): [
                 np.random.default_rng(np.random.SeedSequence([c.seed, 140, phase, k, s]))
                 for s in range(len(c.plant_sizes if k == 0 else c.insect_sizes))
             ]
-            for phase in (0, 1)
+            for phase in (0, 1, 2, 3)
             for k, kind in enumerate(KINDS)
         }
 
@@ -239,16 +293,30 @@ class GeneticState:
                 "conservative allele allocation limit; no descendants committed"
             )
 
-    def inherit(self, g, labels, ids, births, kind, next_id, generation):
-        """F-G2/G3: clone both copies, then create immutable new allele IDs."""
-        parent = np.repeat(np.arange(len(ids)), births)
-        if next_id + len(parent) >= 2**63:
+    def fertilize(self, g, labels, ids, mothers, fathers, kind, next_id, generation):
+        """Two independently formed gametes, followed by per-copy QTL mutation."""
+        mothers, fathers = np.asarray(mothers, int), np.asarray(fathers, int)
+        if mothers.shape != fathers.shape or mothers.ndim != 1:
+            raise ValueError("aligned parental indices required")
+        if any(((p < 0) | (p >= len(ids))).any() for p in (mothers, fathers)):
+            raise ValueError("parent index outside current population")
+        if (mothers == fathers).any() or (labels[mothers] != labels[fathers]).any():
+            raise ValueError("distinct conspecific parents required")
+        if next_id + len(mothers) >= 2**63:
             raise ComputationalLimit("individual ID int64 limit")
-        child = g[parent].copy()
-        child_labels = labels[parent]
-        child_ids = np.arange(next_id, next_id + len(parent), dtype=np.int64)
-        changed = np.zeros((len(parent), len(self.spec["background"][kind])), bool)
-        mutation_counts = np.zeros(len(parent), dtype=np.int64)
+        child_labels = labels[mothers]
+        child_ids = np.arange(next_id, next_id + len(mothers), dtype=np.int64)
+        child = np.empty((len(mothers), 2, len(self.loci[kind])), dtype=np.int64)
+        homolog = np.empty_like(child)
+        crossovers = np.zeros_like(child)
+        for h, parents in enumerate((mothers, fathers)):
+            for species, rng in enumerate(self.rng[2 + h, kind]):
+                selected = np.flatnonzero(child_labels == species)
+                gametes, source, counts = form_gametes(g[parents[selected]], self.loci[kind], rng)
+                child[selected, h] = gametes
+                homolog[selected, h] = source
+                crossovers[selected, h] = counts
+        inherited = child.copy()
         prefix = "P" if kind == "plant" else "H"
         if self.spec["mutation_enabled"][kind]:
             for s, rng in enumerate(self.rng[1, kind]):
@@ -269,10 +337,11 @@ class GeneticState:
                             Allele(idx, locus["locus_id"], old, generation, tuple(effect))
                         )
                         child[i, h, l] = idx
-                        changed[i, locus["targets"]] = True
-                        mutation_counts[i] += 1
                         self.events.append(
                             dict(
+                                event_id=idx,
+                                role="maternal" if h == 0 else "paternal",
+                                chromosome_id=locus["chromosome_id"],
                                 generation=generation,
                                 kind=kind,
                                 species=f"{prefix}{s + 1}",
@@ -287,26 +356,43 @@ class GeneticState:
                         )
         values, _ = self.phenotype(child, kind)
         rows = []
-        for i, p in enumerate(parent):
+        for i, (m, f) in enumerate(zip(mothers, fathers)):
             row = dict(
                 generation=generation,
                 kind=kind,
                 species=f"{prefix}{child_labels[i] + 1}",
                 offspring_id=int(child_ids[i]),
-                parent_id=int(ids[p]),
-                parent_genotype_id=f"{prefix}:{ids[p]}",
-                mutation_stream=f"seed140/phase1/{kind}/species{child_labels[i]}",
-                locus_mutation_count=int(mutation_counts[i]),
+                maternal_id=int(ids[m]),
+                paternal_id=int(ids[f]),
+                maternal_species=f"{prefix}{labels[m] + 1}",
+                paternal_species=f"{prefix}{labels[f] + 1}",
+                mutations_maternal=int(np.count_nonzero(child[i, 0] != inherited[i, 0])),
+                mutations_paternal=int(np.count_nonzero(child[i, 1] != inherited[i, 1])),
             )
-            offset = 0
-            for key, trait in values.items():
-                for j in range(trait.shape[1]):
-                    row[f"{key}_{j + 1}"] = trait[i, j]
-                    row[f"{key}_mutated_{j + 1}"] = bool(changed[i, offset + j])
-                offset += trait.shape[1]
             rows.append(row)
+            for h, parent in enumerate((m, f)):
+                for l, locus in enumerate(self.loci[kind]):
+                    old, new = int(inherited[i, h, l]), int(child[i, h, l])
+                    self.transmissions.append(
+                        dict(
+                            generation=generation,
+                            kind=kind,
+                            offspring_id=int(child_ids[i]),
+                            role="maternal" if h == 0 else "paternal",
+                            parent_id=int(ids[parent]),
+                            chromosome_id=locus["chromosome_id"],
+                            locus_id=locus["locus_id"],
+                            position_cM=locus["position_cM"],
+                            inherited_allele_id=old,
+                            child_allele_id=new,
+                            transmitted_homolog_before_mutation=int(homolog[i, h, l]),
+                            crossover_count=int(crossovers[i, h, l]),
+                            switch_before_locus=bool(crossovers[i, h, l] % 2),
+                            mutation_event_id=new if new != old else None,
+                        )
+                    )
         values[kind + "_genotypes"] = child
-        return values, child_labels, child_ids, rows, next_id + len(parent)
+        return values, child_labels, child_ids, rows, next_id + len(mothers)
 
     def summary(self, state, generation, sizes):
         rows = []
@@ -357,10 +443,37 @@ class GeneticState:
                                 trait=f"{key}_{j + 1}",
                                 mean=float(trait[mask, j].mean()) if n else np.nan,
                                 variance=float(trait[mask, j].var()) if n else np.nan,
+                                raw_mean=float(r.mean()) if n else np.nan,
                                 clipped_fraction=float(np.mean((r < 0) | (r > 1))) if n else np.nan,
                             )
                         )
                     offset += trait.shape[1]
+        return rows
+
+    def haplotype_summary(self, state, generation, sizes):
+        rows = []
+        for kind, count in zip(KINDS, sizes):
+            pop = state.plants if kind == "plant" else state.insects
+            for indices in validate_genome_map(self.loci[kind]).values():
+                for left, right in combinations(indices, 2):
+                    for species in range(count):
+                        copies = pop.genotypes[pop.species == species][:, :, [left, right]].reshape(
+                            -1, 2
+                        )
+                        pairs, counts = np.unique(copies, axis=0, return_counts=True)
+                        for pair, n in zip(pairs, counts):
+                            rows.append(
+                                dict(
+                                    generation=generation,
+                                    kind=kind,
+                                    species=f"{'P' if kind == 'plant' else 'H'}{species + 1}",
+                                    locus_left=self.loci[kind][left]["locus_id"],
+                                    locus_right=self.loci[kind][right]["locus_id"],
+                                    allele_left=int(pair[0]),
+                                    allele_right=int(pair[1]),
+                                    frequency=float(n / len(copies)),
+                                )
+                            )
         return rows
 
     def records(self):
@@ -371,4 +484,5 @@ class GeneticState:
             genetic_loci=[encoded(x) for x in self.spec["loci"]],
             allele_catalog=[encoded(asdict(x)) for x in self.alleles],
             mutations=[encoded(x) for x in self.events],
+            gamete_transmissions=[encoded(x) for x in self.transmissions],
         )

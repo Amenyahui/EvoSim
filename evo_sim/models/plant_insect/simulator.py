@@ -10,9 +10,9 @@ from evo_sim.core.runner import Runner
 from .helpers.config import config_payload
 from .helpers.demography import ComputationalLimit
 from .helpers.runtime import fail, finalize, initialize_community
-from .substeps.demography import CollectOffspring, SampleOffspring
+from .substeps.demography import CollectOffspring, SampleMaternallyProducedOffspring
 from .substeps.ecology import ChooseHosts, ObserveCues, SettleFeeding
-from .substeps.reproduction import InheritAndDisperse
+from .substeps.reproduction import CrossFertilizeAndDisperse
 
 MODEL_DIR = Path(__file__).resolve().parent
 
@@ -24,9 +24,9 @@ def get_registry():
         (ObserveCues, "observe_cues", "observation"),
         (ChooseHosts, "choose_hosts", "policy"),
         (SettleFeeding, "settle_feeding", "transition"),
-        (SampleOffspring, "sample_offspring", "policy"),
+        (SampleMaternallyProducedOffspring, "sample_maternal_offspring", "policy"),
         (CollectOffspring, "collect_offspring", "transition"),
-        (InheritAndDisperse, "inherit_and_disperse", "transition"),
+        (CrossFertilizeAndDisperse, "cross_fertilize_and_disperse", "transition"),
     ):
         registry.register(function, name, category)
     return registry
@@ -64,7 +64,7 @@ def get_runner(config_path=None, *, config=None):
     if config is not None and config_path is not None:
         raise ValueError("Provide config or config_path, not both")
     if config is None:
-        config = read_config(config_path or MODEL_DIR / "configs/qtl_development.yaml")
+        config = read_config(config_path or MODEL_DIR / "configs/sexual_qtl_development.yaml")
     return PlantInsectRunner(config, get_registry())
 
 

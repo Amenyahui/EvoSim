@@ -6,22 +6,10 @@ from .traits import consumption
 from .voc import conditional_probabilities, map_voc
 
 
-def founder_initial(c):
-    return tuple(
-        np.repeat(np.asarray(c.founder_traits[name], float), sizes, axis=0)
-        for name, sizes in (
-            ("D", c.plant_sizes),
-            ("I", c.insect_sizes),
-            ("A", c.insect_sizes),
-            ("plant_voc_independent_trait", c.plant_sizes),
-        )
-    )
-
-
 def standardized(state, c, B, w, generation):
     """Each reference species has one equal-weight option; no ecological RNG."""
-    D = np.asarray(c.founder_traits["D"], float)
-    Z = np.asarray(c.founder_traits["plant_voc_independent_trait"], float)
+    D = np.asarray(c.observation_reference_traits["D"], float)
+    Z = np.asarray(c.observation_reference_traits["plant_voc_independent_trait"], float)
     V = map_voc(D, Z, B, c.rho_voc)
     probability = np.empty((len(state.insects), len(D)))
     for i, preference in enumerate(state.insects.preference):
