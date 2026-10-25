@@ -1,0 +1,16 @@
+# Exchange-symmetric I/A standing variation, not a neutral or unbiased individual.
+# Each coordinate has two QTLs with effects 0.19/0.23; expected trait = 0.42.
+# Wider standing variance differs from adapted baseline and is explicitly reported.
+extends: v012_base.yaml
+input_files:
+  alleles: ../inputs/v012/formation_alleles.csv
+parameters:
+  genetics:
+    provenance:
+      founders:
+        source_kind: theoretical_placeholder
+        description: Plants retain adapted baseline; insect loci independently sample 0.19/0.23 effects equally, giving exchange-symmetric I/A coordinates with mean 0.42 and nonzero variance.
+batch:
+  cases:
+  - name: formation
+    overrides: {}

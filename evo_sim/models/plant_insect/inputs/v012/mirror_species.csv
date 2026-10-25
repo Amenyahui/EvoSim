@@ -1,0 +1,4 @@
+species_id,organism,initial_size,resource_capacity,max_feeding_demand,offspring_lambda,source_kind,source
+P2,plant,200,1.0,,2.0,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"
+P1,plant,200,1.0,,2.0,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"
+H1,insect,40,,1.0,4.0,theoretical_placeholder,"docs/model.md; lambda=4 per female, not per individual; exploratory sexual-demography correction, not empirically calibrated"

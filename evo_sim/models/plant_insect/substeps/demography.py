@@ -26,13 +26,15 @@ class SampleMaternallyProducedOffspring(SubstepAction):
         cells = pop.cells.copy()
         if k == 1:
             cells[valid] = community.plants.cells[runtime.e["host"][valid]]
-        mother = valid & (np.ones(len(labels), bool) if k == 0 else pop.sex == 0)
+        maternal_role = np.ones(len(labels), bool) if k == 0 else pop.sex == 0
+        mother = valid & maternal_role
         donor = valid & (F > 0) & (np.ones(len(labels), bool) if k == 0 else pop.sex == 1)
         radius = runtime.c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
         potential = mating_candidates(
             labels, cells, donor, mother, radius, runtime.c.spatial["grid_shape"]
         )
-        q, expected, variance = maternal_moments(S, mu, potential, mother)
+        # No-host females have zero expectation, not missing values excluded from the mean.
+        q, expected, variance = maternal_moments(S, mu, potential, maternal_role)
         survived = np.zeros(len(labels), bool)
         births = np.zeros(len(labels), dtype=np.int64)
         candidates = [np.empty(0, dtype=int) for _ in labels]
@@ -62,6 +64,7 @@ class SampleMaternallyProducedOffspring(SubstepAction):
                     sex_or_reproductive_role="seed_and_pollen"
                     if k == 0
                     else ("female" if pop.sex[i] == 0 else "male"),
+                    is_maternal_role=bool(maternal_role[i]),
                     S_i=S[i],
                     F_i=F[i],
                     W_i=S[i] * F[i],
@@ -81,7 +84,9 @@ class SampleMaternallyProducedOffspring(SubstepAction):
                     sampling_applied=runtime.update,
                     reason=(
                         "not_maternal_role"
-                        if not mother[i]
+                        if not maternal_role[i]
+                        else "no_host"
+                        if not valid[i]
                         else "did_not_survive"
                         if not survived[i]
                         else "no_compatible_mate"

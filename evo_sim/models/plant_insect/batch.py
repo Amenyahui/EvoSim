@@ -11,24 +11,29 @@ import numpy as np
 import pandas as pd
 
 from evo_sim import __version__
-from evo_sim.core.config import read_config
+from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
 from evo_sim.core.io import atomic_csv, atomic_text
 
 from .helpers.config import Config
+from .helpers.contributions import ALLELE_COLUMNS, NETWORK_CONTRIBUTION_COLUMNS
+from .helpers.inputs import read_config
 from .simulator import simulate
 
 ROOT = Path(__file__).resolve().parents[3]
 COLUMNS = {
     "events": "generation seed insect_id insect_row species species_id host_row host_id plant_species accepted reason candidate_count choice_order q d x g dmax R gamma host_h I_sum W_insect",
     "plants": "generation plant_id plant_row species species_id R T gamma X h herbivore_load D_sum V_emit_mean defense_cost voc_cost W_plant",
-    "parents": "generation kind species species_id individual_id S_i F_i W_i phi_i lambda_s conditional_mu expected_maternal_offspring maternal_offspring_variance survived_to_mating_stage offspring_count_as_mother offspring_count_sired mate_probability sampling_applied survival_stream offspring_stream",
+    "parents": "generation kind species species_id individual_id is_maternal_role S_i F_i W_i phi_i lambda_s conditional_mu expected_maternal_offspring maternal_offspring_variance survived_to_mating_stage offspring_count_as_mother offspring_count_sired mate_probability sampling_applied survival_stream offspring_stream realized_genetic_contribution contribution_committed",
     "offspring": "generation kind species offspring_id maternal_id paternal_id mutations_maternal mutations_paternal offspring_sex",
     "populations": "generation kind species N_start N_survived_to_reproduce N_offspring N_next update_applied extinct_at_generation zero_fitness_count mean_g mean_h total_resource_transfer density_phi population_status",
-    "networks": "generation insect_species plant_species N_accept Q_actual L_per_insect",
+    "networks": "generation insect_species plant_species N_accept Q_actual L_per_insect resource_share "
+    + NETWORK_CONTRIBUTION_COLUMNS,
+    "allele_contributions": ALLELE_COLUMNS,
 }
 DIAGNOSTIC_COLUMNS = (
-    "generation insect_species reference_plant_species insect_count preference q_unlimited panel"
+    "generation insect_species reference_plant_species insect_count preference q_unlimited "
+    "joint_pq cov_pq variance_p variance_q variance_pq panel"
 )
 
 
@@ -75,7 +80,11 @@ def save_result(result, out):
         for state in result["snapshots"]:
             prefix = f"g{int(state['generation']):06d}_"
             for key, value in state.items():
-                if key.endswith(("_genotypes", "_ids", "_species")):
+                if key in {
+                    kind + suffix
+                    for kind in ("plant", "insect")
+                    for suffix in ("_genotypes", "_ids", "_species")
+                }:
                     genotypes[prefix + key] = value
                 if key in ("D", "I", "A", "plant_voc_independent_trait"):
                     phenotypes[prefix + key] = value
@@ -136,7 +145,7 @@ def run(spec, out=None, *, runtime_config=None):
             raise ValueError("case names must be unique simple names")
         for case in cases:
             for rep in range(spec["replicates"]):
-                args = dict(spec["base"], **case["overrides"])
+                args = merge_config(spec["base"], case["overrides"])
                 try:
                     if type(args.get("seed")) is not int:
                         raise ValueError("explicit integer seed required")

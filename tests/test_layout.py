@@ -18,7 +18,7 @@ def test_versioned_output_directory():
         marker = first / "preserve.txt"
         marker.write_text("existing results")
         second = create_output_directory()
-        assert first.relative_to(tmp).as_posix() == "results/results_v0.1.1/run1"
+        assert first.relative_to(tmp).as_posix() == "results/results_v0.1.2/run1"
         assert second.name == "run2" and marker.read_text() == "existing results"
         try:
             create_output_directory(first)
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
 
 def test_long_run_inherits_cases():
-    from evo_sim.core.config import read_config
+    from evo_sim.models.plant_insect.helpers.inputs import read_config
 
     c = read_config(ROOT / "evo_sim/models/plant_insect/configs/sexual_qtl_200gen.yaml")
     assert c["batch"]["replicates"] == 3

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
 
 from .batch import write_json
@@ -58,6 +59,22 @@ def audit_run(path):
         raise AssertionError("invalid_parameter record has valid configuration")
     c = Config(**cfg)
     c.validate()
+    assert c.model_version == meta["version"] == "0.1.2", "audit requires the v0.1.2 contract"
+    required_outputs = {
+        "status.json",
+        "events.csv",
+        "plants.csv",
+        "parents.csv",
+        "offspring.csv",
+        "populations.csv",
+        "networks.csv",
+        "allele_contributions.csv",
+    }
+    if c.record_observations:
+        required_outputs.add("diagnostics.csv")
+    assert required_outputs <= set(meta["output_sha256"]), "missing required output hashes"
+    snapshots = {f.relative_to(path).as_posix() for f in (path / "snapshots").glob("*.npz")}
+    assert snapshots == {name for name in meta["output_sha256"] if name.startswith("snapshots/")}
     encoded = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(encoded).hexdigest() == meta["config_sha256"]
     genetic_checks = {}
@@ -73,6 +90,9 @@ def audit_run(path):
     for file in sorted((path / "snapshots").glob("*.npz")):
         with np.load(file) as a:
             states.append({k: a[k] for k in a.files})
+    from .audit_contributions import audit_contributions
+
+    contribution_checks = audit_contributions(path, c, states, tables)
     if not states:
         from .audit_genetics import genetic_limit
 
@@ -87,6 +107,7 @@ def audit_run(path):
             max_overrun=0.0,
             max_balance_error=0.0,
             **genetic_checks,
+            **contribution_checks,
         )
     ps = [f"P{s + 1}" for s in range(len(c.plant_sizes))]
     hs = [f"H{s + 1}" for s in range(len(c.insect_sizes))]
@@ -99,7 +120,7 @@ def audit_run(path):
     first_extinct = {}
     seen_ids = [set(), set()]
     assert [int(s["generation"]) for s in states] == list(range(len(states)))
-    if c.model_version == "0.1.1":
+    if c.model_version == "0.1.2":
         first = states[0]
         for kind, name, stream in (
             ("plant", "initial_plant_cells", 0),
@@ -155,7 +176,7 @@ def audit_run(path):
         close(p.R, R)
         close(ev.dmax, dmax)
         B = np.array(meta["resolved_B"])
-        V = np.clip(c.rho_voc * (D @ B.T) + (1 - c.rho_voc) * Vtrait, 0, 1)
+        V = np.clip(c.rho_voc * (D @ B.T) + (1 - c.rho_voc) * Vtrait, *c.voc_bounds)
         close(V, state["V_emit"])
         assert sorted(map(tuple, state["V_cue"])) == sorted(map(tuple, V))
         if not c.shuffle_voc:
@@ -256,7 +277,9 @@ def audit_run(path):
             cells = state[kind + "_cells"].copy()
             if k == 1:
                 cells[valid] = state["plant_cells"][ev.host_row.to_numpy(int)[valid]]
-            mother = valid & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0)
+            maternal_role = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0
+            mother = valid & maternal_role
+            assert np.array_equal(flags(par.is_maternal_role), maternal_role)
             donor = (
                 valid & (F > 0) & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1)
             )
@@ -270,11 +293,15 @@ def audit_run(path):
             q = np.array([1 - np.prod(1 - S[pool]) for pool in pools])
             probability = S * q
             close(par.mate_probability, q)
-            close(par.expected_maternal_offspring, np.where(mother, probability * mu, np.nan))
+            close(
+                par.expected_maternal_offspring, np.where(maternal_role, probability * mu, np.nan)
+            )
             close(
                 par.maternal_offspring_variance,
                 np.where(
-                    mother, probability * mu + probability * (1 - probability) * mu**2, np.nan
+                    maternal_role,
+                    probability * mu + probability * (1 - probability) * mu**2,
+                    np.nan,
                 ),
             )
             births = np.zeros(len(labels), dtype=np.int64)
@@ -405,7 +432,7 @@ def audit_run(path):
             else:
                 # Runtime memory/sampler errors are recorded, not independently reproducible proofs.
                 assert meta["status"].get("message")
-    if c.model_version == "0.1.1":
+    if c.model_version == "0.1.2":
         audit_extensions(path, c, meta, states, tables)
     return dict(
         status=status,
@@ -417,6 +444,7 @@ def audit_run(path):
         max_overrun=overrun,
         max_balance_error=balance,
         **genetic_checks,
+        **contribution_checks,
     )
 
 
@@ -514,7 +542,9 @@ def audit_extensions(path, c, meta, states, tables):
     diagnostics = pd.read_csv(path / "diagnostics.csv", float_precision="round_trip")
     D = np.asarray(founders["D"], float)
     Z = np.asarray(founders["plant_voc_independent_trait"], float)
-    V = np.clip(c.rho_voc * (D @ np.asarray(meta["resolved_B"]).T) + (1 - c.rho_voc) * Z, 0, 1)
+    V = np.clip(
+        c.rho_voc * (D @ np.asarray(meta["resolved_B"]).T) + (1 - c.rho_voc) * Z, *c.voc_bounds
+    )
     weights = np.asarray(meta["resolved_weights"])
     expected_rows = 0
     for state in states:
@@ -528,6 +558,9 @@ def audit_extensions(path, c, meta, states, tables):
         expected_rows += len(c.plant_sizes) * len(c.insect_sizes)
         assert len(diag) == len(c.plant_sizes) * len(c.insect_sizes)
         assert diag.panel.eq("equal_ancestral_species").all()
+        assert state["reference_p"].shape == (len(state["insect_ids"]), len(D))
+        assert state["reference_q"].shape == state["reference_p"].shape
+        assert state["reference_plant_species"].tolist() == [f"P{p + 1}" for p in range(len(D))]
         if len(ev):
             exposed = ev.candidate_count.to_numpy() > 0
             shares = ev[[f"P{p + 1}_candidate_share" for p in range(len(D))]].to_numpy()
@@ -559,6 +592,8 @@ def audit_extensions(path, c, meta, states, tables):
                 where=D[None, :, :] > 0,
             )
             q = np.minimum(1, ratios.min(axis=2))
+            close(state["reference_p"][selected], probabilities)
+            close(state["reference_q"][selected], q)
             hev = ev[ev.species == name]
             for p in range(len(D)):
                 pname = f"P{p + 1}"
@@ -568,6 +603,14 @@ def audit_extensions(path, c, meta, states, tables):
                 assert row.insect_count == len(I)
                 close(row.preference, probabilities[:, p].mean() if len(I) else np.nan)
                 close(row.q_unlimited, q[:, p].mean() if len(I) else np.nan)
+                a, b = probabilities[:, p], q[:, p]
+                joint = a * b
+                mean_joint = joint.mean() if len(I) else np.nan
+                covariance = ((a - a.mean()) * (b - b.mean())).mean() if len(I) else np.nan
+                close(row.joint_pq, mean_joint)
+                close(row.cov_pq, covariance)
+                for value, field in ((a, "variance_p"), (b, "variance_q"), (joint, "variance_pq")):
+                    close(row[field], value.var() if len(I) else np.nan)
                 edge = net[(net.insect_species == name) & (net.plant_species == pname)].iloc[0]
                 exposure = (
                     (hev.candidate_count * hev[f"P{p + 1}_candidate_share"]).sum()
@@ -613,7 +656,7 @@ def audit(out, report_dir=None, allow_plot_source_drift=False):
             assert set(differences) <= allowed_drift, differences
             if differences:
                 source_differences.append(dict(case=case["name"], replicate=rep, files=differences))
-            expected = dict(settings["spec"]["base"], **case["overrides"])
+            expected = merge_config(settings["spec"]["base"], case["overrides"])
             expected["seed"] += rep - 1
             if meta["status"]["status"] != "invalid_parameter":
                 expected = config_payload(Config(**expected))

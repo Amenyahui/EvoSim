@@ -3,12 +3,12 @@
 from copy import deepcopy
 from pathlib import Path
 
-from evo_sim.core.config import read_config
 from evo_sim.core.registry import Registry
 from evo_sim.core.runner import Runner
 
 from .helpers.config import config_payload
 from .helpers.demography import ComputationalLimit
+from .helpers.inputs import read_config
 from .helpers.runtime import fail, finalize, initialize_community
 from .substeps.demography import CollectOffspring, SampleMaternallyProducedOffspring
 from .substeps.ecology import ChooseHosts, ObserveCues, SettleFeeding

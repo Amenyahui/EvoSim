@@ -1,0 +1,139 @@
+# General model parameters; species and genetic input records are in ../inputs/*.csv.
+# Paths are relative to this YAML. All default values remain illustrative.
+# Explicit YAML parameters override imported CSV values; experiments override this file.
+extends: ../config.yaml
+input_files:
+  species: ../inputs/species.csv
+  competition: ../inputs/competition.csv
+  loci: ../inputs/loci.csv
+  alleles: ../inputs/alleles.csv
+  founder_frequencies: ../inputs/founder_frequencies.csv
+  reference_traits: ../inputs/reference_traits.csv
+simulation_metadata:
+  num_steps_per_episode: 5
+parameters:
+  insect_pop: null
+  n: 2
+  record_every: 1
+  seed: 20261021
+  plant_cost: 0.125
+  insect_cost: 0.125
+  sP0: 0.5
+  sI0: 0.0
+  candidate_size: 8
+  olfaction_mode: template
+  shuffle_voc: false
+  mapping: identity
+  B:
+  - [1.0, 0.0]
+  - [0.0, 1.0]
+  weights: [0.5, 0.5]
+  sigma: 0.2
+  b: 1.0
+  tau: 1.0
+  outside_utility: 0.0
+  unmatched_insect_fitness: 0.0
+  rho_voc: 0.5
+  voc_bounds: [0.0, 1.0]
+  voc_cost: 0.05
+  choice_mode: outside
+  insect_life_history: self_feeding_pre_reproductive
+  resource_unit: normalized_edible_dry_biomass
+  demand_unit: normalized_edible_dry_biomass
+  feeding_window: one_generation_pre_reproductive_feeding
+  demand_window: one_generation_pre_reproductive_feeding
+  model_version: 0.1.2
+  life_history: nonoverlapping_sexual_generations
+  demography:
+    plant_survival: bernoulli
+    insect_survival: bernoulli
+    offspring_distribution_given_survival: poisson
+    plant_density_stage: offspring_recruitment
+    insect_independent_density_factor: false
+    immigration: false
+    seed_bank: false
+    overlapping_generations: false
+  illustrative_only: true
+  study_site: theoretical periodic 10x10 habitat patches; no empirical cell length
+  max_individuals_safety: 5000
+  parameter_provenance:
+    resources:
+      kind: theoretical_placeholder
+      source: docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global
+        estimate
+    inherited_ecology:
+      kind: theoretical_placeholder
+      source: docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global
+        estimate
+  record_observations: true
+  spatial:
+    grid_shape: [10, 10]
+    boundary: periodic
+    search_radius: 2
+    competition_radius: 1
+    plant_dispersal_radius: 1
+    insect_dispersal_radius: 1
+    initial_plant_cells: null
+    initial_insect_cells: null
+  genetics:
+    phenotype_map:
+      effect_scale: 0.5
+      bounds: [0.0, 1.0]
+    mode: sexual_qtl
+    schema_version: sexual-qtl-1
+    ploidy: 2
+    inheritance: biparental_meiosis
+    background:
+      plant: [0.0, 0.0, 0.0, 0.0]
+      insect: [0.0, 0.0, 0.0, 0.0]
+    mutation_enabled:
+      plant: true
+      insect: true
+    max_alleles_safety: 100000
+    max_genotype_values_safety: 4000000
+    provenance:
+      mapping:
+        source_kind: theoretical_placeholder
+        description: Two abstract QTLs per trait coordinate; common zero background, half-copy sum and
+          clip; no molecular calibration.
+      mutation:
+        source_kind: theoretical_placeholder
+        description: Independent per-copy per-locus per-generation probability 0.01; normal SD 0.02 in
+          declared coordinate; distinct from legacy trait rates.
+      founders:
+        source_kind: theoretical_placeholder
+        description: Two configured alleles at frequency 0.5 each; independent copies; positive alternative
+          +0.02 allele effect. Not sequencing data; baseline reference is P1-adapted by design.
+      limits:
+        source_kind: implementation_choice
+        description: Conservative allele reservation and retained genotype scalar count; computational
+          stops, not ecological caps.
+      genome_map:
+        source_kind: theoretical_placeholder
+        description: Eight independent abstract linkage groups per taxon; not physical chromosomes.
+    recombination_model: haldane_poisson_no_interference
+  sexual_reproduction:
+    plant_mating_system: hermaphroditic_obligate_outcrossing
+    plant_selfing: false
+    insect_mating_system: dioecious
+    insect_founder_female_probability: 0.5
+    insect_offspring_female_probability: 0.5
+    pollen_radius: 1
+    insect_mate_radius: 2
+    father_sampling: uniform_with_replacement
+    provenance:
+      source_kind: theoretical_placeholder
+      description: Strict outcrossing, equal sex probabilities, insect mate radius 2; exploratory demographic
+        correction, not calibrated.
+batch:
+  purpose: Sexual QTL development and mutation control; illustrative parameters only.
+  replicates: 1
+  cases:
+  - name: qtl_mutating
+    overrides: {}
+  - name: mutation_off
+    overrides:
+      genetics:
+        mutation_enabled:
+          plant: false
+          insect: false

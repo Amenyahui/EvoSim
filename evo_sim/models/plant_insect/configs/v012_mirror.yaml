@@ -1,0 +1,16 @@
+# Complete P1/P2 relabeling. Equal sizes/resources/lambda/positions are invariant.
+# All species-bearing tables, both competition axes and references are permuted.
+# Same seed is NOT a pathwise coupling: random streams use species slot indices.
+extends: v012_base.yaml
+input_files:
+  species: ../inputs/v012/mirror_species.csv
+  competition: ../inputs/v012/mirror_competition.csv
+  founder_frequencies: ../inputs/v012/mirror_founder_frequencies.csv
+  reference_traits: ../inputs/v012/mirror_reference_traits.csv
+parameters:
+  plant_sizes: [20, 20]
+  insect_sizes: [24]
+batch:
+  cases:
+  - name: mirror
+    overrides: {}

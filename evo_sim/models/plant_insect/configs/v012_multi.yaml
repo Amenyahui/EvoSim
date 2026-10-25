@@ -1,0 +1,10 @@
+# Mechanism-generalization check only: 2 plants and 2 initially identical insects.
+# Total insect abundance remains 24, but conspecific mate pools necessarily differ.
+extends: v012_base.yaml
+input_files:
+  species: ../inputs/v012/multi_species.csv
+  founder_frequencies: ../inputs/v012/multi_founder_frequencies.csv
+batch:
+  cases:
+  - name: multi
+    overrides: {}

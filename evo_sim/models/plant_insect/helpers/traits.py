@@ -3,8 +3,8 @@
 import numpy as np
 
 
-def map_voc(D, B):
-    return np.clip(D @ B.T, 0, 1)
+def map_voc(D, B, bounds):
+    return np.clip(D @ B.T, *bounds)
 
 
 def encounter_candidates(pool, size, rng):
@@ -20,7 +20,7 @@ def chemical_scores(V, A, c, weights):
         return c.b - (distance / c.sigma) / c.sigma / 2
 
 
-def choice_probabilities(scores, tau=1.0, outside=0.0):
+def choice_probabilities(scores, tau, outside):
     scores = np.asarray(scores, float)
     if (
         np.isnan(scores).any()

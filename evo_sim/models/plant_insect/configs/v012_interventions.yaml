@@ -1,0 +1,12 @@
+# One-generation baseline and a single spatial-scale intervention.
+extends: v012_base.yaml
+simulation_metadata:
+  num_steps_per_episode: 1
+batch:
+  cases:
+  - name: intervention_baseline
+    overrides: {}
+  - name: search_radius
+    overrides:
+      spatial:
+        search_radius: 0

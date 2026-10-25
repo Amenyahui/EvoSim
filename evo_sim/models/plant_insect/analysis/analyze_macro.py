@@ -67,6 +67,12 @@ def analyze(batch: Batch):
                     kind=kind,
                     species=species,
                     initial_expected_maternal_offspring=group.expected_maternal_offspring.mean(),
+                    initial_maternal_role_count=int(
+                        group.expected_maternal_offspring.notna().sum()
+                    ),
+                    initial_expected_maternal_offspring_per_individual=group.expected_maternal_offspring.fillna(
+                        0
+                    ).mean(),
                     initial_survival=group.S_i.mean(),
                     initial_fecundity=group.F_i.mean(),
                 )

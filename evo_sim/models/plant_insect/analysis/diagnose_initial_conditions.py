@@ -4,41 +4,35 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from evo_sim.core.config import read_config
 from evo_sim.models.plant_insect.audit import audit
 from evo_sim.models.plant_insect.batch import run
+from evo_sim.models.plant_insect.helpers.inputs import read_config
 
 
 def main():
-    config = read_config(
-        Path(__file__).resolve().parents[1] / "configs/sexual_qtl_development.yaml"
-    )
-    pilot = {"base": config["parameters"]}
-    base = dict(pilot["base"], generations=0)
-    cases = []
-    for plants, insects in [(60, 60), (60, 6), (180, 60), (600, 60), (60, 0), (180, 0), (600, 0)]:
-        cases.append(
-            dict(
-                name=f"P{plants}_H{insects}",
-                overrides=dict(plant_sizes=[plants // 2] * 2, insect_sizes=[insects]),
-            )
-        )
-    spec = dict(
-        purpose="Post-pilot initial-state resource/density diagnosis; zero population updates",
-        replicates=4,
-        base=base,
-        cases=cases,
-    )
     parser = argparse.ArgumentParser(description="Zero-generation resource and density diagnosis")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "configs/initial_conditions.yaml",
+    )
     parser.add_argument("--out", type=Path, required=True)
-    out = parser.parse_args().out
-    run(spec, out)
+    args = parser.parse_args()
+    config = read_config(args.config)
+    generations = config["simulation_metadata"]["num_steps_per_episode"]
+    if generations != 0 or any(
+        case["overrides"].get("generations", generations) != 0 for case in config["batch"]["cases"]
+    ):
+        raise ValueError("initial-condition diagnosis requires zero generations")
+    spec = dict(config["batch"], base=dict(config["parameters"], generations=generations))
+    out = args.out
+    run(spec, out, runtime_config=config)
     audit(out)
     summary_dir = out / "data" / "summary"
     summary_dir.mkdir()
     rows = []
-    for case in cases:
-        for rep in range(1, 5):
+    for case in spec["cases"]:
+        for rep in range(1, spec["replicates"] + 1):
             folder = out / "data" / case["name"] / f"rep{rep:02d}"
             p = pd.read_csv(folder / "parents.csv")
             b = pd.read_csv(folder / "plants.csv")
@@ -58,12 +52,18 @@ def main():
                     mean_plant_damage=b.h.mean(),
                     mean_phi=plant.phi_i.mean(),
                     mean_plant_expected_maternal_offspring=plant.expected_maternal_offspring.mean(),
-                    mean_plant_expected_without_damage=(
+                    mean_plant_potential_maternal_mu_before_survival_and_mate_limitation=(
                         plant.lambda_s * plant.F_i * plant.phi_i
                     ).mean(),
                     mean_insect_expected_maternal_offspring=insect.expected_maternal_offspring.mean()
                     if len(insect)
                     else np.nan,
+                    insect_maternal_role_count=int(
+                        insect.expected_maternal_offspring.notna().sum()
+                    ),
+                    mean_insect_expected_maternal_offspring_per_individual=insect.expected_maternal_offspring.fillna(
+                        0
+                    ).mean(),
                 )
             )
     frame = pd.DataFrame(rows)
@@ -82,7 +82,7 @@ def main():
                 "mean_plant_damage",
                 "mean_phi",
                 "mean_plant_expected_maternal_offspring",
-                "mean_plant_expected_without_damage",
+                "mean_plant_potential_maternal_mu_before_survival_and_mate_limitation",
             ]
         ].to_string(index=False)
     )

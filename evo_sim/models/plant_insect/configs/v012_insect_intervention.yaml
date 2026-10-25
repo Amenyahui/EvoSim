@@ -1,0 +1,15 @@
+# Focal plants unchanged; exchange adapted insect I/A coordinate means.
+# Both recognition and utilization change: total opponent-composition intervention.
+extends: v012_interventions.yaml
+input_files:
+  alleles: ../inputs/v012/insect_intervention_alleles.csv
+parameters:
+  genetics:
+    provenance:
+      founders:
+        source_kind: theoretical_placeholder
+        description: Same founder allele identities and frequencies; insect I/A coordinate means exchanged by plus or minus 0.2 per allele effect. Focal plants unchanged.
+batch:
+  cases:
+  - name: insect_intervention
+    overrides: {}

@@ -1,0 +1,13 @@
+# Suite entries are separate YAMLs because batch overrides do not parse CSV files.
+extends: v012_base.yaml
+causal_checks:
+  scenarios:
+  - v012_base.yaml
+  - v012_linked.yaml
+  - v012_mirror.yaml
+  - v012_formation.yaml
+  - v012_multi.yaml
+  - v012_interventions.yaml
+  - v012_plant_intervention.yaml
+  - v012_insect_intervention.yaml
+  interpretation: Numerical and intervention-design checks; two seeds do not establish coevolution or stability.

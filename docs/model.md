@@ -1,4 +1,8 @@
-# evoSim v0.1.1 — Model：植物—植食性昆虫显式遗传共同演化 IBM 的理论与方法
+# evoSim v0.1.2 — Model：植物—植食性昆虫显式遗传生态—演化 IBM
+
+## v0.1.2 机制与观测契约
+
+本版保留原生态、交配与 QTL 机制，明确自主选择—取食—繁殖的生活史，增加实际双亲贡献、等位频率贡献分解、固定面板个体联合反应谱及寄主贡献网络。短而完整的定义与原计划的批判性修正见 [最小模型规范](v0.1.2_minimal_model.md)。旧长程模拟属于历史探索，不是本版新增观测的验证结果。
 
 ## 2026-10-22：默认实验修正
 
@@ -15,9 +19,9 @@
 绘图逐重复展示，单个观测使用点标记，时间轴从 0 开始，标注灭绝和实际停止状态；遗传图阴影仍表示种群内 SD，不能当作重复间置信区间。等位频率图每物种/位点最多显示峰值频率最高的 12 个 allele，全部原始数据保留。
 
 
-> **用途**：论文 *Materials and Methods / Model Description* 的中文初稿；v0.1.1 唯一科学规范；遗传协议 `sexual-qtl-1`。  
+> **用途**：论文 *Materials and Methods / Model Description* 的中文初稿；v0.1.2 机制说明；遗传协议 `sexual-qtl-1`。
 > **模型类型**：显式个体、空间局部互作、双亲有性遗传、非重叠世代的前向随机仿真。  
-> **状态**：下列为 **v0.1.1 目标公式契约**，须由 Agent 实现并经测试，不是已经获得的模拟结论。  
+> **状态**：下列为当前实现的公式契约，不是已获得的生态科学结论；新增观测的字段与缺失语义见 [输出规范](results.md)。
 > **证据标记**：`[B]` 经典遗传/数学规律，`[M]` 成熟理论形式，`[H]` 本研究可证伪的机制性假设，`[I]` 实现约定/占位参数；引用的论文只能支撑其相应层次。
 
 ## 摘要
@@ -88,10 +92,10 @@ G_{o,0,\ell}=M'_{m,\ell},\qquad G_{o,1,\ell}=M'_{f,\ell}.\tag{G6}
 \[
 U_{o,h,\ell}\sim\mathrm{Bernoulli}(\mu_\ell),\qquad
 \boldsymbol e_{a'}=\boldsymbol e_a+\Delta\boldsymbol e_\ell,\quad
-\Delta\boldsymbol e_\ell\sim\mathcal N(\boldsymbol0,\mathrm{diag}(\boldsymbol\sigma_\ell^2)).\tag{G7}
+\Delta\boldsymbol e_\ell\sim\mathcal N(\boldsymbol m_\ell,\mathrm{diag}(\boldsymbol\sigma_\ell^2)).\tag{G7}
 \]
 
-新等位 `a'` 使用新的唯一 ID、父等位 ID 和事件 ID；不能原位改变 `a`。`μ_ℓ` 为**每次配子传递一个抽象 QTL 的突变概率**，不是每核苷酸突变率。若各位点相同、两个配子各有 `L` 个位点：
+`m_ℓ` 对应每个位点的 `mutation_mean`，由 `inputs/loci.csv` 的 `mutation_mean_j` 列读入，默认全为 0，保留无偏突变假设；`mutation_sd_j` 列指定各坐标标准差。改变均值会引入定向突变，不能解释为选择的结果。新等位 `a'` 使用新的唯一 ID、父等位 ID 和事件 ID；不能原位改变 `a`。`μ_ℓ` 为**每次配子传递一个抽象 QTL 的突变概率**，不是每核苷酸突变率。若各位点相同、两个配子各有 `L` 个位点：
 
 \[
 P(\text{子代至少有一个新 QTL 突变})=1-(1-\mu)^{2L}.\tag{G8}
@@ -102,11 +106,11 @@ P(\text{子代至少有一个新 QTL 突变})=1-(1-\mu)^{2L}.\tag{G8}
 令个体性状向量 `\boldsymbol T_i` 分别为植物 `(D_1,D_2,Z_1,Z_2)` 或昆虫 `(I_1,I_2,A_1,A_2)`，各等位基因贡献可正可负的功能效应：
 
 \[
-T_{iq}^{\rm raw}=b_q+\frac12\sum_{\ell=1}^{L_k}\sum_{h=0}^1 e_{a_{ih\ell},q},\qquad
-T_{iq}=\operatorname{clip}_{[0,1]}(T_{iq}^{\rm raw}).\tag{G9}
+T_{iq}^{\rm raw}=b_q+s_e\sum_{\ell=1}^{L_k}\sum_{h=0}^1 e_{a_{ih\ell},q},\qquad
+T_{iq}=\operatorname{clip}_{[l_T,u_T]}(T_{iq}^{\rm raw}).\tag{G9}
 \]
 
-采用加性 QTL 模型 [M]；`1/2` 是**本模型对二倍体拷贝效应尺度的约定** [I]。显性、上位性与群体方差定标不在本版实现；Chu 等 2024 提供的是个体功能遗传效应与群体统计遗传效应区分的理论，而非 P450 蛋白功能关系 [R05]。必须记录未截断 `T_raw`，否则长期演化的遗传效应隐藏积累无法识别。当前基因突变**仅经 G9**影响性状；性状没有额外随机突变。
+采用加性 QTL 模型 [M]；`s_e` 读取 `genetics.phenotype_map.effect_scale`，默认 `1/2` 是**本模型对二倍体拷贝效应尺度的约定** [I]，不是显性系数。`[l_T,u_T]` 读取同组 `bounds`，默认 `[0,1]`，且须满足 `0≤l_T<u_T≤1`。显性、上位性与群体方差定标不在本版实现；Chu 等 2024 提供的是个体功能遗传效应与群体统计遗传效应区分的理论，而非 P450 蛋白功能关系 [R05]。必须记录未截断 `T_raw`，否则长期演化的遗传效应隐藏积累无法识别。当前基因突变**仅经 G9**影响性状；性状没有额外随机突变。
 
 ## 3. 植物气味、昆虫选择与资源竞争
 
@@ -115,10 +119,10 @@ T_{iq}=\operatorname{clip}_{[0,1]}(T_{iq}^{\rm raw}).\tag{G9}
 植物 `p` 的防御向量为 `\boldsymbol D_p`，独立 VOC 性状为 `\boldsymbol Z_p`，共用 `B` 映射矩阵及耦合系数 `ρ`：
 
 \[
-\boldsymbol V_p=\operatorname{clip}_{[0,1]}[\rho\,B\boldsymbol D_p+(1-\rho)\boldsymbol Z_p].\tag{E1}
+\boldsymbol V_p=\operatorname{clip}_{[l_V,u_V]}[\rho\,B\boldsymbol D_p+(1-\rho)\boldsymbol Z_p].\tag{E1}
 \]
 
-这是一种**现象学的信号耦合假设**，不是萜烯合酶反应速率公式。PSM 化学谱与植物 VOC 释放受遗传变异调节的实验背景见 [R08,R09]；具体线性混合形式及 `ρ` 为本研究假设，尚无实验参数估计。
+`[l_V,u_V]` 从 `voc_bounds` 读取，默认 `[0,1]`，须满足 `0≤l_V<u_V≤1`。这是一种**现象学的信号耦合假设**，不是萜烯合酶反应速率公式。PSM 化学谱与植物 VOC 释放受遗传变异调节的实验背景见 [R08,R09]；具体线性混合形式及 `ρ` 为本研究假设，尚无实验参数估计。
 
 ### 3.2 空间候选与寄主效用 [H/M]
 
@@ -160,11 +164,11 @@ H_i\in\mathcal H_i\cup\{\varnothing\},\qquad \text{由 E3 抽取且本代固定�
 \[
 q_i=\begin{cases}
 \min\left(1,\min_{j=1,\dots,n_D} I_{ij}/D_{H_i,j}\right),&H_i\neq\varnothing;\\
-0,&H_i=\varnothing.
+\mathrm{NA},&H_i=\varnothing.
 \end{cases}\tag{E5}
 \]
 
-约定分母 `D=0` 的该通道不构成限制，按 `+∞` 处理（包括 `I=D=0`），最后由外层最小值限制到 `[0,1]`。`q` 是**相对有效摄食能力**，不是体内酶动力学活性。最低通道限制是一项明确的瓶颈机制假设，文献只支持底物特异性解毒的重要性 [R11]，不支持该具体 `min` 函数。
+约定分母 `D=0` 的该通道不构成限制，按 `+∞` 处理（包括 `I=D=0`），最后由外层最小值限制到 `[0,1]`。`q` 是**相对有效摄食能力**，不是体内酶动力学活性。底物特异性的实证背景见 [R11]；最限制通道及 I/D 摄入预算的直接模型先例见 [R14]。这是有明确条件的理论抽象，不是普适生化定律；本项目的单位推导见 [最小模型规范第 3 节](v0.1.2_minimal_model.md)。
 
 若昆虫种 `s` 的最大单代需求为 `d^{max}_s`、植物 `p` 供给上限 `R_p>0`：
 
@@ -261,6 +265,8 @@ P(f=j\mid j\in\mathcal C_i)=1/|\mathcal C_i|.\tag{D4}
 
 ### 5.3 条件生殖均值、出生及矩 [H/数学推导]
 
+v0.1.2 的母源期望统计覆盖所有植物和所有雌虫，包括未找到寄主的雌虫（期望为零）；雄虫的母源期望缺失。`is_maternal_role` 仅表示角色，不表示已通过生态或交配筛选。按全体昆虫计算母源均值时，雄虫按零贡献计入；按雌虫计算时保留所有雌虫，不能只统计已找到寄主者。此改动修正观测分母，不改变抽样或生殖规则。
+
 植物母本：
 
 \[
@@ -317,9 +323,11 @@ N_{s,t+1}=\sum_{i:\,s(i)=s}B_i.\tag{D10}
 
 ### 6.2 参数总表（未核实数值标明“待定”）
 
+通用参数和 CSV 路径由 [`configs/model_parameters.yaml`](../evo_sim/models/plant_insect/configs/model_parameters.yaml) 声明；物种、竞争、位点、等位效应、初始频率和参考性状分别由 [`inputs/`](../evo_sim/models/plant_insect/inputs/) 中的六张 CSV 提供，读取后展开为现有模型参数结构。Python 不提供模型默认值。所有键的实际位置、CSV 列、继承和覆盖规则见 [参数配置指南](parameters.md)。下表保留展开后参数的科学含义分类；数值均为理论示例。
+
 | 参数 / 配置键 | 数学作用 / 含义 | 单位或约束 | 当前理论示例（如有） | 主分类 | 将来怎么用 / 依据 |
 |---|---|---|---|---|---|
-| `plant_sizes`, `insect_sizes` | 初始每物种个体数 | 个体，整数≥0 | P1=20, P2=20, H1=6 | X | 初始群落与灭绝风险情景，不作真实密度宣称 |
+| `plant_sizes`, `insect_sizes` | 初始每物种个体数 | 个体，整数≥0 | P1=200, P2=200, H1=40 | X | 初始群落与灭绝风险情景，不作真实密度宣称 |
 | `grid_shape` | 空间斑块数量 | 格数，两个正整数 | 10×10 | X | 空间尺度敏感性与空间热图；无物理长度 |
 | `search_radius` | 昆虫候选寄主搜索半径 | 格，≥0 | 2 | C | 生态行为参数；理论区间/空间效应检查 |
 | `candidate_size` | 每只昆虫最多评估的候选植株数 | 正整数 | 8 | C | 信息限制假设；文献不决定固定值 |
@@ -335,20 +343,23 @@ N_{s,t+1}=\sum_{i:\,s(i)=s}B_i.\tag{D10}
 | `plant_cost` `c_D` | 防御性状繁殖成本 | 每性状单位 | 0.125 | C | 防御—繁殖权衡；可作为后期假设对照 X |
 | `voc_cost` `c_V` | VOC 发生成本 | 每性状单位 | 0.05 | C | 气味信号成本，机制依据需限定 |
 | `insect_cost` `c_I` | 利用能力繁殖成本 | 每性状单位 | 0.125 | C | 解毒广度与成本权衡，不等于真实代谢成本 |
-| `sP0` | 全部资源被摄食时植物残余生存率 | [0,1] | 0.1 | C | 抵抗食害的生存基线 |
+| `sP0` | 全部资源被摄食时植物残余生存率 | [0,1] | 0.5 | C | 抵抗食害的生存基线 |
 | `plant_offspring_lambda` | 可交配植物母本每代基础后代均值 | 子代/母本，>0 | P1/P2=2 | C | 对应 D5，绝非产生的实际种子粒数 |
-| `insect_offspring_lambda` | 可交配雌虫基础后代均值 | 子代/雌虫，>0 | H1=2 | C | 对应 D6，不能以旧群体曲线反推 |
+| `insect_offspring_lambda` | 可交配雌虫基础后代均值 | 子代/雌虫，>0 | H1=4 | C | 对应 D6，不能以旧群体曲线反推 |
 | `plant_competition_alpha` | 邻域物种竞争系数矩阵 | 每个邻域个体≥0 | 对角0.02/交叉0.005 | C | 共存机制及密度反馈；可作 X 的理论范围 |
 | `competition_radius` | 植物竞争邻域 | 格，≥0 | 1 | X | 空间竞争尺度；绘图比较 |
-| `pollen_radius` | 花粉可达范围 | 格，≥0 | 待定 | C | 独立于种子扩散的交配空间尺度 |
-| `insect_mate_radius` | 昆虫雌雄交配半径 | 格，≥0 | 待定 | C | 交配限制与灭绝风险，单独探索 |
+| `pollen_radius` | 花粉可达范围 | 格，≥0 | 1 | C | 独立于种子扩散的交配空间尺度 |
+| `insect_mate_radius` | 昆虫雌雄交配半径 | 格，≥0 | 2 | C | 交配限制与灭绝风险，单独探索 |
 | `plant_dispersal_radius` | 种子扩散范围 | 格，≥0 | 1 | X | 空间集聚与迁移情景 |
 | `insect_dispersal_radius` | 昆虫子代扩散范围 | 格，≥0 | 1 | X | 虫体空间结构及寄主转换情景 |
 | `p_female` | 昆虫子代为雌性概率 | [0,1] | 0.5 | C | 无性染色体时理论性别分配，检验局部小种群效应 |
-| `L_P,L_H` | 类群各自抽象 QTL 数 | 正整数 | 各8 | X | 遗传架构实验因素；目前固定 |
+| `L_P,L_H` | 类群各自抽象 QTL 数 | 正整数 | 各8 | X | 由 `genetics.loci` 列表决定，需覆盖各性状坐标 |
 | `chromosome_id`, `position_cM` | 连锁结构、重组几率 | 连锁组、cM | 默认8个独立组 | X | 未来连锁强度比较，**不是经验图谱** |
 | `mutation_rate[ℓ]` | QTL/配子传递突变概率 | [0,1] | 每位点0.01 | C | 强理论占位，不能称核苷酸突变率 |
 | `mutation_sd[ℓ]` | 突变效应增量标准差 | 性状效应单位 | 目标坐标0.02 | C | 需界限/敏感性；不按进化结果方向微调 |
+| `mutation_mean[ℓ]` | 突变效应增量均值 | 性状效应单位；非目标坐标为0 | 全0 | X | 默认无偏；非零为额外的定向突变假设 |
+| `genetics.phenotype_map.effect_scale` | 等位效应总和的标度 | 有限非负值 | 0.5 | X | 与等位效应单位共同定义；不是显性参数 |
+| `genetics.phenotype_map.bounds`, `voc_bounds` | 遗传表型及 VOC 的截断区间 | 0≤下界<上界≤1 | 均为[0,1] | X | 归一化尺度内的边界假设，不是数值容差 |
 | `founder_allele_frequencies` | 初始等位频率 | 每位点和为1 | 例子0.5/0.5 | X | 初始遗传差异对结果的影响；人为适应须明示 |
 | `background_traits` | 加性性状基线 `b_q` | 数值，无量纲 | 各0 | C | 初始功能表型均值与截断率 |
 | `num_steps_per_episode` | 代数 T | 非负整数 | 200仅示例 | N | 研究观察窗口；不是生理年龄 |
@@ -357,7 +368,7 @@ N_{s,t+1}=\sum_{i:\,s(i)=s}B_i.\tag{D10}
 
 ### 6.3 参数来源等级及调整纪律
 
-所有运行在 `metadata.json` 为每个参数写 `value, unit, source_kind, citation_or_reason, stage, sensitivity_range`。允许的来源：`empirical_estimate`（需数据或可核论文）、`literature_theory`（有明确适用条件）、`theoretical_placeholder`（占位范围）、`implementation_choice`（确定性规则）、`numerical_control`（纯工程）。**当前多数数值仍是 theoretical_placeholder。**
+所有运行在 `metadata.json.config` 保存 YAML 与 CSV 展开后的实际参数及来源记录。通过配置文件运行时，`input_sources` 保存输入 CSV 的路径和 SHA-256 指纹；独立审计使用保存的展开数据，不依赖原 CSV。当前 `parameter_provenance` 使用 `kind/source`，遗传及交配来源使用 `source_kind/description`；没有为每个参数自动生成单位、引用或敏感性范围。单位由相关单位字段及本说明定义，科学依据仍需研究者核实并填写。**当前多数数值仍是 theoretical_placeholder。**
 
 - **构建期**：只能因生物/数学逻辑不正确而改变规则；冒烟运行检查守恒、分离率、RNG 和边界；不按趋势方向调数值。
 - **模型完成后校准**：用**独立数据**或预定目标统计量估计可辨识参数（C），记录不确定性及参数间耦合；不能把预测图上的“期望趋势”当校准目标。
@@ -400,7 +411,7 @@ N_{s,t+1}=\sum_{i:\,s(i)=s}B_i.\tag{D10}
 | G7–G9：突变效应与加性 QTL | [R02,R05] | 模拟用统计/功能遗传模型；0.01和0.02不是文献实测值 |
 | E1：PSM/VOC 遗传功能联系 | [R08,R09] | 实验支持遗传影响化学组成，**不支持线性混合式数值** |
 | E2–E4：气味效用与选择 | [R07,R10] | Logit 数学形式+昆虫嗅觉作用的经验背景，函数参数是研究假设 |
-| E5–E8：底物瓶颈与资源比例共享 | [R11] + 本研究 H/I | 底物特异性有证据；`min` 与比例分配为明确自定义规则 |
+| E5–E8：底物瓶颈与资源比例共享 | [R11,R14] + 本研究 H/I | R11 支持底物特异性，R14 提供最限制预算先例；共享资源比例分配仍为本项目假说 |
 | E9–E11：生存与生殖成本 | 本研究 H，背景 [R08–R11] | **不得**写成参考文献直接报告的具体适合度公式 |
 | S2：负密度依赖 | [R12,R13] | 类 Beverton–Holt 的局部变体，并非实测竞争系数 |
 | D3–D4：花粉与异交配偶限制 | [R06] + 本研究 H/I | 植物交配系统有依据；半径/均匀选父是理想化 |
@@ -449,5 +460,8 @@ N_{s,t+1}=\sum_{i:\,s(i)=s}B_i.\tag{D10}
 
 **[R13]** Beverton RJH, Holt SJ. 1957. *On the Dynamics of Exploited Fish Populations*. Fisheries Investigations, Series II, Vol. 19. [Beverton–Holt 函数与原始文献说明](https://search.r-project.org/CRAN/refmans/LeMaRns/html/rec_BH.html)  
 **适用范围**：负密度依赖的有理函数建模传统；本项目局部个体竞争是从该理论形状借鉴的变体。
+
+**[R14]** Speed MP, Fenton A, Jones MG, Ruxton GD, Brockhurst MA. 2015. *Coevolution can explain defensive secondary metabolite diversity in plants*. New Phytologist, 208:1251–1263. [DOI: 10.1111/nph.13560](https://doi.org/10.1111/nph.13560)。
+**适用范围**：最限制抵抗通道、固定取食窗口预算与线性成本的模型先例；不验证本项目父本成本门槛、共享资源分配或具体参数。
 
 **证据声明**：引用文献只对相应的“遗传规律、方法形式或经验机制”负责。`μ=0.01`、`σ_mut=0.02`、`λ=2`、`α=0.02/0.005`、化学效用系数、配偶半径、严格异交与 Poisson 出生的特定参数等，凡未直接从独立数据拟合，都必须标记 `theoretical_placeholder` 或 `implementation_choice`。这些假设不能因为列出参考文献而被写成实测事实。

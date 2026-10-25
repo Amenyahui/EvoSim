@@ -1,18 +1,21 @@
 import hashlib
 import json
 import platform
+from copy import deepcopy
 from dataclasses import fields
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 
+from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
 
 from . import ecology as shared
 from . import genetics, spatial, voc
 from .agents import CommunityState, InsectPopulation, PlantPopulation
 from .config import Config, config_payload, resource_values
+from .contributions import mark_uncommitted
 from .demography import ComputationalLimit
 
 
@@ -43,7 +46,7 @@ def ecology(state, c, B, w, rng_p, rng_H):
     A = state.insects.preference
     trait = state.plants.voc_trait
     pl, hl = state.plants.species, state.insects.species
-    V_emit = voc.map_voc(D, trait, B, c.rho_voc)
+    V_emit = voc.map_voc(D, trait, B, c.rho_voc, c.voc_bounds)
     V_cue = V_emit[rng_p.permutation(len(D))] if c.shuffle_voc else V_emit.copy()
     options = {}
     if c.spatial is not None:
@@ -106,6 +109,7 @@ def initialize_community(config, initial=None):
         "network": {},
     }
     community = None
+    runtime.input_sources = deepcopy(config.get("input_sources", {}))
     runtime.B, runtime.w = runtime.c.validate()
     runtime.genetic = genetics.GeneticState(runtime.c)
     if initial is not None:
@@ -115,7 +119,14 @@ def initialize_community(config, initial=None):
     runtime.lp, runtime.li, runtime.alpha = runtime.c.resolved_demography()
     runtime.rng = streams(runtime.c)
     runtime.result = dict(
-        events=[], plants=[], parents=[], offspring=[], populations=[], networks=[], snapshots=[]
+        events=[],
+        plants=[],
+        parents=[],
+        offspring=[],
+        populations=[],
+        networks=[],
+        snapshots=[],
+        allele_contributions=[],
     )
     if runtime.observe:
         runtime.result["diagnostics"] = []
@@ -185,6 +196,7 @@ def initialize_community(config, initial=None):
 
 def fail(state, error):
     runtime = state["environment"]["runtime"]
+    mark_uncommitted(runtime.result["parents"])
     if runtime.reproduction_checkpoint is not None:
         runtime.rng, runtime.spatial_rng = runtime.reproduction_checkpoint
         runtime.reproduction_checkpoint = None
@@ -201,9 +213,11 @@ def fail(state, error):
 
 def finalize(state):
     runtime = state["environment"]["runtime"]
+    mark_uncommitted(runtime.result["parents"])
     runtime.result["metadata"] = dict(
         version=runtime.c.model_version,
         config=config_payload(runtime.c),
+        input_sources=runtime.input_sources,
         status=runtime.status,
         resolved_B=runtime.B.tolist(),
         resolved_weights=runtime.w.tolist(),
@@ -222,7 +236,12 @@ def finalize(state):
     architecture = json.dumps(runtime.c.genetics, sort_keys=True, separators=(",", ":"))
     payload = json.dumps(config_payload(runtime.c), sort_keys=True, separators=(",", ":"))
     runtime.result["metadata"].update(
-        software_version="0.1.1",
+        software_version=__version__,
+        contribution_semantics="parent generation t to offspring generation t+1; realized counts only on committed transitions; missing for observation-only or failed transitions",
+        fitness_proxy_semantics="W_i/W_insect/W_plant are S*F proxies, not total fitness; realized_genetic_contribution=(maternal+paternal offspring)/2",
+        maternal_expectation_semantics="all plants or all females, including zero expectation for no host/survival/mate; nonmaternal roles are missing; all-individual mean counts those roles as zero",
+        allele_contribution_semantics="per-species per-locus parent/offspring allele union; parental contribution includes stochastic reproduction; transmission includes segregation and mutation",
+        reference_panel_semantics="reference_p/reference_q snapshot rows align with insect_ids; columns align with reference_plant_species; p is conditional choice without rejection",
         ecology_rule_version=runtime.c.model_version,
         genetics_version="sexual-qtl-1",
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),

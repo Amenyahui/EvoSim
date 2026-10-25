@@ -1,0 +1,5 @@
+recipient,competitor,alpha,source_kind,source
+P2,P2,0.02,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"
+P2,P1,0.005,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"
+P1,P2,0.005,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"
+P1,P1,0.02,theoretical_placeholder,"docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global estimate"

@@ -1,0 +1,90 @@
+# Small illustrative checks; no coexistence or specialization requirement.
+extends: model_parameters.yaml
+simulation_metadata:
+  num_steps_per_episode: 2
+parameters:
+  model_version: 0.1.2
+  insect_life_history: self_feeding_pre_reproductive
+  feeding_window: one_generation_pre_reproductive_feeding
+  demand_window: one_generation_pre_reproductive_feeding
+  seed: 20261025
+  plant_sizes: [20, 20]
+  insect_sizes: [24]
+  spatial:
+    grid_shape: [6, 6]
+    initial_plant_cells:
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    initial_insect_cells:
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+    - [0, 0]
+    - [0, 1]
+    - [1, 0]
+    - [1, 1]
+batch:
+  purpose: Small reproducible numerical and causal-design checks, not calibrated scientific evidence.
+  replicates: 2
+  cases:
+  - name: independent
+    overrides: {}
+  - name: mutation_off
+    overrides:
+      genetics:
+        mutation_enabled: {plant: false, insect: false}

@@ -1,0 +1,15 @@
+# Focal insects unchanged; plant D effects scaled by 0.7, Z unchanged.
+# Under rho=0.5 this changes both defense and emitted cue: total opponent effect.
+extends: v012_interventions.yaml
+input_files:
+  alleles: ../inputs/v012/plant_intervention_alleles.csv
+parameters:
+  genetics:
+    provenance:
+      founders:
+        source_kind: theoretical_placeholder
+        description: Same founder allele identities and frequencies; plant D effects multiplied by 0.7, Z and focal insects unchanged. This also changes VOC via rho.
+batch:
+  cases:
+  - name: plant_intervention
+    overrides: {}

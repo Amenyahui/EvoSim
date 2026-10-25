@@ -37,7 +37,9 @@ class ObserveCues(SubstepObservation):
             )
         )
         D = community.plants.defense
-        V_emit = voc.map_voc(D, community.plants.voc_trait, runtime.B, runtime.c.rho_voc)
+        V_emit = voc.map_voc(
+            D, community.plants.voc_trait, runtime.B, runtime.c.rho_voc, runtime.c.voc_bounds
+        )
         V_cue = (
             V_emit[runtime.rng[1][0][0].permutation(len(D))]
             if runtime.c.shuffle_voc
@@ -255,7 +257,9 @@ class SettleFeeding(SubstepTransition):
                     cell_col=int(community.plants.cells[p, 1]),
                     density_phi=runtime.plant_phi[p],
                 )
+        runtime.network_start = len(runtime.result["networks"])
         for h in range(len(runtime.c.insect_sizes)):
+            total_resource = float(runtime.e["x"][hl == h].sum())
             for p in range(len(runtime.c.plant_sizes)):
                 matched = (hl == h) & (runtime.e["host"] >= 0)
                 matched &= np.array(
@@ -271,6 +275,14 @@ class SettleFeeding(SubstepTransition):
                         N_accept=int(matched.sum()),
                         Q_actual=actual,
                         L_per_insect=actual / size if size else np.nan,
+                        resource_share=actual / total_resource if total_resource else np.nan,
+                        maternal_offspring=None,
+                        paternal_offspring=None,
+                        genetic_contribution=None,
+                        maternal_share=None,
+                        paternal_share=None,
+                        genetic_contribution_share=None,
+                        contribution_committed=False,
                     )
                 )
                 if runtime.observe:
@@ -278,7 +290,15 @@ class SettleFeeding(SubstepTransition):
                         runtime.e["candidate_exposure"][h, pl == p].sum()
                     )
         if runtime.observe:
-            runtime.result["diagnostics"].extend(
-                standardized(community, runtime.c, runtime.B, runtime.w, state["current_step"])
+            rows, probability, q = standardized(
+                community, runtime.c, runtime.B, runtime.w, state["current_step"]
+            )
+            runtime.result["diagnostics"].extend(rows)
+            snapshot.update(
+                reference_p=probability,
+                reference_q=q,
+                reference_plant_species=np.array(
+                    [f"P{p + 1}" for p in range(len(runtime.c.plant_sizes))]
+                ),
             )
         return {}

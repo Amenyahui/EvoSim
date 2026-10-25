@@ -1,0 +1,17 @@
+﻿locus_id,organism,functional_module,chromosome_id,position_cM,mutation_rate,target_0,target_1,target_2,target_3,mutation_mean_0,mutation_mean_1,mutation_mean_2,mutation_mean_3,mutation_sd_0,mutation_sd_1,mutation_sd_2,mutation_sd_3
+plant_1_1,plant,D,plant_LG01,0.0,0.01,1,0,0,0,0.0,0.0,0.0,0.0,0.02,0.0,0.0,0.0
+plant_1_2,plant,D,plant_LG02,0.0,0.01,1,0,0,0,0.0,0.0,0.0,0.0,0.02,0.0,0.0,0.0
+plant_2_1,plant,D,plant_LG03,0.0,0.01,0,1,0,0,0.0,0.0,0.0,0.0,0.0,0.02,0.0,0.0
+plant_2_2,plant,D,plant_LG04,0.0,0.01,0,1,0,0,0.0,0.0,0.0,0.0,0.0,0.02,0.0,0.0
+plant_3_1,plant,plant_voc_independent_trait,plant_LG05,0.0,0.01,0,0,1,0,0.0,0.0,0.0,0.0,0.0,0.0,0.02,0.0
+plant_3_2,plant,plant_voc_independent_trait,plant_LG06,0.0,0.01,0,0,1,0,0.0,0.0,0.0,0.0,0.0,0.0,0.02,0.0
+plant_4_1,plant,plant_voc_independent_trait,plant_LG07,0.0,0.01,0,0,0,1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.02
+plant_4_2,plant,plant_voc_independent_trait,plant_LG08,0.0,0.01,0,0,0,1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.02
+insect_1_1,insect,I,insect_LG09,0.0,0.01,1,0,0,0,0.0,0.0,0.0,0.0,0.02,0.0,0.0,0.0
+insect_1_2,insect,I,insect_LG10,0.0,0.01,1,0,0,0,0.0,0.0,0.0,0.0,0.02,0.0,0.0,0.0
+insect_2_1,insect,I,insect_LG11,0.0,0.01,0,1,0,0,0.0,0.0,0.0,0.0,0.0,0.02,0.0,0.0
+insect_2_2,insect,I,insect_LG12,0.0,0.01,0,1,0,0,0.0,0.0,0.0,0.0,0.0,0.02,0.0,0.0
+insect_3_1,insect,A,insect_LG13,0.0,0.01,0,0,1,0,0.0,0.0,0.0,0.0,0.0,0.0,0.02,0.0
+insect_3_2,insect,A,insect_LG14,0.0,0.01,0,0,1,0,0.0,0.0,0.0,0.0,0.0,0.0,0.02,0.0
+insect_4_1,insect,A,insect_LG15,0.0,0.01,0,0,0,1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.02
+insect_4_2,insect,A,insect_LG16,0.0,0.01,0,0,0,1,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.02

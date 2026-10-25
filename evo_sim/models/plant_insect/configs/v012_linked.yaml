@@ -1,0 +1,14 @@
+# Four I/A pairs; 10 cM within each pair. All other locus fields unchanged.
+extends: v012_base.yaml
+input_files:
+  loci: ../inputs/v012/linked_loci.csv
+parameters:
+  genetics:
+    provenance:
+      genome_map:
+        source_kind: theoretical_placeholder
+        description: Plant map unchanged; insect I/A coordinates paired into four groups at 0 and 10 cM, with no imposed founder association.
+batch:
+  cases:
+  - name: linked
+    overrides: {}

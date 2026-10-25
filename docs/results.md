@@ -1,15 +1,15 @@
-# evoSim v0.1.1 — Results：输出内容、指标定义、图件与结果解释
+# evoSim v0.1.2 — Results：输出内容、指标定义、图件与结果解释
 
-> **版本**：仅对应 `evoSim v0.1.1 / sexual-qtl-1`。  
-> **文件性质**：科学结果**输出规范和分析计划**，不是已经运行得到的结果报告。交付本次四份文档时，**没有将 v0.1.1 模拟数值当作已获得结果**；Agent 实现并运行后，才能填写实际发现。  
+> **版本**：当前文件契约为 `evoSim v0.1.2 / sexual-qtl-1`。
+> **文件性质**：输出规范与分析计划。O01–O10、F1–F12 保留原始规划身份，不表示所有规划表和图均已实现。
 > **目的**：清楚说明“模型将产生什么原始数据、汇总统计和论文图件”，并对接 `architecture.md` 的 Agent/Step 和 `model.md` 的公式。
 
-## 当前实现与本规范的对应（2026-10-22）
+## 当前实现与本规范的对应（2026-10-25）
 
-默认运行入口已经输出到 `results/results_v0.1.1/runN/`，自动选择下一个编号且不覆盖已有目录。当前可执行文件契约如下；下文 O01–O10 和 F1–F12 保留为目标规范，不能据此假定所有独立表或图已经生成。
+默认批次入口输出到 `results/results_v0.1.2/runN/`，不覆盖已有目录。因果检查入口由 `--out` 指定目录，输出相同逐运行文件及 `causal_checks.json/md`，不生成常规批次的 `settings.json`；各运行已经单独审计，该目录不直接用于常规批次汇总命令。
 
 ```text
-results/results_v0.1.1/runN/
+results/results_v0.1.2/runN/
 ├── settings.json
 ├── data/
 │   ├── run_status.csv、status.json
@@ -19,13 +19,35 @@ results/results_v0.1.1/runN/
 │   │   ├── offspring.csv、gamete_transmissions.csv、mutations.csv
 │   │   ├── genetic_loci.csv、allele_catalog.csv、genetic_summary.csv
 │   │   ├── haplotype_summary.csv、networks.csv、diagnostics.csv
+│   │   ├── allele_contributions.csv
 │   │   └── snapshots/、genotypes.npz、phenotypes.npz
 │   └── summary/                 # 汇总命令生成
 ├── audits/integrity_audit.json   # 审计命令生成
 └── figures/                     # 绘图命令生成
 ```
 
-当前个体主键为 `(case, replicate, kind, individual_id)`，不是跨类群共享的裸 ID；处理和重复由目录提供。`events.csv` 合并寄主选择与取食事件，昆虫性别、位置和性状保存在快照；重组间隔信息保存在 `gamete_transmissions.csv`。当前尚未单独输出 `insects/host_choices/feeding/mating_summary/recombination_intervals/traits_summary/spatial_summary.csv`，`networks.csv` 对应网络账本；O01 字段名与实现也不完全相同。实际结果及验证范围见 [实施报告](v0.1.1_implementation_report.md)。
+当前个体主键为 `(case, replicate, kind, individual_id)`，处理和重复由目录提供。`events.csv` 合并选择与取食事件，性别、位置和性状保存在快照。重组信息在 `gamete_transmissions.csv`；未单独输出 `insects/host_choices/feeding/mating_summary/recombination_intervals/traits_summary/spatial_summary.csv`。验证范围见 [本版检查报告](v0.1.2_causal_check_report.md)。
+
+### v0.1.2 新增字段及缺失语义
+
+| 文件 | 字段 | 定义 |
+| --- | --- | --- |
+| `parents.csv` | `is_maternal_role` | 植物及雌虫为真；与有无寄主、生存、配偶分开 |
+| 同上 | `realized_genetic_contribution` | 母源、父源后代数之和除以 2；未提交时缺失 |
+| `parents.csv`、`networks.csv` | `contribution_committed` | 完成代际更新才为真；终代、失败更新不能伪造贡献 |
+| `allele_contributions.csv` | `p_parent`、`p_parent_weighted`、`p_offspring` | 每物种/位点的亲代频率、按实际双亲贡献加权频率、实际后代频率；记录亲子等位基因并集 |
+| 同上 | `delta_parent_contribution`、`delta_transmission` | 加权频率减亲代频率、后代频率减加权频率；不是纯选择与纯突变分解 |
+| `networks.csv` | `resource_share` | 昆虫物种内实际资源份额；总量为零时缺失 |
+| 同上 | `maternal_offspring`、`paternal_offspring`、`genetic_contribution` | 按母本、父本各自当代寄主归属；合并两者各乘 1/2 |
+| 同上 | `maternal_share`、`paternal_share`、`genetic_contribution_share` | 各自在昆虫物种内归一化；相应总量零时缺失 |
+| `diagnostics.csv` | `joint_pq`、`cov_pq`、`variance_p`、`variance_q`、`variance_pq` | 个体先相乘后平均；协方差/方差用总体分母 N；p 不含拒绝，q 不含资源竞争 |
+| `snapshots/*.npz` | `reference_p`、`reference_q`、`reference_plant_species` | 矩阵行与 `insect_ids` 对齐，列与参考物种标签对齐；关闭观测时不保存 |
+
+`expected_maternal_offspring` 对所有雌虫和植物有定义：没有寄主的雌虫记零，雄虫记缺失。全体个体的母源期望均值把非母源角色按零计入；全体雌虫均值则不包含雄虫，须报告分母。`W_i/W_insect/W_plant` 仍为 `S×F` 的兼容字段，仅是表现代理量。
+
+没有后代时实际贡献可以为零，但下一代等位频率及分解缺失；在非空后代中消失的等位基因频率才是零。未提交的更新不输出频率分解行。空账本仍保存列头。新增观测不抽随机数，不改变生态和遗传抽样顺序。
+
+以下保留原 v0.1.1 分析规划；尚未实现的独立表和图不属于本版完成声明。
 
 ## 1. 结果分类：四级证据，不可混写
 

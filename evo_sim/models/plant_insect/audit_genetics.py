@@ -10,6 +10,8 @@ import pandas as pd
 
 def audit_genetics(path, c, meta):
     spec = c.genetics
+    mapping = spec["phenotype_map"]
+    lower, upper = mapping["bounds"]
     assert meta["genetics_version"] == "sexual-qtl-1"
     assert meta["ecology_rule_version"] == c.model_version
     encoded = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()
@@ -44,7 +46,10 @@ def audit_genetics(path, c, meta):
         assert row.parent_allele_id == alleles.parent_allele_id.iloc[i]
         delta = np.asarray(json.loads(row.delta))
         np.testing.assert_allclose(effects[i], effects[parent] + delta, rtol=1e-12, atol=1e-14)
-        assert np.all(delta[np.asarray(locus["mutation_sd"]) == 0] == 0)
+        deterministic = np.asarray(locus["mutation_sd"]) == 0
+        np.testing.assert_array_equal(
+            delta[deterministic], np.asarray(locus["mutation_mean"])[deterministic]
+        )
         assert row.mutation_stream == f"seed140/phase1/{row.kind}/species{int(row.species[1:]) - 1}"
     for i, key in enumerate(keys):
         assert key in by_locus
@@ -89,8 +94,8 @@ def audit_genetics(path, c, meta):
                     for h in range(2):
                         assert all(keys[int(a)] == locus["locus_id"] for a in g[:, h, l])
                         assert np.all(alleles.birth_generation.to_numpy()[g[:, h, l]] <= t)
-                        raw += effects[g[:, h, l]] / 2
-                derived = np.clip(raw, 0, 1)
+                        raw += effects[g[:, h, l]] * mapping["effect_scale"]
+                derived = np.clip(raw, lower, upper)
                 for name, values in zip(names, (derived[:, : c.n], derived[:, c.n :])):
                     np.testing.assert_allclose(values, state[name], rtol=1e-12, atol=1e-14)
                     key = f"g{t:06d}_{name}"
@@ -233,7 +238,11 @@ def audit_genetics(path, c, meta):
                             x = state[name][mask, j]
                             unbounded = raw[mask, offset + j]
                             expected = (
-                                [x.mean(), x.var(), np.mean((unbounded < 0) | (unbounded > 1))]
+                                [
+                                    x.mean(),
+                                    x.var(),
+                                    np.mean((unbounded < lower) | (unbounded > upper)),
+                                ]
                                 if n
                                 else [np.nan] * 3
                             )

@@ -5,13 +5,13 @@ import numpy as np
 from . import traits
 
 
-def map_voc(D, Z, B, rho):
+def map_voc(D, Z, B, rho, bounds):
     if rho == 1:
-        return traits.map_voc(D, B)
-    return np.clip(rho * (D @ B.T) + (1 - rho) * Z, 0, 1)
+        return traits.map_voc(D, B, bounds)
+    return np.clip(rho * (D @ B.T) + (1 - rho) * Z, *bounds)
 
 
-def choice_probabilities(scores, tau=1.0, outside=0.0, mode="outside"):
+def choice_probabilities(scores, tau, outside, mode):
     if mode == "outside":
         return traits.choice_probabilities(scores, tau, outside)
     scores = np.asarray(scores, float)
@@ -42,7 +42,7 @@ def conditional_probabilities(V, A, c, w):
         # Center before sigma division so the nearest candidate stays finite.
         with np.errstate(over="ignore"):
             relative = -((distance - distance.min()) / c.sigma) / c.sigma / 2
-    return choice_probabilities(relative, c.tau, mode="forced")[:-1]
+    return choice_probabilities(relative, c.tau, c.outside_utility, mode="forced")[:-1]
 
 
 def fecundity(D, V_emit, c):

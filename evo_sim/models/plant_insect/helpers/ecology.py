@@ -102,7 +102,9 @@ def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_poo
             probabilities = np.append(conditional, 0.0)
         else:
             scores = traits.chemical_scores(V_cue[candidates], A[i], c, w)
-            probabilities = voc.choice_probabilities(scores, c.tau, c.outside_utility)
+            probabilities = voc.choice_probabilities(
+                scores, c.tau, c.outside_utility, c.choice_mode
+            )
         for s in range(len(c.plant_sizes)):
             mask = p_labels[candidates] == s
             candidate_share[i, s] = mask.mean()

@@ -8,6 +8,7 @@ from itertools import combinations
 
 import numpy as np
 
+from .config import normalized_bounds, numeric
 from .demography import ComputationalLimit
 
 KINDS = ("plant", "insect")
@@ -83,6 +84,7 @@ def validate(c, K):
         "inheritance",
         "recombination_model",
         "background",
+        "phenotype_map",
         "loci",
         "alleles",
         "founder_frequencies",
@@ -103,6 +105,11 @@ def validate(c, K):
     ):
         raise ValueError("only sexual-qtl-1 biparental meiosis is implemented")
     width = c.n + K
+    mapping = g["phenotype_map"]
+    if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
+        raise ValueError("phenotype_map requires explicit effect_scale and bounds")
+    numeric(mapping["effect_scale"], "phenotype_map.effect_scale")
+    normalized_bounds(mapping["bounds"], "phenotype_map.bounds")
     if set(g["background"]) != set(KINDS) or set(g["mutation_enabled"]) != set(KINDS):
         raise ValueError("background/mutation_enabled require plant and insect")
     for kind in KINDS:
@@ -141,6 +148,7 @@ def validate(c, K):
             "position_cM",
             "targets",
             "mutation_rate",
+            "mutation_mean",
             "mutation_sd",
         }:
             raise ValueError("complete locus record required")
@@ -160,9 +168,14 @@ def validate(c, K):
         mu = locus["mutation_rate"]
         if type(mu) not in (int, float) or not np.isfinite(mu) or not 0 <= mu <= 1:
             raise ValueError("mutation_rate per copy/locus/generation must be in [0,1]")
+        mean = vector(locus["mutation_mean"], width, "mutation_mean")
         sd = vector(locus["mutation_sd"], width, "mutation_sd")
-        if (sd < 0).any() or any(sd[j] != 0 for j in set(range(width)) - set(targets)):
-            raise ValueError("nonnegative SD; zero outside declared targets required")
+        if (sd < 0).any() or any(
+            mean[j] != 0 or sd[j] != 0 for j in set(range(width)) - set(targets)
+        ):
+            raise ValueError(
+                "nonnegative SD; mutation mean/SD zero outside declared targets required"
+            )
         loci[key] = locus
     for kind in KINDS:
         targets = {j for x in loci.values() if x["organism"] == kind for j in x["targets"]}
@@ -263,7 +276,7 @@ class GeneticState:
         return g
 
     def phenotype(self, g, kind):
-        """F-G1: common background + half the two-copy sum; no species argument."""
+        """F-G1: common background + configured scale times allele sum; no species argument."""
         if g.dtype.kind not in "iu" or g.shape[1:] != (2, len(self.loci[kind])):
             raise ValueError("genotype must be N by two copies by organism loci")
         if (g < 0).any() or (g >= len(self.alleles)).any():
@@ -274,8 +287,11 @@ class GeneticState:
             ):
                 raise ValueError("allele assigned to wrong locus or organism")
         effects = np.asarray([a.effect for a in self.alleles])
-        raw = np.asarray(self.spec["background"][kind]) + 0.5 * effects[g].sum(axis=(1, 2))
-        values = np.clip(raw, 0, 1)
+        mapping = self.spec["phenotype_map"]
+        raw = np.asarray(self.spec["background"][kind]) + mapping["effect_scale"] * effects[g].sum(
+            axis=(1, 2)
+        )
+        values = np.clip(raw, *mapping["bounds"])
         return {TRAITS[kind][0]: values[:, : self.n], TRAITS[kind][1]: values[:, self.n :]}, raw
 
     def preflight(self, sizes, stored_values):
@@ -328,7 +344,7 @@ class GeneticState:
                         i = int(selected[row])
                         h = int(h)
                         old = int(child[i, h, l])
-                        delta = rng.normal(0, locus["mutation_sd"])
+                        delta = rng.normal(locus["mutation_mean"], locus["mutation_sd"])
                         effect = np.asarray(self.alleles[old].effect) + delta
                         if not np.isfinite(effect).all():
                             raise FloatingPointError("nonfinite allele effect")
@@ -396,6 +412,7 @@ class GeneticState:
 
     def summary(self, state, generation, sizes):
         rows = []
+        lower, upper = self.spec["phenotype_map"]["bounds"]
         mutation_counts = Counter(
             (event["species"], event["locus_id"])
             for event in self.events
@@ -444,7 +461,9 @@ class GeneticState:
                                 mean=float(trait[mask, j].mean()) if n else np.nan,
                                 variance=float(trait[mask, j].var()) if n else np.nan,
                                 raw_mean=float(r.mean()) if n else np.nan,
-                                clipped_fraction=float(np.mean((r < 0) | (r > 1))) if n else np.nan,
+                                clipped_fraction=float(np.mean((r < lower) | (r > upper)))
+                                if n
+                                else np.nan,
                             )
                         )
                     offset += trait.shape[1]

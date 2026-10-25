@@ -1,8 +1,4 @@
-"""Public v1.3 configuration and validation.
-
-The private validation layers preserve established boundary behavior. Only
-Config is part of the public API; all scientific modules consume that object.
-"""
+"""Configuration and validation for the v0.1.2 model contract."""
 
 from dataclasses import asdict, dataclass
 
@@ -38,30 +34,30 @@ def resource_values(value, sizes, prefix):
     return value
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _TraitConfig:
-    plant_sizes: tuple = (80, 80)
-    insect_pop: int = 160
-    n: int = 2
-    generations: int = 200
-    record_every: int = 10
-    seed: int = 20261019
-    plant_cost: float = 0.125
-    insect_cost: float = 0.125
-    sP0: float = 0.1
-    sI0: float = 0.1
-    candidate_size: int = 8
-    olfaction_mode: str = "template"
-    shuffle_voc: bool = False
-    mapping: str = "identity"
-    B: object = None
-    weights: object = None
-    sigma: float = 0.2
-    b: float = 1.0
-    tau: float = 1.0
-    outside_utility: float = 0.0
-    unmatched_insect_fitness: float = 0.0
-    # Optional explicit species centers; None retains Speed's U(0,.01) start.
+    # All values come from YAML (or an explicitly supplied Config); no scientific defaults.
+    plant_sizes: tuple
+    insect_pop: int | None
+    n: int
+    generations: int
+    record_every: int
+    seed: int
+    plant_cost: float
+    insect_cost: float
+    sP0: float
+    sI0: float
+    candidate_size: int
+    olfaction_mode: str
+    shuffle_voc: bool
+    mapping: str
+    B: object
+    weights: object
+    sigma: float
+    b: float
+    tau: float
+    outside_utility: float
+    unmatched_insect_fitness: float
 
     def validate(self):
         for name in ("insect_pop", "n", "generations", "record_every", "candidate_size"):
@@ -89,15 +85,9 @@ class _TraitConfig:
             raise ValueError("positive sigma and template/neutral mode required")
         if self.mapping not in ("identity", "mixed"):
             raise ValueError("mapping must be identity or mixed; use B for a custom sparse map")
-        B = (
-            np.asarray(self.B, float)
-            if self.B is not None
-            else (
-                np.eye(self.n)
-                if self.mapping == "identity"
-                else 0.5 * np.eye(self.n) + 0.5 * np.ones((self.n, self.n)) / self.n
-            )
-        )
+        if type(self.shuffle_voc) is not bool:
+            raise ValueError("shuffle_voc must be boolean")
+        B = np.asarray(self.B, float)
         if (
             B.ndim != 2
             or B.shape[1] != self.n
@@ -106,11 +96,7 @@ class _TraitConfig:
             or (B < 0).any()
         ):
             raise ValueError("B must be a finite nonnegative L by K matrix")
-        w = (
-            np.ones(B.shape[0]) / B.shape[0]
-            if self.weights is None
-            else np.asarray(self.weights, float)
-        )
+        w = np.asarray(self.weights, float)
         if (
             w.shape != (B.shape[0],)
             or not np.isfinite(w).all()
@@ -121,11 +107,12 @@ class _TraitConfig:
         return B, w / w.sum()
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _VOCConfig(_TraitConfig):
-    rho_voc: float = 1.0
-    voc_cost: float = 0.0
-    choice_mode: str = "outside"
+    rho_voc: float
+    voc_cost: float
+    voc_bounds: object
+    choice_mode: str
 
     def validate(self):
         B, w = super().validate()
@@ -134,17 +121,17 @@ class _VOCConfig(_TraitConfig):
                 raise ValueError(f"{name} must be in [0,1]")
         if self.voc_cost < 0:
             raise ValueError("sigma_Z and voc_cost must be nonnegative")
+        normalized_bounds(self.voc_bounds, "voc_bounds")
         if self.choice_mode not in ("outside", "forced"):
             raise ValueError("choice_mode must be outside or forced")
         return B, w
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _CommunityConfig(_VOCConfig):
-    insect_pop: int | None = None
-    insect_sizes: tuple = (80, 80)
-    resource_capacity: object = 1.0
-    max_feeding_demand: object = 1.0
+    insect_sizes: tuple
+    resource_capacity: object
+    max_feeding_demand: object
 
     def validate(self):
         if not self.insect_sizes or any(type(x) is not int or x < 1 for x in self.insect_sizes):
@@ -159,29 +146,23 @@ class _CommunityConfig(_VOCConfig):
         species_units(self.resource_capacity, self.plant_sizes, "resource_capacity")
         species_units(self.max_feeding_demand, self.insect_sizes, "max_feeding_demand")
         if self.unmatched_insect_fitness != 0:
-            raise ValueError("v1.2 retains zero fitness for unmatched insects")
+            raise ValueError("unmatched insects must have zero ecological performance")
         return B, w
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _ResourceConfig(_CommunityConfig):
-    # Explicit None rejects un-migrated old configs instead of silently adopting beta=.1.
-    sI0: object = None
-    insect_life_history: object = None
-    resource_capacity: object = None
-    max_feeding_demand: object = None
-    resource_unit: object = None
-    demand_unit: object = None
-    feeding_window: object = None
-    demand_window: object = None
+    insect_life_history: object
+    resource_unit: object
+    demand_unit: object
+    feeding_window: object
+    demand_window: object
 
     def validate(self):
-        if self.insect_life_history != "obligate_host_larval_feeding":
-            raise ValueError("explicit obligate_host_larval_feeding life history required")
+        if self.insect_life_history != "self_feeding_pre_reproductive":
+            raise ValueError("explicit self_feeding_pre_reproductive life history required")
         if type(self.sI0) not in (int, float) or not np.isfinite(self.sI0) or self.sI0 != 0:
-            raise ValueError(
-                "v1.2.1 requires explicit sI0=0 (beta=0); old .1 configs must not be reused"
-            )
+            raise ValueError("self-feeding insects require sI0=0; survival equals feeding gain")
         units = ("normalized_edible_dry_biomass", "g_edible_dry_biomass", "mg_edible_dry_biomass")
         if self.resource_unit not in units or self.demand_unit != self.resource_unit:
             raise ValueError("resource/demand require the same recognized edible dry mass unit")
@@ -193,14 +174,13 @@ class _ResourceConfig(_CommunityConfig):
             raise ValueError("resource/demand require the same explicit feeding window")
         R = resource_values(self.resource_capacity, self.plant_sizes, "P")
         dmax = resource_values(self.max_feeding_demand, self.insect_sizes, "H")
-        # ponytail: reuse the complete historical validator on a resolved copy; no alias state.
-        old = _CommunityConfig(
+        resolved = _CommunityConfig(
             **{k: v for k, v in asdict(self).items() if k in _CommunityConfig.__dataclass_fields__}
         )
-        old.resource_capacity = R
-        old.max_feeding_demand = dmax
-        result = old.validate()
-        self.insect_pop = old.insect_pop
+        resolved.resource_capacity = R
+        resolved.max_feeding_demand = dmax
+        result = resolved.validate()
+        self.insect_pop = resolved.insect_pop
         return result
 
 
@@ -232,29 +212,41 @@ def numeric(value, name, positive=False):
     return value
 
 
+def normalized_bounds(value, name):
+    bounds = np.asarray(value)
+    if (
+        bounds.dtype.kind not in "iuf"
+        or bounds.shape != (2,)
+        or not np.isfinite(bounds).all()
+        or not 0 <= bounds[0] < bounds[1] <= 1
+    ):
+        raise ValueError(f"{name} requires [lower, upper] within normalized [0,1]")
+    return bounds
+
+
 def species_map(value, keys, name, positive=False):
     if not isinstance(value, dict) or set(value) != set(keys):
         raise ValueError(f"{name} requires exactly {keys}")
     return np.array([numeric(value[k], name, positive) for k in keys], float)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class Config(_ResourceConfig):
-    model_version: object = None
-    life_history: object = None
-    plant_offspring_lambda: object = None
-    insect_offspring_lambda: object = None
-    plant_competition_alpha: object = None
-    demography: object = None
-    illustrative_only: object = None
-    parameter_provenance: object = None
-    study_site: object = None
-    max_individuals_safety: object = None
-    record_observations: bool = True
-    spatial: object = None
-    genetics: object = None
-    sexual_reproduction: object = None
-    observation_reference_traits: object = None
+    model_version: object
+    life_history: object
+    plant_offspring_lambda: object
+    insect_offspring_lambda: object
+    plant_competition_alpha: object
+    demography: object
+    illustrative_only: object
+    parameter_provenance: object
+    study_site: object
+    max_individuals_safety: object
+    record_observations: bool
+    spatial: object
+    genetics: object
+    sexual_reproduction: object
+    observation_reference_traits: object
 
     def validate(self):
         for sizes in (self.plant_sizes, self.insect_sizes):
@@ -271,10 +263,10 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version != "0.1.1"
+            self.model_version != "0.1.2"
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
-            raise ValueError("explicit 0.1.1 and nonoverlapping_sexual_generations required")
+            raise ValueError("explicit 0.1.2 and nonoverlapping_sexual_generations required")
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
         ):

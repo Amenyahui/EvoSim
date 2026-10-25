@@ -6,6 +6,12 @@ from evo_sim.core.substep import SubstepTransition
 
 from ..helpers import spatial
 from ..helpers.agents import CommunityState
+from ..helpers.contributions import (
+    allele_contributions,
+    commit_parent_contributions,
+    host_contributions,
+    mark_uncommitted,
+)
 from ..helpers.demography import ComputationalLimit
 from ..helpers.runtime import agent_state, community_state
 
@@ -13,6 +19,7 @@ from ..helpers.runtime import agent_state, community_state
 class CrossFertilizeAndDisperse(SubstepTransition):
     def forward(self, state, action):
         runtime = self.input(state, "runtime")
+        mark_uncommitted(runtime.result["parents"])
         community = community_state(self.input(state, "agents"))
         pl, hl = community.plants.species, community.insects.species
         if not len(pl) + len(hl):
@@ -116,6 +123,24 @@ class CrossFertilizeAndDisperse(SubstepTransition):
         for rows, counts in zip(parent_groups, sired_counts):
             for row, count in zip(rows, counts):
                 row["offspring_count_sired"] = int(count)
+        commit_parent_contributions(parent_groups)
+        committed_alleles = runtime.result["allele_contributions"] + allele_contributions(
+            community,
+            community_next,
+            parent_groups,
+            genetic,
+            state["current_step"],
+            (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes)),
+        )
+        current_networks = runtime.result["networks"][runtime.network_start :]
+        committed_networks = runtime.result["networks"][
+            : runtime.network_start
+        ] + host_contributions(
+            current_networks,
+            community,
+            runtime.e["host"],
+            parent_groups[1],
+        )
         population_rows = [dict(row) for row in runtime.result["populations"][runtime.start :]]
         extinct = runtime.extinct.copy()
         for row in population_rows:
@@ -145,5 +170,7 @@ class CrossFertilizeAndDisperse(SubstepTransition):
         runtime.result["offspring"] = committed_records
         runtime.result["parents"] = committed_parents
         runtime.result["populations"] = committed_populations
+        runtime.result["allele_contributions"] = committed_alleles
+        runtime.result["networks"] = committed_networks
         runtime.reproduction_checkpoint = None
         return output

@@ -1,0 +1,36 @@
+# Existing diagnostic scenarios, moved from Python without changing their values.
+extends: model_parameters.yaml
+simulation_metadata:
+  num_steps_per_episode: 0
+batch:
+  purpose: Post-pilot initial-state resource/density diagnosis; zero population updates
+  replicates: 4
+  cases:
+  - name: P60_H60
+    overrides:
+      plant_sizes: [30, 30]
+      insect_sizes: [60]
+  - name: P60_H6
+    overrides:
+      plant_sizes: [30, 30]
+      insect_sizes: [6]
+  - name: P180_H60
+    overrides:
+      plant_sizes: [90, 90]
+      insect_sizes: [60]
+  - name: P600_H60
+    overrides:
+      plant_sizes: [300, 300]
+      insect_sizes: [60]
+  - name: P60_H0
+    overrides:
+      plant_sizes: [30, 30]
+      insect_sizes: [0]
+  - name: P180_H0
+    overrides:
+      plant_sizes: [90, 90]
+      insect_sizes: [0]
+  - name: P600_H0
+    overrides:
+      plant_sizes: [300, 300]
+      insect_sizes: [0]
