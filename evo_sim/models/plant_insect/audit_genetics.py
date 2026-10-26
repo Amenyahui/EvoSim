@@ -12,7 +12,25 @@ def audit_genetics(path, c, meta):
     spec = c.genetics
     mapping = spec["phenotype_map"]
     lower, upper = mapping["bounds"]
-    assert meta["genetics_version"] == "sexual-qtl-1"
+    assert meta["genetics_version"] == spec["schema_version"]
+    slim = spec["schema_version"] == "slim-qtl-1"
+    calls = {}
+    if slim:
+        for call in meta["slim_calls"]:
+            key = (call["generation"], call["kind"])
+            assert key not in calls
+            seeds = np.random.SeedSequence(
+                [c.seed, 140, 4, ("plant", "insect").index(call["kind"]), call["generation"]]
+            ).generate_state(2)
+            assert call["meiosis_seed"] == int(seeds[0]) + 1
+            assert call["mutation_seed"] == int(seeds[1]) + 1
+            assert "SLiM version 5.2" in call["version"]
+            assert len(call["binary_sha256"]) == len(call["script_sha256"]) == 64
+            assert (
+                call["script_sha256"]
+                == meta["source_hash"]["models/plant_insect/helpers/slim_reproduction.slim"]
+            )
+            calls[key] = call
     assert meta["ecology_rule_version"] == c.model_version
     encoded = json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(encoded).hexdigest() == meta["genetic_architecture_sha256"]
@@ -50,7 +68,14 @@ def audit_genetics(path, c, meta):
         np.testing.assert_array_equal(
             delta[deterministic], np.asarray(locus["mutation_mean"])[deterministic]
         )
-        assert row.mutation_stream == f"seed140/phase1/{row.kind}/species{int(row.species[1:]) - 1}"
+        if slim:
+            seed = calls[row.generation, row.kind]["mutation_seed"]
+            assert row.mutation_stream == f"SLiM/seed{seed}/{row.kind}/generation{row.generation}"
+        else:
+            assert (
+                row.mutation_stream
+                == f"seed140/phase1/{row.kind}/species{int(row.species[1:]) - 1}"
+            )
     for i, key in enumerate(keys):
         assert key in by_locus
         other = list(set(range(effects.shape[1])) - set(by_locus[key]["targets"]))
@@ -140,6 +165,8 @@ def audit_genetics(path, c, meta):
                         len(ids),
                         len(local),
                     )
+                    if slim and len(ids):
+                        assert calls[t, kind]["offspring_count"] == len(ids)
                     assert not tx.duplicated(["offspring_id", "role", "locus_id"]).any()
                     seen_transmissions += len(tx)
                     child_lookup = {int(x): i for i, x in enumerate(ids)}
@@ -156,16 +183,20 @@ def audit_genetics(path, c, meta):
                         parent = (maternal if h == 0 else paternal)[i]
                         assert row.parent_id == previous[kind + "_ids"][parent]
                         source = int(row.transmitted_homolog_before_mutation)
-                        assert (
-                            source in (0, 1)
-                            and row.crossover_count >= 0
-                            and row.crossover_count == int(row.crossover_count)
-                        )
+                        assert source in (0, 1)
+                        if slim:
+                            assert pd.isna(row.crossover_count)
+                        else:
+                            assert row.crossover_count >= 0 and row.crossover_count == int(
+                                row.crossover_count
+                            )
                         assert (
                             row.chromosome_id == local[l]["chromosome_id"]
                             and row.position_cM == local[l]["position_cM"]
                         )
-                        assert bool(row.switch_before_locus) == bool(row.crossover_count % 2)
+                        assert row.switch_before_locus in (True, False)
+                        if not slim:
+                            assert bool(row.switch_before_locus) == bool(row.crossover_count % 2)
                         old = previous[kind + "_genotypes"][parent, source, l]
                         assert old == row.inherited_allele_id and row.child_allele_id == g[i, h, l]
                         event = event_lookup.get((int(row.offspring_id), h, row.locus_id))
@@ -182,11 +213,13 @@ def audit_genetics(path, c, meta):
                         ancestry.setdefault((i, h, row.chromosome_id), []).append(row)
                     for group in ancestry.values():
                         group.sort(key=lambda r: r.position_cM)
-                        assert group[0].crossover_count == 0
+                        assert not group[0].switch_before_locus
+                        if not slim:
+                            assert group[0].crossover_count == 0
                         for prev, curr in zip(group, group[1:]):
                             assert curr.transmitted_homolog_before_mutation == (
                                 int(prev.transmitted_homolog_before_mutation)
-                                ^ (int(curr.crossover_count) % 2)
+                                ^ int(curr.switch_before_locus)
                             )
                     for i, row in enumerate(rows.itertuples()):
                         for h, role in enumerate(("maternal", "paternal")):
@@ -291,6 +324,9 @@ def audit_genetics(path, c, meta):
         assert set(exported_g.files) == expected_g and set(exported_p.files) == expected_p
     assert seen_events == len(events) and expected_summary_rows == len(summary)
     assert seen_transmissions == len(transmissions)
+    if slim:
+        expected_calls = set(zip(children.generation, children.kind))
+        assert set(calls) == expected_calls
     if expected_haplotypes:
         pd.testing.assert_frame_equal(
             haplotypes, pd.DataFrame(expected_haplotypes), check_exact=False, rtol=1e-12, atol=1e-14

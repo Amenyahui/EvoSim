@@ -59,7 +59,7 @@ def audit_run(path):
         raise AssertionError("invalid_parameter record has valid configuration")
     c = Config(**cfg)
     c.validate()
-    assert c.model_version == meta["version"] == "0.1.2", "audit requires the v0.1.2 contract"
+    assert c.model_version == meta["version"] and c.model_version in {"0.1.2", "0.1.3"}
     required_outputs = {
         "status.json",
         "events.csv",
@@ -120,7 +120,7 @@ def audit_run(path):
     first_extinct = {}
     seen_ids = [set(), set()]
     assert [int(s["generation"]) for s in states] == list(range(len(states)))
-    if c.model_version == "0.1.2":
+    if c.model_version in {"0.1.2", "0.1.3"}:
         first = states[0]
         for kind, name, stream in (
             ("plant", "initial_plant_cells", 0),
@@ -153,7 +153,11 @@ def audit_run(path):
                 assert cells.shape == (len(ids), 2) and cells.dtype.kind in "iu"
                 assert ((cells >= 0) & (cells < np.asarray(c.spatial["grid_shape"]))).all()
         if "R" not in state or not (tables["populations"].generation == t).any():
-            assert t == len(states) - 1 and status in ("arithmetic_error", "computational_limit")
+            assert t == len(states) - 1 and status in (
+                "arithmetic_error",
+                "computational_limit",
+                "backend_error",
+            )
             continue
         # Explicit masks keep audit selection independent of expression scope.
         ev = tables["events"][tables["events"].generation == t].sort_values("insect_row")
@@ -254,7 +258,10 @@ def audit_run(path):
                 close(edge.L_per_insect, pair.x.sum() / hicount[h] if hicount[h] else np.nan)
         # A runtime numerical failure may leave only a prefix of parent draws; never fabricate it as a transition.
         if len(parent) != len(pl) + len(hl):
-            assert status in ("arithmetic_error", "computational_limit") and t == len(states) - 1
+            assert (
+                status in ("arithmetic_error", "computational_limit", "backend_error")
+                and t == len(states) - 1
+            )
             assert not flags(pop.update_applied).any()
             continue
         for k, (kind, labels, S, F, lam, factor, species_keys) in enumerate(
@@ -432,7 +439,7 @@ def audit_run(path):
             else:
                 # Runtime memory/sampler errors are recorded, not independently reproducible proofs.
                 assert meta["status"].get("message")
-    if c.model_version == "0.1.2":
+    if c.model_version in {"0.1.2", "0.1.3"}:
         audit_extensions(path, c, meta, states, tables)
     return dict(
         status=status,

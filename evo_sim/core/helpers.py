@@ -25,5 +25,6 @@ def source_hashes():
     package = PROJECT_ROOT / "evo_sim"
     return {
         p.relative_to(package).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(package.rglob("*.py"))
+        for p in sorted(package.rglob("*"))
+        if p.suffix in {".py", ".slim", ".eidos"}
     }

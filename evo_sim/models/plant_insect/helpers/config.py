@@ -1,4 +1,4 @@
-"""Configuration and validation for the v0.1.2 model contract."""
+"""Configuration for current execution and historical result audits."""
 
 from dataclasses import asdict, dataclass
 
@@ -263,10 +263,10 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version != "0.1.2"
+            self.model_version not in {"0.1.2", "0.1.3"}
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
-            raise ValueError("explicit 0.1.2 and nonoverlapping_sexual_generations required")
+            raise ValueError("explicit supported model version and sexual generations required")
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
         ):

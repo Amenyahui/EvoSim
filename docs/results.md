@@ -1,6 +1,6 @@
 # evoSim v0.1.2 — Results：输出内容、指标定义、图件与结果解释
 
-> **版本**：当前文件契约为 `evoSim v0.1.2 / sexual-qtl-1`。
+> **版本**：当前文件契约为 `evoSim v0.1.3 / slim-qtl-1`。
 > **文件性质**：输出规范与分析计划。O01–O10、F1–F12 保留原始规划身份，不表示所有规划表和图均已实现。
 > **目的**：清楚说明“模型将产生什么原始数据、汇总统计和论文图件”，并对接 `architecture.md` 的 Agent/Step 和 `model.md` 的公式。
 
@@ -335,3 +335,12 @@ N_{eff,h,t}=\exp\left(-\sum_{p:\pi>0}\pi_{hpt}\ln\pi_{hpt}\right).\tag{O3}
 **适用范围**：负密度依赖的有理函数建模传统；本项目局部个体竞争是从该理论形状借鉴的变体。
 
 **证据声明**：引用文献只对相应的“遗传规律、方法形式或经验机制”负责。`μ=0.01`、`σ_mut=0.02`、`λ=2`、`α=0.02/0.005`、化学效用系数、配偶半径、严格异交与 Poisson 出生的特定参数等，凡未直接从独立数据拟合，都必须标记 `theoretical_placeholder` 或 `implementation_choice`。这些假设不能因为列出参考文献而被写成实测事实。
+
+
+## v0.1.3 的 SLiM 记录变化
+
+`metadata.json.slim_calls` 保存每次成功提交的类群/代际调用身份、后代数、配子和突变 seed、实际执行文件及 binary/script SHA-256。源码指纹包含实际 `.slim` 脚本。无后代时不启动引擎；失败更新不发布该更新的调用或等位记录。
+
+配子表的 `transmitted_homolog_before_mutation` 由同位置中性来源标记判定，`switch_before_locus` 为相邻 QTL 来源切换。压缩图谱没有完整区间交换数，因此 `crossover_count` 在新协议中缺失；旧协议仍按旧定义审计。突变仍按每传递 QTL 拷贝定义，由 Eidos 执行，`mutation_stream` 改为实际 SLiM seed 与代际标识。
+
+引擎缺失、非零退出、超时或非法返回记录为 `backend_error`。该状态保持现有群体和未提交贡献语义，不自动切换至另一遗传器。历史结果、空群体频率、终代和失败更新的缺失值规则保留。

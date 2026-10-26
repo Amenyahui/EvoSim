@@ -1,4 +1,6 @@
-# evoSim v0.1.1 — Architecture：Agent、Rule 与 Step 的实现规范
+# 历史 evoSim v0.1.1 — Architecture：Agent、Rule 与 Step 的实现规范
+
+> **当前架构更新**：本文件保留 v0.1.1 设计历史。v0.1.3 已用实际 SLiM 引擎替换下文的 Python 配子/重组执行；当前职责、源码位置与记录契约以 [v0.1.3 README](../README_v0.1.3.md)、[model.md](model.md) 为准。
 
 > **适用版本**：evoSim v0.1.1；遗传协议 `sexual-qtl-1`。  
 > **文件属性**：唯一目标架构 / Agent 实现与审计契约。下面描述 v0.1.1 **必须实现的最终架构**，不代表附件源码已完成全部实现。  

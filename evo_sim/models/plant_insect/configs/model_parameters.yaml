@@ -42,7 +42,7 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_pre_reproductive_feeding
   demand_window: one_generation_pre_reproductive_feeding
-  model_version: 0.1.2
+  model_version: 0.1.3
   life_history: nonoverlapping_sexual_generations
   demography:
     plant_survival: bernoulli
@@ -80,7 +80,10 @@ parameters:
       effect_scale: 0.5
       bounds: [0.0, 1.0]
     mode: sexual_qtl
-    schema_version: sexual-qtl-1
+    schema_version: slim-qtl-1
+    slim:
+      executable: slim
+      timeout_seconds: 120
     ploidy: 2
     inheritance: biparental_meiosis
     background:
@@ -111,7 +114,7 @@ parameters:
       genome_map:
         source_kind: theoretical_placeholder
         description: Eight independent abstract linkage groups per taxon; not physical chromosomes.
-    recombination_model: haldane_poisson_no_interference
+    recombination_model: slim_haldane_marker_map
   sexual_reproduction:
     plant_mating_system: hermaphroditic_obligate_outcrossing
     plant_selfing: false

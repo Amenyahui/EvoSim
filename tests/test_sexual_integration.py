@@ -12,6 +12,7 @@ from evo_sim.models.plant_insect import get_runner, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
+from evo_sim.models.plant_insect.helpers.slim_backend import SlimError
 from tests.support import config, raises
 
 
@@ -143,3 +144,42 @@ def test_insect_biparental_births_and_audit():
     with TemporaryDirectory() as tmp:
         save_result(result, Path(tmp) / "run")
         audit_run(Path(tmp) / "run")
+
+
+def test_slim_failure_does_not_commit_or_fall_back():
+    runner = get_runner()
+    runner.config["parameters"]["genetics"]["slim"]["executable"] = "missing_evosim_slim_binary"
+    runner.init()
+    runtime = runner.state["environment"]["runtime"]
+    before = copy.deepcopy(runtime.genetic.alleles)
+    runner.step(1)
+    assert runner.result["metadata"]["status"]["status"] == "backend_error"
+    assert not runtime.genetic.engine_calls and not runner.result["offspring"]
+    assert runtime.genetic.alleles == before and not runtime.genetic.events
+    with TemporaryDirectory() as tmp:
+        path = Path(tmp) / "failed"
+        save_result(runner.result, path)
+        assert audit_run(path)["status"] == "backend_error"
+
+    # Reject malformed returned material after a real SLiM process, before publication.
+    from evo_sim.models.plant_insect.helpers import slim_backend
+
+    original = slim_backend.subprocess.run
+
+    def corrupt(command, **kwargs):
+        result = original(command, **kwargs)
+        output = next((a for a in command if a.startswith("OUTPUT=")), None)
+        if output:
+            Path(json.loads(output[len("OUTPUT=") :])).write_text("invalid output\n")
+        return result
+
+    c = config()
+    g = GeneticState(c)
+    parents = g.founders([2, 0], "plant")
+    before = g.alleles.copy()
+    with patch.object(slim_backend.subprocess, "run", corrupt):
+        raises(
+            lambda: g.fertilize(parents, np.zeros(2, int), np.arange(2), [0], [1], "plant", 2, 1),
+            SlimError,
+        )
+    assert g.alleles == before and not g.events and not g.engine_calls

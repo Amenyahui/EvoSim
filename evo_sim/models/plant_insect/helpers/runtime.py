@@ -17,6 +17,7 @@ from .agents import CommunityState, InsectPopulation, PlantPopulation
 from .config import Config, config_payload, resource_values
 from .contributions import mark_uncommitted
 from .demography import ComputationalLimit
+from .slim_backend import SlimError
 
 
 def streams(c):
@@ -201,7 +202,9 @@ def fail(state, error):
         runtime.rng, runtime.spatial_rng = runtime.reproduction_checkpoint
         runtime.reproduction_checkpoint = None
     runtime.status = dict(
-        status="computational_limit"
+        status="backend_error"
+        if isinstance(error, SlimError)
+        else "computational_limit"
         if isinstance(error, (ComputationalLimit, MemoryError))
         else "arithmetic_error",
         generation=state["current_step"],
@@ -243,14 +246,16 @@ def finalize(state):
         allele_contribution_semantics="per-species per-locus parent/offspring allele union; parental contribution includes stochastic reproduction; transmission includes segregation and mutation",
         reference_panel_semantics="reference_p/reference_q snapshot rows align with insect_ids; columns align with reference_plant_species; p is conditional choice without rejection",
         ecology_rule_version=runtime.c.model_version,
-        genetics_version="sexual-qtl-1",
+        genetics_version=runtime.c.genetics["schema_version"],
+        slim_calls=runtime.genetic.engine_calls,
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),
         config_sha256=hashlib.sha256(payload.encode()).hexdigest(),
-        genetic_rng="SeedSequence([seed,140,phase,taxon,species]); 0 founders, 1 mutation, 2 maternal meiosis, 3 paternal meiosis",
+        genetic_rng="NumPy founders: SeedSequence([seed,140,0,taxon,species]); SLiM seeds: SeedSequence([seed,140,4,taxon,generation]).generate_state(2)+1; first meiosis, second Eidos QTL mutation",
         rng="SeedSequence([seed,130,phase,taxon,species]); 0 init, 1 ecology, 2 survival, 3 maternal births, 5 mate choice, 6 founder sex, 7 offspring sex",
         spatial_rng="SeedSequence([seed,150,0]) plants; [seed,150,2] insects; [seed,150,1,taxon] maternal dispersal",
-        inheritance="biparental_meiosis; copy 0 maternal, copy 1 paternal; Haldane Poisson intervals in Morgan",
+        inheritance="SLiM 5.2 native addCrossed; copy 0 maternal, copy 1 paternal; separate chromosomes; compressed marker boundary r=(1-exp(-2*distance_Morgan))/2",
         mutation_semantics="per transmitted abstract QTL copy; not per nucleotide",
+        crossover_semantics="switch_before_locus records marker ancestry changes; crossover_count is missing because compressed intervals do not retain full crossover counts",
         spatial_semantics="periodic Chebyshev distance; independent founder positions; maternal dispersal",
     )
     return runtime.result

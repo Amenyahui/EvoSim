@@ -1,4 +1,4 @@
-"""Explicit sexual diploid QTLs; project conventions are recorded in evidence_ledger.csv."""
+"""Explicit QTL states; SLiM executes meiosis and the configured QTL mutation kernel."""
 
 import copy
 import json
@@ -10,6 +10,7 @@ import numpy as np
 
 from .config import normalized_bounds, numeric
 from .demography import ComputationalLimit
+from .slim_backend import SlimError, reproduce
 
 KINDS = ("plant", "insect")
 TRAITS = {"plant": ("D", "plant_voc_independent_trait"), "insect": ("I", "A")}
@@ -34,38 +35,6 @@ def validate_genome_map(loci):
         if len(set(positions)) != len(positions):
             raise ValueError("duplicate position within linkage group")
     return groups
-
-
-def interval_crossovers(distance_morgan, size, rng):
-    if not np.isfinite(distance_morgan) or distance_morgan < 0:
-        raise ValueError("finite nonnegative genetic interval required")
-    try:
-        return rng.poisson(distance_morgan, size=size)
-    except ValueError as error:
-        raise ComputationalLimit("genetic interval exceeds Poisson sampler capacity") from error
-
-
-def form_gametes(parents, loci, rng):
-    """Haldane: independent Poisson intervals; odd counts switch ancestry."""
-    if parents.ndim != 3 or parents.shape[1:] != (2, len(loci)):
-        raise ValueError("parents must have shape (N,2,L)")
-    groups = validate_genome_map(loci)
-    n = len(parents)
-    gametes = np.empty((n, len(loci)), dtype=parents.dtype)
-    homolog = np.empty((n, len(loci)), dtype=np.int8)
-    counts = np.zeros((n, len(loci)), dtype=np.int64)
-    for indices in groups.values():
-        source = rng.integers(0, 2, size=n)
-        previous = indices[0]
-        for j, l in enumerate(indices):
-            if j:
-                d = (loci[l]["position_cM"] - loci[previous]["position_cM"]) / 100
-                counts[:, l] = interval_crossovers(d, n, rng)
-                source = source ^ (counts[:, l] % 2)
-            homolog[:, l] = source
-            gametes[:, l] = parents[np.arange(n), source, l]
-            previous = l
-    return gametes, homolog, counts
 
 
 def vector(value, width, name):
@@ -93,17 +62,30 @@ def validate(c, K):
         "max_alleles_safety",
         "max_genotype_values_safety",
     }
+    slim = isinstance(g, dict) and g.get("schema_version") == "slim-qtl-1"
+    if slim:
+        required.add("slim")
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
         g["mode"] != "sexual_qtl"
-        or g["schema_version"] != "sexual-qtl-1"
+        or g["schema_version"] not in {"sexual-qtl-1", "slim-qtl-1"}
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
-        or g["recombination_model"] != "haldane_poisson_no_interference"
+        or g["recombination_model"]
+        != ("slim_haldane_marker_map" if slim else "haldane_poisson_no_interference")
     ):
-        raise ValueError("only sexual-qtl-1 biparental meiosis is implemented")
+        raise ValueError("explicit supported biparental QTL protocol required")
+    if slim:
+        settings = g["slim"]
+        if not isinstance(settings, dict) or set(settings) != {"executable", "timeout_seconds"}:
+            raise ValueError("slim requires executable and timeout_seconds")
+        if not isinstance(settings["executable"], str) or not settings["executable"].strip():
+            raise ValueError("nonempty SLiM executable required")
+        numeric(settings["timeout_seconds"], "slim.timeout_seconds")
+        if settings["timeout_seconds"] <= 0:
+            raise ValueError("SLiM timeout must be positive")
     width = c.n + K
     mapping = g["phenotype_map"]
     if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
@@ -239,8 +221,14 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
+        if c.genetics["schema_version"] != "slim-qtl-1":
+            raise ValueError(
+                "Execution requires slim-qtl-1; legacy results remain readable for audit"
+            )
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n
+        self.seed = c.seed
+        self.engine_calls = []
         self.loci = {
             kind: [x for x in self.spec["loci"] if x["organism"] == kind] for kind in KINDS
         }
@@ -255,7 +243,7 @@ class GeneticState:
                 np.random.default_rng(np.random.SeedSequence([c.seed, 140, phase, k, s]))
                 for s in range(len(c.plant_sizes if k == 0 else c.insect_sizes))
             ]
-            for phase in (0, 1, 2, 3)
+            for phase in (0,)
             for k, kind in enumerate(KINDS)
         }
 
@@ -310,7 +298,7 @@ class GeneticState:
             )
 
     def fertilize(self, g, labels, ids, mothers, fathers, kind, next_id, generation):
-        """Two independently formed gametes, followed by per-copy QTL mutation."""
+        """Native SLiM crossing followed by Eidos-defined per-copy QTL mutation."""
         mothers, fathers = np.asarray(mothers, int), np.asarray(fathers, int)
         if mothers.shape != fathers.shape or mothers.ndim != 1:
             raise ValueError("aligned parental indices required")
@@ -324,52 +312,83 @@ class GeneticState:
         child_ids = np.arange(next_id, next_id + len(mothers), dtype=np.int64)
         child = np.empty((len(mothers), 2, len(self.loci[kind])), dtype=np.int64)
         homolog = np.empty_like(child)
-        crossovers = np.zeros_like(child)
-        for h, parents in enumerate((mothers, fathers)):
-            for species, rng in enumerate(self.rng[2 + h, kind]):
-                selected = np.flatnonzero(child_labels == species)
-                gametes, source, counts = form_gametes(g[parents[selected]], self.loci[kind], rng)
-                child[selected, h] = gametes
-                homolog[selected, h] = source
-                crossovers[selected, h] = counts
-        inherited = child.copy()
+        switches = np.zeros_like(child, dtype=bool)
+        inherited = np.empty_like(child)
         prefix = "P" if kind == "plant" else "H"
-        if self.spec["mutation_enabled"][kind]:
-            for s, rng in enumerate(self.rng[1, kind]):
-                selected = np.flatnonzero(child_labels == s)
-                for l, locus in enumerate(self.loci[kind]):
-                    for row, h in np.argwhere(
-                        rng.random((len(selected), 2)) < locus["mutation_rate"]
+        if len(mothers):
+            # Seeds are indexed by generation/taxon, so subprocesses have no rollback state.
+            seeds = np.random.SeedSequence(
+                [self.seed, 140, 4, KINDS.index(kind), generation]
+            ).generate_state(2)
+            seeds = [int(x) + 1 for x in seeds]
+            loci = copy.deepcopy(self.loci[kind])
+            if not self.spec["mutation_enabled"][kind]:
+                for locus in loci:
+                    locus["mutation_rate"] = 0.0
+            material, call = reproduce(
+                g,
+                mothers,
+                fathers,
+                loci,
+                np.asarray([a.effect for a in self.alleles]),
+                self.spec["slim"],
+                seeds,
+                len(self.alleles),
+            )
+            new_alleles, new_events = [], []
+            for i, h, l in np.ndindex(child.shape):
+                row, locus = material[i, h, l], loci[l]
+                old, allele, source, changed = (int(x) for x in row[3:7])
+                parent = mothers[i] if h == 0 else fathers[i]
+                if old != g[parent, source, l]:
+                    raise SlimError("SLiM allele does not match recorded parental homolog")
+                delta, effect = (
+                    row[7 : 7 + len(self.alleles[old].effect)],
+                    row[7 + len(self.alleles[old].effect) :],
+                )
+                expected = np.asarray(self.alleles[old].effect) + delta
+                if not np.allclose(effect, expected, rtol=1e-12, atol=1e-14):
+                    raise SlimError("SLiM allele effect does not equal inherited effect plus delta")
+                deterministic = np.asarray(locus["mutation_sd"]) == 0
+                if changed:
+                    if locus["mutation_rate"] == 0 or allele != len(self.alleles) + len(
+                        new_alleles
                     ):
-                        i = int(selected[row])
-                        h = int(h)
-                        old = int(child[i, h, l])
-                        delta = rng.normal(locus["mutation_mean"], locus["mutation_sd"])
-                        effect = np.asarray(self.alleles[old].effect) + delta
-                        if not np.isfinite(effect).all():
-                            raise FloatingPointError("nonfinite allele effect")
-                        idx = len(self.alleles)
-                        self.alleles.append(
-                            Allele(idx, locus["locus_id"], old, generation, tuple(effect))
+                        raise SlimError("Invalid SLiM mutation identity or disabled mutation")
+                    if not np.array_equal(
+                        delta[deterministic], np.asarray(locus["mutation_mean"])[deterministic]
+                    ):
+                        raise SlimError("Invalid deterministic mutation effect")
+                    new_alleles.append(
+                        Allele(allele, locus["locus_id"], old, generation, tuple(effect))
+                    )
+                    new_events.append(
+                        dict(
+                            event_id=allele,
+                            role="maternal" if h == 0 else "paternal",
+                            chromosome_id=locus["chromosome_id"],
+                            generation=generation,
+                            kind=kind,
+                            species=f"{prefix}{child_labels[i] + 1}",
+                            offspring_id=int(child_ids[i]),
+                            locus_id=locus["locus_id"],
+                            copy=h,
+                            parent_allele_id=old,
+                            allele_id=allele,
+                            delta=delta.tolist(),
+                            mutation_stream=f"SLiM/seed{seeds[1]}/{kind}/generation{generation}",
                         )
-                        child[i, h, l] = idx
-                        self.events.append(
-                            dict(
-                                event_id=idx,
-                                role="maternal" if h == 0 else "paternal",
-                                chromosome_id=locus["chromosome_id"],
-                                generation=generation,
-                                kind=kind,
-                                species=f"{prefix}{s + 1}",
-                                offspring_id=int(child_ids[i]),
-                                locus_id=locus["locus_id"],
-                                copy=h,
-                                parent_allele_id=old,
-                                allele_id=idx,
-                                delta=delta.tolist(),
-                                mutation_stream=f"seed140/phase1/{kind}/species{s}",
-                            )
-                        )
+                    )
+                elif allele != old or delta.any() or locus["mutation_rate"] == 1:
+                    raise SlimError("Invalid unchanged SLiM allele")
+                inherited[i, h, l], child[i, h, l], homolog[i, h, l] = old, allele, source
+            self.alleles = self.alleles + new_alleles
+            self.events = self.events + new_events
+            call.update(kind=kind, generation=generation, offspring_count=len(mothers))
+            self.engine_calls = self.engine_calls + [call]
+            for indices in validate_genome_map(loci).values():
+                for left, right in zip(indices, indices[1:]):
+                    switches[:, :, right] = homolog[:, :, left] != homolog[:, :, right]
         values, _ = self.phenotype(child, kind)
         rows = []
         for i, (m, f) in enumerate(zip(mothers, fathers)):
@@ -402,8 +421,8 @@ class GeneticState:
                             inherited_allele_id=old,
                             child_allele_id=new,
                             transmitted_homolog_before_mutation=int(homolog[i, h, l]),
-                            crossover_count=int(crossovers[i, h, l]),
-                            switch_before_locus=bool(crossovers[i, h, l] % 2),
+                            crossover_count=None,
+                            switch_before_locus=bool(switches[i, h, l]),
                             mutation_event_id=new if new != old else None,
                         )
                     )

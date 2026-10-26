@@ -1,50 +1,51 @@
-# evoSim 0.1.2
+# evoSim 0.1.3
 
 植物—植食性昆虫的个体基（agent-based）共进化模拟器。每一代中，昆虫在周期空间栅格里局部遇见植物、按气味线索选择寄主、共享取食资源，植物与昆虫再经历存活、密度依赖繁殖、QTL 遗传、突变与扩散，提交下一代；可连续运行数百代，观察种群动态与性状的演化响应。
 
 技术要点：
 
-- **纯 NumPy + YAML / CSV 输入驱动**：YAML 声明流程和通用参数，CSV 保存物种、遗传结构与初始组成，代码实现方程和输入检查。
-- **位级可复现**：随机流按 `阶段 × 类群 × 物种` 分层播种，同配置同种子完全复现。
+- **Python 生态 + SLiM 遗传 + YAML / CSV 输入**：YAML 声明流程和通用参数，CSV 保存物种、遗传结构与初始组成，Python 实现生态方程，实际 SLiM 5.2 执行遗传与重组。
+- **位级可复现**：Python 生态流分层播种，SLiM 配子与 Eidos 突变使用独立的代际 seed；固定配置、源码和引擎版本下可复现。
 - **不是深度学习框架**：代码组织参考 AgentTorch 风格（Runner / Controller / Registry，组件实现 `forward()`），但没有 PyTorch 后端，不提供 GPU、自动求导或参数校准。
 - **参数为理论示例**：所有数值配置均标注 illustrative，不是实测标定；模拟输出不能作为校准数据。
 
-本版接通个体联合寄主反应、双亲遗传贡献、寄主贡献网络和等位频率分解。保留既有生态与遗传生成规则，明确当代昆虫自主选择、取食和繁殖的生活史；物种标签仍固定。依据与边界见 [v0.1.2 计划](docs/v0.1.2_plan.md)、[最小模型规范](docs/v0.1.2_minimal_model.md) 及 [实施检查报告](docs/v0.1.2_causal_check_report.md)。
+本版在现有 IBM 中实际接入 SLiM，替换自写配子形成、重组和突变抽样。YAML/CSV、生态和贡献账本继续衔接；使用 `slim-qtl-1` 协议。安装、职责分工、数学映射、验证范围与理论出处见 [v0.1.3 说明](README_v0.1.3.md)。物种边界仍固定，成本角色和生活史问题不因采用 SLiM 自动解决。
 
 ## 快速上手
 
 在本目录打开终端：
 
 ```powershell
-# 1. 安装（Python ≥ 3.10，依赖：numpy / pandas / matplotlib / PyYAML）
+# 1. 安装（Python ≥ 3.10，另需 SLiM 5.2 命令行）
+conda install --channel conda-forge slim=5.2
 python -m pip install -e .
 
 # 2. 最小示例：默认配置（sexual_qtl_development，5 代）跑一遍并打印状态
 python example.py
 
 # 3. 小规模批次：2 代、独立遗传/无新突变，各两个重复
-python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v012_example
+python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v013_example
 ```
 
-省略 `--out` 时输出到 `results/results_v0.1.2/run<N>` 的下一个空闲编号；显式输出目录必须不存在，已有结果不会覆盖。
+省略 `--out` 时输出到 `results/results_v0.1.3/run<N>` 的下一个空闲编号；显式输出目录必须不存在，已有结果不会覆盖。
 
 实验跑完后，建议依次做独立审计和汇总作图：
 
 ```powershell
 # 4. 独立重建取食/人口/遗传账本，核对数值一致性（不依赖运行时函数）
-python -m evo_sim.models.plant_insect.audit --input results/v012_example
+python -m evo_sim.models.plant_insect.audit --input results/v013_example
 
 # 5. 汇总逐代人口/性状/等位基因
-python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input results/v012_example
+python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input results/v013_example
 
 # 6. 生成已有诊断图（PNG + PDF）
-python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input results/v012_example
+python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input results/v013_example
 
 # 7. 本版小规模因果对照：20 次运行，逐次独立审计
-python -m evo_sim.models.plant_insect.analysis.check_causal_chain --out results/v012_causal_example
+python -m evo_sim.models.plant_insect.analysis.check_causal_chain --out results/v013_causal_example
 ```
 
-`results/results_v0.1.0/` 和 `results/results_v0.1.1/run4` 属于历史版本，不属于本版验证。历史结果应使用生成它们时的代码审计；不改旧元数据以通过新审计。小规模因果检查只验证规则与对照设计，不证明专化、共存或共同演化。
+v0.1.0、v0.1.1 及 v0.1.2 的结果属于历史版本，不属于本版验证。历史结果应使用生成它们时的代码审计；不改旧元数据以通过新审计。小规模因果检查只验证规则与对照设计，不证明专化、共存或共同演化。
 
 其他常用命令：
 
@@ -52,7 +53,7 @@ python -m evo_sim.models.plant_insect.analysis.check_causal_chain --out results/
 python -m tests                                        # 全部自动检查（无需 pytest）
 ```
 
-`python -m evo_sim` 等价于安装后提供的 `evosim` 命令。本版只接受 `sexual-qtl-1`；旧协议会报错，不自动迁移。
+`python -m evo_sim` 等价于安装后提供的 `evosim` 命令。当前执行要求 `slim-qtl-1`，SLiM 路径及超时见公共 YAML 的 `genetics.slim`；可用 `EVOSIM_SLIM` 指定可执行文件。缺少或失败的引擎记录 `backend_error`，不会自动退回旧实现。历史 0.1.2 结果可按原协议独立审计，不能用旧配置运行新遗传器。
 
 ## 模拟内容：一代发生了什么
 
@@ -60,13 +61,13 @@ python -m tests                                        # 全部自动检查（�
 
 1. **选寄主与取食**：植物按防御性状 $D$ 和独立气味性状 $Z$ 释放 VOC 线索；昆虫在候选池（空间模式下为局部邻域随机抽取）中按化学得分 softmax 选择寄主，允许"不选择"；被接受的个体按 $d = d_{\max} q$ 产生需求，共享植株资源并按比例缩放实际转移量。
 2. **存活与繁殖**：植物存活受取食负荷 $h$ 影响，昆虫存活取决于实际取食满足率 $g$；成本乘子 F 连续作用于母源后代均值。存活且有配偶的植物母本/雌虫按条件 Poisson($\mu = \lambda F \varphi$) 抽后代，植物繁殖另受局部密度限制。父本经 `F>0` 等资格筛选后均匀抽样，该成本门槛仍是未获直接实证支持的假设。
-3. **遗传与扩散**：真实双亲各形成一份配子，同连锁群按 Haldane–Poisson 重组、不同组独立分离；逐 QTL 突变后由新基因型重算性状，再从母方位置扩散。植物严格异交，昆虫仅雌虫产子；最终代不再繁殖。
+3. **遗传与扩散**：将双亲名单交给 SLiM 原生 `addCrossed()`；原生染色体间自由组合，群内按 Haldane 图谱换算的标记概率重组。Eidos 按显式 QTL 规则产生突变，返回新基因型后重算性状，再从母方位置扩散。植物严格异交，昆虫仅雌虫产子；最终代不再繁殖。
 
 完整参数说明与理论公式（含文献出处）见 [docs/model.md](docs/model.md)；假设与边界见 [docs/assumptions.md](docs/assumptions.md)。`S×F` 仅为表现代理量；实际一代遗传贡献为母源、父源后代数之和的一半。
 
 ## 内置实验配置
 
-通用参数和输入路径在 [model_parameters.yaml](evo_sim/models/plant_insect/configs/model_parameters.yaml)，物种数量、资源、繁殖率、竞争、位点、等位效应及初始频率在 [inputs/](evo_sim/models/plant_insect/inputs/) 的六张 CSV 表中。主 YAML 从 908 行缩减到 139 行，原数值不变。Python 不提供模型参数默认值；缺少必填项会报错。实验 YAML 继承公共配置，只写差异，用 `--config` 选择。CSV 列含义、单位、约束和覆盖示例见 [参数配置指南](docs/parameters.md)。
+通用参数和输入路径在 [model_parameters.yaml](evo_sim/models/plant_insect/configs/model_parameters.yaml)，物种数量、资源、繁殖率、竞争、位点、等位效应及初始频率在 [inputs/](evo_sim/models/plant_insect/inputs/) 的六张 CSV 表中。物种和遗传记录集中在 CSV；本版新增 SLiM 执行位置和超时，生态参数没有随引擎迁移调参。Python 不提供模型参数默认值；缺少必填项会报错。实验 YAML 继承公共配置，只写差异，用 `--config` 选择。CSV 列含义、单位、约束和覆盖示例见 [参数配置指南](docs/parameters.md)。
 
 | 配置 | 代数 | 重复 | 处理 | 用途 |
 | --- | --- | --- | --- | --- |
@@ -125,6 +126,7 @@ evoSim/
 | [docs/model.md](docs/model.md) | 论文式模型说明：ODD、全部参数、理论公式（F01–F16 + QTL）与参考文献 |
 | [docs/assumptions.md](docs/assumptions.md) | 全部建模假设与边界（生态/取食/嗅觉/空间/遗传/标定验证），逐条标注类别 |
 | [docs/parameters.md](docs/parameters.md) | YAML 通用参数、CSV 列说明、输入路径与实验覆盖规则 |
+| [README_v0.1.3.md](README_v0.1.3.md) | 实际 SLiM 接入、数学定义、验证记录及后续理论任务 |
 | [docs/v0.1.2_plan.md](docs/v0.1.2_plan.md) | 六步计划、13 篇参考文献及证据边界 |
 | [docs/v0.1.2_minimal_model.md](docs/v0.1.2_minimal_model.md) | 生活史、预算、双亲贡献与寄主关系规范 |
 | [docs/v0.1.2_causal_check_report.md](docs/v0.1.2_causal_check_report.md) | 实现范围、小规模检查及未解决问题 |

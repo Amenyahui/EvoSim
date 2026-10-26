@@ -1,0 +1,102 @@
+// SLiM 5.2: native diploid chromosomes and addCrossed(); ecology supplies the crosses.
+initialize() {
+    source(INPUT);
+    initializeSLiMModelType("nonWF");
+    initializeMutationType("m1", 0.5, "f", 0.0);
+    m1.convertToSubstitution = F;
+    m1.mutationStackPolicy = "l";
+    initializeMutationType("m2", 0.5, "f", 0.0);
+    m2.convertToSubstitution = F;
+    m2.mutationStackPolicy = "l";
+    initializeGenomicElementType("g1", m1, 1.0);
+    for (chr in unique(CHROMOSOMES)) {
+        ls = which(CHROMOSOMES == chr);
+        ls = ls[order(POSITIONS[ls])];
+        initializeChromosome(chr, size(ls));
+        initializeGenomicElement(g1, 0, size(ls) - 1);
+        initializeMutationRate(0.0);
+        // Breakpoint at position j separates j-1 and j; position 0 cannot be a breakpoint.
+        if (size(ls) > 1)
+            initializeRecombinationRate(RATES[ls[1:(size(ls)-1)]], POSITIONS[ls[1:(size(ls)-1)]]);
+        else
+            initializeRecombinationRate(0.0);
+    }
+}
+
+1 first() {
+    sim.addSubpop("p1", NP);
+    for (l in seqLen(NL)) {
+        hs = p1.individuals.haplosomesForChromosomes(CHROMOSOMES[l]);
+        ids = PARENT_G[l + seqLen(2 * NP) * NL];
+        for (a in unique(ids)) {
+            targets = hs[ids == a];
+            mut = targets[0].addNewMutation(m1, 0.0, POSITIONS[l]);
+            mut.tag = a;
+            mut.setValue("effect", EFFECTS[a * WIDTH + seqLen(WIDTH)]);
+            if (size(targets) > 1)
+                targets[1:(size(targets) - 1)].addMutations(mut);
+        }
+        // Same-position neutral markers identify homolog even for homozygous parents.
+        for (h in 0:1) {
+            targets = hs[seqLen(NP) * 2 + h];
+            marker = targets[0].addNewMutation(m2, 0.0, POSITIONS[l]);
+            marker.tag = h;
+            if (size(targets) > 1)
+                targets[1:(size(targets) - 1)].addMutations(marker);
+        }
+    }
+}
+
+reproduction() {
+    self.active = 0;
+    parents = p1.individuals;
+    children = NULL;
+    for (i in seqAlong(MOTHERS))
+        children = c(children, p1.addCrossed(parents[MOTHERS[i]], parents[FATHERS[i]]));
+    // Mutations use an independent seed after all meioses: toggling mutation preserves gametes.
+    setSeed(MUTATION_SEED);
+    nextAllele = NEXT_ALLELE;
+    header = c("child", "copy", "locus", "inherited", "allele", "homolog", "mutated",
+        "delta" + seqLen(WIDTH), "effect" + seqLen(WIDTH));
+    writeFile(OUTPUT, paste(header, sep=","));
+    lines = string(0);
+    for (i in seqAlong(children)) {
+        for (h in 0:1) {
+            for (l in seqLen(NL)) {
+                genome = children[i].haplosomesForChromosomes(CHROMOSOMES[l], index=h);
+                old = genome.containsMarkerMutation(m1, POSITIONS[l], returnMutation=T);
+                marker = genome.containsMarkerMutation(m2, POSITIONS[l], returnMutation=T);
+                if (isNULL(old) | isNULL(marker))
+                    stop("Missing inherited QTL or source marker");
+                inherited = old.tag;
+                effect = old.getValue("effect");
+                delta = rep(0.0, WIDTH);
+                changed = asInteger(runif(1) < MU[l]);
+                a = inherited;
+                if (changed) {
+                    delta = rnorm(WIDTH, MEANS[l * WIDTH + seqLen(WIDTH)],
+                        SDS[l * WIDTH + seqLen(WIDTH)]);
+                    effect = effect + delta;
+                    mut = genome.addNewMutation(m1, 0.0, POSITIONS[l]);
+                    mut.tag = nextAllele;
+                    mut.setValue("effect", effect);
+                    a = nextAllele;
+                    nextAllele = nextAllele + 1;
+                }
+                row = c(i, h, l, inherited, a, marker.tag, changed);
+                lines = c(lines, paste(c(asString(row), format("%.17g", c(delta, effect))), sep=","));
+            }
+        }
+        // Bounded transport buffer, unrelated to biological event probabilities.
+        if (size(lines) >= 4096) {
+            writeFile(OUTPUT, lines, append=T);
+            lines = string(0);
+        }
+    }
+    if (size(lines))
+        writeFile(OUTPUT, lines, append=T);
+}
+
+1 late() {
+    sim.simulationFinished();
+}

@@ -76,7 +76,7 @@
 | 空间 | `spatial.grid_shape`, `boundary` | 网格形状；当前仅支持周期边界 |
 | 空间作用范围 | `spatial.search_radius`, `competition_radius`, `plant_dispersal_radius`, `insect_dispersal_radius` | 搜寻、竞争和两类群扩散半径，单位为格 |
 | 初始位置 | `spatial.initial_plant_cells`, `initial_insect_cells` | `null` 表示按现有均匀位置规则抽样；也可逐个体指定坐标 |
-| 遗传协议 | `genetics.mode`, `schema_version`, `ploidy`, `inheritance`, `recombination_model` | 显式二倍体、有性双亲、Haldane–Poisson 重组协议；当前不支持任意倍性 |
+| 遗传协议 | `genetics.mode`, `schema_version`, `ploidy`, `inheritance`, `recombination_model` | 显式二倍体、有性双亲、SLiM 原生染色体与 Haldane 标记概率协议；当前不支持任意倍性 |
 | 遗传映射 | `genetics.background`, `phenotype_map.effect_scale`, `phenotype_map.bounds` | 两类群背景向量、所有等位效应总和的非负尺度系数、遗传表型截断区间 |
 | 染色体与位点 | `genetics.loci[]` 中的 `locus_id`, `organism`, `functional_module`, `chromosome_id`, `position_cM`, `targets` | 位点身份、类群、功能注释、连锁组、遗传位置和作用坐标；位点数量由列表长度决定 |
 | 突变 | 每个位点的 `mutation_rate`, `mutation_mean`, `mutation_sd`，以及 `genetics.mutation_enabled` | 逐拷贝逐位点事件概率，以及效应增量的均值/标准差向量；未声明的目标坐标必须均为 0 |
@@ -167,7 +167,7 @@ python -m evo_sim.models.plant_insect.analysis.diagnose_initial_conditions --out
 
 YAML 中列出的协议项会校验可支持的机制。把 `ploidy: 2` 改为 4、把 `immigration: false` 改为 true，并不会自动获得多倍体或迁入模型；当前会明确拒绝。这次修改统一参数来源，没有实现新的物种形成或互作网络机制。
 
-完整内联 YAML 和 YAML + CSV 均须遵守当前 `model_version: 0.1.2` 与 `insect_life_history: self_feeding_pre_reproductive` 契约，不提供旧配置自动迁移。默认取食窗口为 `one_generation_pre_reproductive_feeding`。历史结果没有修改；重建历史结果应使用生成它们时的代码和配置。
+完整内联 YAML 和 YAML + CSV 均须遵守当前 `model_version: 0.1.3` 与 `insect_life_history: self_feeding_pre_reproductive` 契约，不提供旧配置自动迁移。默认取食窗口为 `one_generation_pre_reproductive_feeding`。历史结果没有修改；重建历史结果应使用生成它们时的代码和配置。
 
 ## 6. v0.1.2 对照的可比性
 
@@ -180,3 +180,12 @@ YAML 中列出的协议项会校验可支持的机制。把 `ploidy: 2` 改为 4
 - `rho_voc` 是表型映射耦合，不能用作连锁开关。
 
 所有新增数值仍是探索性输入。`theoretical_placeholder` 中需文字区分归一化尺度约定和具体探索参数；文献采用过某个数值不使它成为本项目物种的经验估计。
+
+
+## 7. v0.1.3 SLiM 执行设置
+
+`genetics.schema_version: slim-qtl-1` 与 `recombination_model: slim_haldane_marker_map` 声明实际 SLiM 遗传。`genetics.slim.executable` 指定 SLiM 5.2 命令或完整路径；`timeout_seconds` 为一次调用的运行时限，不是生物学时间。`EVOSIM_SLIM` 可覆盖可执行路径，实际路径及引擎身份写入元数据。开发区可找到独立安装的 `codex/slim_runtime/Library/bin/slim.exe`，该安装不随包分发。
+
+原六张 CSV、突变概率及效应单位沿用。`position_cM` 映射为原生染色体上压缩的 QTL 位置与相邻边界 `r=(1-exp(-2*d_Morgan))/2`；不把 cM 作为 bp，不把 QTL 概率作为核苷酸率。记录完整新等位效应，但不再输出完整区间 Poisson 交换次数。
+
+`v012_*.yaml` 保留场景名称，现继承当前 SLiM 执行器。其旧版本结果须使用原 Git 标签重建。安装和运行见 [v0.1.3 README](../README_v0.1.3.md)。

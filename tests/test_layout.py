@@ -18,7 +18,7 @@ def test_versioned_output_directory():
         marker = first / "preserve.txt"
         marker.write_text("existing results")
         second = create_output_directory()
-        assert first.relative_to(tmp).as_posix() == "results/results_v0.1.2/run1"
+        assert first.relative_to(tmp).as_posix() == "results/results_v0.1.3/run1"
         assert second.name == "run2" and marker.read_text() == "existing results"
         try:
             create_output_directory(first)
