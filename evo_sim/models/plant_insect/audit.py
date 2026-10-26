@@ -59,7 +59,7 @@ def audit_run(path):
         raise AssertionError("invalid_parameter record has valid configuration")
     c = Config(**cfg)
     c.validate()
-    assert c.model_version == meta["version"] and c.model_version in {"0.1.2", "0.1.3"}
+    assert c.model_version == meta["version"] and c.model_version in {"0.1.2", "0.1.3", "0.1.4"}
     required_outputs = {
         "status.json",
         "events.csv",
@@ -120,7 +120,7 @@ def audit_run(path):
     first_extinct = {}
     seen_ids = [set(), set()]
     assert [int(s["generation"]) for s in states] == list(range(len(states)))
-    if c.model_version in {"0.1.2", "0.1.3"}:
+    if c.model_version in {"0.1.2", "0.1.3", "0.1.4"}:
         first = states[0]
         for kind, name, stream in (
             ("plant", "initial_plant_cells", 0),
@@ -439,7 +439,7 @@ def audit_run(path):
             else:
                 # Runtime memory/sampler errors are recorded, not independently reproducible proofs.
                 assert meta["status"].get("message")
-    if c.model_version in {"0.1.2", "0.1.3"}:
+    if c.model_version in {"0.1.2", "0.1.3", "0.1.4"}:
         audit_extensions(path, c, meta, states, tables)
     return dict(
         status=status,

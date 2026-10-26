@@ -1,0 +1,10 @@
+# Analysis definitions only: never fed back into simulation or its RNG.
+# Optional complete replacement: <batch>/analysis.yaml (same keys).
+early_generation: 0
+late_generation: last_recorded
+# Independent one-plant/one-insect trials, in the run's common resource/demand unit.
+assay_resource_capacity: 1.0
+assay_max_feeding_demand: 1.0
+resource_edge_threshold: 0.0
+contribution_edge_threshold: 0.0
+persistence_generations: 3

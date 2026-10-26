@@ -263,7 +263,7 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in {"0.1.2", "0.1.3"}
+            self.model_version not in {"0.1.2", "0.1.3", "0.1.4"}
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
             raise ValueError("explicit supported model version and sexual generations required")

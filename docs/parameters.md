@@ -1,4 +1,4 @@
-# evoSim 参数配置指南
+# evoSim v0.1.4 参数配置指南
 
 模型输入由 **YAML 通用参数 + CSV 数据表**组成。[`model_parameters.yaml`](../evo_sim/models/plant_insect/configs/model_parameters.yaml) 保留模型规则、运行参数和输入路径；物种、位点、等位效应、初始频率等逐条记录放在 [`inputs/`](../evo_sim/models/plant_insect/inputs/) 的 CSV 中。实验文件通过 `extends` 继承公共值，Python 读取表格、计算和检查约束，不用隐藏的模型默认值补齐缺项。
 
@@ -171,7 +171,7 @@ YAML 中列出的协议项会校验可支持的机制。把 `ploidy: 2` 改为 4
 
 ## 6. v0.1.2 对照的可比性
 
-`configs/v012*.yaml` 与 `inputs/v012/` 提供小规模已有适配、连锁、无新突变、完整物种重标记、较少预设形成及多物种场景。各配置只覆盖必要的参数或 CSV，不另建配置体系。实际场景及检查命令见 [因果核对报告](v0.1.2_causal_check_report.md)。
+`configs/v012*.yaml` 与 `inputs/v012/` 提供小规模已有适配、连锁、无新突变、完整物种重标记、较少预设形成及多物种场景。各配置只覆盖必要的参数或 CSV，不另建配置体系。实际场景及检查命令见 [因果核对报告](plan/v0.1.2_causal_check_report.md)。
 
 - 连锁比较只改图谱；不改等位效应、创始频率、位点行序和突变输入。有限创始样本仍可能存在关联，需用相同位点对检查。
 - 无新突变不代表无演化；位点概率是每传递 QTL 拷贝的概率，不是核苷酸率。
@@ -189,3 +189,25 @@ YAML 中列出的协议项会校验可支持的机制。把 `ploidy: 2` 改为 4
 原六张 CSV、突变概率及效应单位沿用。`position_cM` 映射为原生染色体上压缩的 QTL 位置与相邻边界 `r=(1-exp(-2*d_Morgan))/2`；不把 cM 作为 bp，不把 QTL 概率作为核苷酸率。记录完整新等位效应，但不再输出完整区间 Poisson 交换次数。
 
 `v012_*.yaml` 保留场景名称，现继承当前 SLiM 执行器。其旧版本结果须使用原 Git 标签重建。安装和运行见 [v0.1.3 README](../README_v0.1.3.md)。
+
+## 8. v0.1.4 观察设计（2026-10-27）
+
+新增 `evo_sim/models/plant_insect/analysis/v014_analysis.yaml`，与运行场景 `configs/*.yaml` 分开。它仅控制保存结果的观察分析，不改变生态、遗传或随机过程。批次根目录存在 `analysis.yaml` 时完整替代默认设计，必须提供全部下列键；不支持隐式填补或任意额外键。
+
+| 键 | 默认值 | 意义与约束 |
+| --- | --- | --- |
+| `early_generation` | 0 | 非负整数，必须实际保存 |
+| `late_generation` | `last_recorded` | 实际最后记录代；也可为不早于 early 的已保存整数代 |
+| `assay_resource_capacity` | 1.0 | 独立单株试验的 R*，正有限数；单位继承运行的 resource_unit |
+| `assay_max_feeding_demand` | 1.0 | 独立单虫试验的 d*，正有限数；与 R* 共享单位及窗口 |
+| `resource_edge_threshold` | 0.0 | Q_actual 严格大于此非负阈值才有资源边 |
+| `contribution_edge_threshold` | 0.0 | 已提交 genetic_contribution 严格大于此非负阈值才有贡献边 |
+| `persistence_generations` | 3 | 连续相邻观测代数，正整数；不是经过验证的生物常数 |
+
+R*/d* 的示例数值是明确的试验设计，未实测定标。比较不同运行须检查单位、时间窗口和行为参数是否一致；仅设相同数字不能保证跨单位可比。分析元数据保存设计和哈希，不改写历史模拟配置。正式研究应事前选择窗口与阈值并检查敏感性。
+
+运行 `python -m evo_sim.models.plant_insect.analysis.summarize_coevolution --input <batch>`，输出见 [结果说明](results.md)。此命令只接受 --input；分析参数通过 YAML 提供。
+
+**密度阶段标签说明：** `demography.plant_density_stage: offspring_recruitment` 保留旧协议拼写；执行语义始终是母株邻域密度折减母源产子均值，不是子代落点的招募抽样。v0.1.4 澄清其含义，未增加新的死亡或密度选择。
+
+版本号升级至 0.1.4；历史审计仍接受 0.1.2/0.1.3 的实际记录。已有 `v012_*.yaml` 名称表示场景来源，当前执行协议继承 0.1.4，遗传仍为 slim-qtl-1。

@@ -42,7 +42,7 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_pre_reproductive_feeding
   demand_window: one_generation_pre_reproductive_feeding
-  model_version: 0.1.3
+  model_version: 0.1.4
   life_history: nonoverlapping_sexual_generations
   demography:
     plant_survival: bernoulli

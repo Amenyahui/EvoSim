@@ -3,7 +3,7 @@ extends: model_parameters.yaml
 simulation_metadata:
   num_steps_per_episode: 2
 parameters:
-  model_version: 0.1.3
+  model_version: 0.1.4
   insect_life_history: self_feeding_pre_reproductive
   feeding_window: one_generation_pre_reproductive_feeding
   demand_window: one_generation_pre_reproductive_feeding
