@@ -33,13 +33,18 @@ def test_yaml_is_complete_and_missing_parameters_fail():
         for case in loaded["batch"]["cases"]:
             Config(**merge_config(values, case["overrides"])).validate()
     assert all(
-        field.default is MISSING and field.default_factory is MISSING for field in fields(Config)
+        field.default is MISSING and field.default_factory is MISSING
+        for field in fields(Config)
+        if field.name != "eta_shared"
     )
     values = dict(get_runner().config["parameters"], generations=1)
     for key in values:
         missing = {k: v for k, v in values.items() if k != key}
-        raises(lambda: Config(**missing), TypeError)
-    for key in ("B", "weights"):
+        if key == "eta_shared":
+            raises(lambda: Config(**missing).validate())
+        else:
+            raises(lambda: Config(**missing), TypeError)
+    for key in ("eta_shared", "weights"):
         raises(config(**{key: None}).validate)
     for bounds in ([0.8, 0.2], [-0.1, 1], [0, 1.2], [0, float("nan")], [False, True]):
         raises(config(voc_bounds=bounds).validate)
@@ -102,8 +107,8 @@ def test_nested_yaml_and_case_overrides_preserve_other_parameters():
 
 
 def test_nondefault_mapping_flows_through_simulation_and_independent_audit():
-    for rho in (0.5, 1.0):
-        c = config(generations=1, voc_bounds=[0.3, 0.48], rho_voc=rho)
+    for eta in (0.0, 1.0):
+        c = config(generations=1, eta_shared=eta)
         c.genetics["phenotype_map"] = dict(effect_scale=0.25, bounds=[0.23, 0.51])
         c.validate()
         result = simulate(c)

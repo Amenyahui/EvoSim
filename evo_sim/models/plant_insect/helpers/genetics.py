@@ -62,14 +62,14 @@ def validate(c, K):
         "max_alleles_safety",
         "max_genotype_values_safety",
     }
-    slim = isinstance(g, dict) and g.get("schema_version") == "slim-qtl-1"
+    slim = isinstance(g, dict) and g.get("schema_version") in {"slim-qtl-1", "slim-qtl-2"}
     if slim:
         required.add("slim")
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
         g["mode"] != "sexual_qtl"
-        or g["schema_version"] not in {"sexual-qtl-1", "slim-qtl-1"}
+        or g["schema_version"] not in {"sexual-qtl-1", "slim-qtl-1", "slim-qtl-2"}
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
@@ -86,7 +86,12 @@ def validate(c, K):
         numeric(settings["timeout_seconds"], "slim.timeout_seconds")
         if settings["timeout_seconds"] <= 0:
             raise ValueError("SLiM timeout must be positive")
-    width = c.n + K
+    chemical = g["schema_version"] == "slim-qtl-2"
+    if chemical and c.model_version != "0.1.5":
+        raise ValueError("slim-qtl-2 chemical coordinates require model_version=0.1.5")
+    if chemical != (c.mapping == "shared_chemical_modules"):
+        raise ValueError("chemical mapping and genetic schema disagree")
+    widths = {"plant": 3 if chemical else c.n + K, "insect": c.n + K}
     mapping = g["phenotype_map"]
     if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
         raise ValueError("phenotype_map requires explicit effect_scale and bounds")
@@ -95,7 +100,7 @@ def validate(c, K):
     if set(g["background"]) != set(KINDS) or set(g["mutation_enabled"]) != set(KINDS):
         raise ValueError("background/mutation_enabled require plant and insect")
     for kind in KINDS:
-        vector(g["background"][kind], width, "background")
+        vector(g["background"][kind], widths[kind], "background")
         if type(g["mutation_enabled"][kind]) is not bool:
             raise ValueError("mutation_enabled must be boolean")
     for name in ("max_alleles_safety", "max_genotype_values_safety"):
@@ -139,6 +144,7 @@ def validate(c, K):
             raise ValueError("unique locus_id and valid organism required")
         if not isinstance(locus["functional_module"], str) or not locus["functional_module"]:
             raise ValueError("functional_module required")
+        width = widths[kind]
         targets = locus["targets"]
         if (
             not isinstance(targets, list)
@@ -161,7 +167,7 @@ def validate(c, K):
         loci[key] = locus
     for kind in KINDS:
         targets = {j for x in loci.values() if x["organism"] == kind for j in x["targets"]}
-        if targets != set(range(width)):
+        if targets != set(range(widths[kind])):
             raise ValueError("all trait dimensions require declared QTL coverage")
     for kind in KINDS:
         validate_genome_map([x for x in loci.values() if x["organism"] == kind])
@@ -177,6 +183,7 @@ def validate(c, K):
             raise ValueError("founder allele IDs must be consecutive integers starting at zero")
         if a["locus_id"] not in loci:
             raise ValueError("allele references unknown locus")
+        width = widths[loci[a["locus_id"]]["organism"]]
         effect = vector(a["effect"], width, "allele effect")
         if any(effect[j] != 0 for j in set(range(width)) - set(loci[a["locus_id"]]["targets"])):
             raise ValueError("allele effects outside declared targets")
@@ -221,12 +228,11 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
-        if c.genetics["schema_version"] != "slim-qtl-1":
-            raise ValueError(
-                "Execution requires slim-qtl-1; legacy results remain readable for audit"
-            )
+        if c.genetics["schema_version"] not in {"slim-qtl-1", "slim-qtl-2"}:
+            raise ValueError("SLiM QTL execution requires a declared supported native protocol")
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n
+        self.chemical = c.genetics["schema_version"] == "slim-qtl-2"
         self.seed = c.seed
         self.engine_calls = []
         self.loci = {
@@ -274,13 +280,25 @@ class GeneticState:
                 self.alleles[int(a)].locus_id != locus["locus_id"] for a in np.unique(g[:, :, l])
             ):
                 raise ValueError("allele assigned to wrong locus or organism")
-        effects = np.asarray([a.effect for a in self.alleles])
+        effects = self.effects(kind)
         mapping = self.spec["phenotype_map"]
         raw = np.asarray(self.spec["background"][kind]) + mapping["effect_scale"] * effects[g].sum(
             axis=(1, 2)
         )
         values = np.clip(raw, *mapping["bounds"])
+        if self.chemical and kind == "plant":
+            return {"D": values[:, :2], "plant_chemical_traits": values}, raw
         return {TRAITS[kind][0]: values[:, : self.n], TRAITS[kind][1]: values[:, self.n :]}, raw
+
+    def effects(self, kind):
+        """Per-taxon transport matrix; other taxon's allele IDs cannot occur in this genotype."""
+        width = len(self.spec["background"][kind])
+        result = np.zeros((len(self.alleles), width))
+        own = {l["locus_id"] for l in self.loci[kind]}
+        for allele in self.alleles:
+            if allele.locus_id in own:
+                result[allele.allele_id] = allele.effect
+        return result
 
     def preflight(self, sizes, stored_values):
         """Conservative allocation ceiling: reserve even the all-loci-mutate case."""
@@ -330,7 +348,7 @@ class GeneticState:
                 mothers,
                 fathers,
                 loci,
-                np.asarray([a.effect for a in self.alleles]),
+                self.effects(kind),
                 self.spec["slim"],
                 seeds,
                 len(self.alleles),
@@ -440,6 +458,8 @@ class GeneticState:
         for kind, count in zip(KINDS, sizes):
             pop = state.plants if kind == "plant" else state.insects
             values, raw = self.phenotype(pop.genotypes, kind)
+            if self.chemical and kind == "plant":
+                values = {"plant_chemical_traits": values["plant_chemical_traits"]}
             prefix = "P" if kind == "plant" else "H"
             for s in range(count):
                 mask = pop.species == s

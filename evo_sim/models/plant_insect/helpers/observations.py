@@ -2,15 +2,14 @@
 
 import numpy as np
 
+from .chemistry import reference
 from .traits import consumption
-from .voc import conditional_probabilities, map_voc
+from .voc import conditional_probabilities
 
 
 def standardized(state, c, B, w, generation):
     """Return summaries and individual p/q on an equal panel, without ecological RNG."""
-    D = np.asarray(c.observation_reference_traits["D"], float)
-    Z = np.asarray(c.observation_reference_traits["plant_voc_independent_trait"], float)
-    V = map_voc(D, Z, B, c.rho_voc, c.voc_bounds)
+    D, V = reference(c, B)
     probability = np.empty((len(state.insects), len(D)))
     for i, preference in enumerate(state.insects.preference):
         probability[i] = conditional_probabilities(V, preference, c, w)

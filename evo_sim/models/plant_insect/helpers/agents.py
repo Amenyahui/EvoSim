@@ -14,9 +14,11 @@ class PlantPopulation:
     ids: np.ndarray
     species: np.ndarray
     defense: np.ndarray
-    voc_trait: np.ndarray
+    voc_trait: np.ndarray | None = None
     cells: np.ndarray | None = None
     genotypes: np.ndarray | None = None
+
+    chemical_traits: np.ndarray | None = None
 
     def __len__(self):
         return len(self.ids)
@@ -71,13 +73,16 @@ class CommunityState:
             D=self.plants.defense,
             I=self.insects.resistance,
             A=self.insects.preference,
-            plant_voc_independent_trait=self.plants.voc_trait,
             plant_species=self.plants.species,
             insect_species=self.insects.species,
             plant_ids=self.plants.ids,
             insect_ids=self.insects.ids,
             insect_sex=self.insects.sex,
         )
+        if self.plants.chemical_traits is not None:
+            values["plant_chemical_traits"] = self.plants.chemical_traits
+        else:
+            values["plant_voc_independent_trait"] = self.plants.voc_trait
         if self.plants.cells is not None:
             values["plant_cells"] = self.plants.cells
             values["insect_cells"] = self.insects.cells
@@ -100,9 +105,10 @@ class CommunityState:
                 values["plant_ids"],
                 values["plant_species"],
                 values["D"],
-                values["plant_voc_independent_trait"],
+                values.get("plant_voc_independent_trait"),
                 values.get("plant_cells"),
                 values.get("plant_genotypes"),
+                values.get("plant_chemical_traits"),
             ),
             InsectPopulation(
                 values["insect_ids"],

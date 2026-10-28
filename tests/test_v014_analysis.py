@@ -28,7 +28,7 @@ def test_v014_reciprocal_assay_and_missing_species():
         design, _ = read_design(Path(tmp))
     plants = dict(
         D=np.array([[0.8, 0.8]]),
-        plant_voc_independent_trait=np.array([[0.8, 0.8]]),
+        plant_chemical_traits=np.array([[0.8, 0.8, 0.8]]),
         plant_species=np.array([0]),
     )
     insects = dict(I=np.array([[0.2, 0.2]]), A=np.array([[0.8, 0.8]]), insect_species=np.array([0]))
@@ -42,7 +42,7 @@ def test_v014_reciprocal_assay_and_missing_species():
     stronger = dict(insects, I=np.array([[0.4, 0.4]]))
     later = cross_assay(plants, stronger, c, design)[0]
     assert later["plant_survival"] < row["plant_survival"]
-    weak = dict(plants, D=np.array([[0.4, 0.4]]))
+    weak = dict(plants, D=np.array([[0.4, 0.4]]), plant_chemical_traits=np.array([[0.4, 0.4, 0.8]]))
     assert cross_assay(weak, insects, c, design)[0]["q"] > row["q"]
     # A resource-limited, forced-acceptance trial: x=min(R,dmax*q), not R*q.
     c.choice_mode = "forced"

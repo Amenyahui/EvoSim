@@ -16,7 +16,7 @@ from evo_sim.models.plant_insect.analysis.common import (
     sha256,
     write_json,
 )
-from evo_sim.models.plant_insect.helpers import traits, voc
+from evo_sim.models.plant_insect.helpers import chemistry, traits, voc
 from evo_sim.models.plant_insect.helpers.config import Config
 from evo_sim.models.plant_insect.helpers.ecology import allocate_resources
 
@@ -52,10 +52,15 @@ def cross_assay(plants, insects, c, design):
     Each trial offers one plant and the configured rejection option. It is NOT a
     simultaneous multi-host choice assay. SF is an ecological proxy, not offspring.
     """
-    B, w = np.asarray(c.B, float), np.asarray(c.weights, float)
+    w = np.asarray(c.weights, float)
     D = plants["D"]
-    V = voc.map_voc(D, plants["plant_voc_independent_trait"], B, c.rho_voc, c.voc_bounds)
-    fp = voc.fecundity(D, V, c)[0]
+    V = chemistry.plant_voc(
+        D,
+        plants.get("plant_voc_independent_trait"),
+        c,
+        chemical=plants.get("plant_chemical_traits"),
+    )
+    fp = voc.fecundity(D, V, c, plants.get("plant_chemical_traits"))[0]
     metrics = (
         "acceptance",
         "q",
@@ -125,7 +130,12 @@ def contribution_differentials(snapshot, following, parents):
     The residual includes segregation, mutation and clipping; no causal selection claim.
     """
     rows = []
-    for kind, fields in (("plant", ("D", "plant_voc_independent_trait")), ("insect", ("I", "A"))):
+    plant_fields = (
+        ("plant_chemical_traits",)
+        if "plant_chemical_traits" in snapshot
+        else ("D", "plant_voc_independent_trait")
+    )
+    for kind, fields in (("plant", plant_fields), ("insect", ("I", "A"))):
         ledger = parents[parents.kind == kind].set_index("individual_id")
         ids, species = snapshot[f"{kind}_ids"], snapshot[f"{kind}_species"]
         if ledger.index.has_duplicates or set(ledger.index) != set(ids):
@@ -363,6 +373,7 @@ def summarize(batch: Batch):
                     Path(__file__),
                     Path(traits.__file__),
                     Path(voc.__file__),
+                    Path(chemistry.__file__),
                     Path(__file__).parents[1] / "helpers" / "ecology.py",
                     Path(__file__).parents[1] / "helpers" / "config.py",
                     Path(__file__).with_name("analyze_macro.py"),

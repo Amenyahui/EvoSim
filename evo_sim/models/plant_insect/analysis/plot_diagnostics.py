@@ -206,16 +206,25 @@ def figure_B(d, out, dpi):
     No unvalidated 'functional match' proxy: the model's interaction formulas are not in these CSVs.
     """
     t = d["trait_timeseries"].query("record_type=='trait'")
+    chemical = "plant_chemical_traits_1" in set(t.trait)
+    plant_pair = (
+        ("plant_chemical_traits_1", "plant_chemical_traits_2") if chemical else ("D_1", "D_2")
+    )
+    odor_pair = (
+        ("plant_chemical_traits_2", "plant_chemical_traits_3")
+        if chemical
+        else ("plant_voc_independent_trait_1", "plant_voc_independent_trait_2")
+    )
     panels = [
         (
-            "Independent VOC trait",
-            ("plant_voc_independent_trait_1", "plant_voc_independent_trait_2"),
+            "Shared / VOC-only chemical modules" if chemical else "Independent VOC trait",
+            odor_pair,
             ("P1", "P2"),
-            "Δ VOC 1",
-            "Δ VOC 2",
+            "Δ x_S" if chemical else "Δ VOC 1",
+            "Δ x_V" if chemical else "Δ VOC 2",
         ),
         ("Insect detoxification", ("I_1", "I_2"), ("H1",), "Δ I₁", "Δ I₂"),
-        ("Plant defense", ("D_1", "D_2"), ("P1", "P2"), "Δ D₁", "Δ D₂"),
+        ("Plant defense", plant_pair, ("P1", "P2"), "Δ D₁", "Δ D₂"),
         ("Insect recognition", ("A_1", "A_2"), ("H1",), "Δ A₁", "Δ A₂"),
     ]
     fig, axes = plt.subplots(4, 2, figsize=(9.5, 11.2))

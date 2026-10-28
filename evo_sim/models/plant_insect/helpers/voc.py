@@ -45,9 +45,18 @@ def conditional_probabilities(V, A, c, w):
     return choice_probabilities(relative, c.tau, c.outside_utility, mode="forced")[:-1]
 
 
-def fecundity(D, V_emit, c):
+def fecundity(D, V_emit, c, chemical=None):
     defense_cost = c.plant_cost * D.sum(axis=1)
-    voc_cost = c.voc_cost * V_emit.mean(axis=1)
+    if c.mapping == "shared_chemical_modules":
+        from .chemistry import outputs
+
+        chemical = np.asarray(chemical, float)
+        defense, _ = outputs(chemical, c.eta_shared)
+        if not np.array_equal(defense, D):
+            raise ValueError("shared chemical costs require aligned genetic modules and defense")
+        voc_cost = c.voc_cost * chemical[:, 2]
+    else:
+        voc_cost = c.voc_cost * V_emit.mean(axis=1)
     # Preserve exact arithmetic order of v1.1 when the extra cost is disabled.
     fp = (
         np.maximum(0, 1 - defense_cost)

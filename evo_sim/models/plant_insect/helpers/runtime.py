@@ -11,8 +11,8 @@ import pandas as pd
 from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
 
+from . import chemistry, genetics, spatial
 from . import ecology as shared
-from . import genetics, spatial, voc
 from .agents import CommunityState, InsectPopulation, PlantPopulation
 from .config import Config, config_payload, resource_values
 from .contributions import mark_uncommitted
@@ -47,7 +47,7 @@ def ecology(state, c, B, w, rng_p, rng_H):
     A = state.insects.preference
     trait = state.plants.voc_trait
     pl, hl = state.plants.species, state.insects.species
-    V_emit = voc.map_voc(D, trait, B, c.rho_voc, c.voc_bounds)
+    V_emit = chemistry.plant_voc(D, trait, c, B, state.plants.chemical_traits)
     V_cue = V_emit[rng_p.permutation(len(D))] if c.shuffle_voc else V_emit.copy()
     options = {}
     if c.spatial is not None:
@@ -57,7 +57,18 @@ def ecology(state, c, B, w, rng_p, rng_H):
     choice = shared.choose_hosts(A, pl, hl, V_cue, c, w, rng_p, rng_H, **options)
     capacity = resource_vector(c.resource_capacity, c.plant_sizes, pl, "P")
     dmax = resource_vector(c.max_feeding_demand, c.insect_sizes, hl, "H")
-    e = shared.settle_feeding(D, I, pl, hl, V_emit, choice["host"], c, capacity, dmax)
+    e = shared.settle_feeding(
+        D,
+        I,
+        pl,
+        hl,
+        V_emit,
+        choice["host"],
+        c,
+        capacity,
+        dmax,
+        chemical=state.plants.chemical_traits,
+    )
     # Explicit Speed beta=0 and common actual resource ledger. No fixed-size reproduction.
     e["wi"] = e["g"] * e["fi"]
     e.update(
@@ -112,6 +123,14 @@ def initialize_community(config, initial=None):
     community = None
     runtime.input_sources = deepcopy(config.get("input_sources", {}))
     runtime.B, runtime.w = runtime.c.validate()
+    if (
+        runtime.c.model_version != __version__
+        or runtime.c.genetics["schema_version"] != "slim-qtl-2"
+    ):
+        raise ValueError(
+            f"Execution requires model_version={__version__} and slim-qtl-2; use the matching Git tag "
+            "to rerun historical models. Saved historical results remain readable."
+        )
     runtime.genetic = genetics.GeneticState(runtime.c)
     if initial is not None:
         raise ValueError("initialization comes only from the founder allele catalog")
@@ -163,7 +182,7 @@ def initialize_community(config, initial=None):
             pvalues["D"],
             hvalues["I"],
             hvalues["A"],
-            pvalues["plant_voc_independent_trait"],
+            pvalues.get("plant_voc_independent_trait"),
         )
         D, I, A, plant_voc_independent_trait = initial
         pl = np.repeat(np.arange(len(runtime.c.plant_sizes)), runtime.c.plant_sizes)
@@ -176,7 +195,14 @@ def initialize_community(config, initial=None):
                 >= runtime.c.sexual_reproduction["insect_founder_female_probability"]
             )
         community = CommunityState(
-            PlantPopulation(np.arange(len(pl)), pl, D, plant_voc_independent_trait, genotypes=gp),
+            PlantPopulation(
+                np.arange(len(pl)),
+                pl,
+                D,
+                plant_voc_independent_trait,
+                genotypes=gp,
+                chemical_traits=pvalues.get("plant_chemical_traits"),
+            ),
             InsectPopulation(np.arange(len(hl)), hl, I, A, genotypes=gh, sex=sex),
         )
         if runtime.c.spatial is not None:
@@ -222,7 +248,7 @@ def finalize(state):
         config=config_payload(runtime.c),
         input_sources=runtime.input_sources,
         status=runtime.status,
-        resolved_B=runtime.B.tolist(),
+        resolved_B=None if chemistry.shared(runtime.c) else runtime.B.tolist(),
         resolved_weights=runtime.w.tolist(),
         resolved_alpha=runtime.alpha.tolist(),
         resolved_plant_lambda=runtime.lp.tolist(),
@@ -241,12 +267,17 @@ def finalize(state):
     runtime.result["metadata"].update(
         software_version=__version__,
         contribution_semantics="parent generation t to offspring generation t+1; realized counts only on committed transitions; missing for observation-only or failed transitions",
-        fitness_proxy_semantics="W_i/W_insect/W_plant are S*F proxies, not total fitness; realized_genetic_contribution=(maternal+paternal offspring)/2",
+        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers F_m, not paternal fertility; W_i/W_insect/W_plant are S*F_m proxies, not total fitness; realized_genetic_contribution=(maternal+paternal offspring)/2",
         maternal_expectation_semantics="all plants or all females, including zero expectation for no host/survival/mate; nonmaternal roles are missing; all-individual mean counts those roles as zero",
         allele_contribution_semantics="per-species per-locus parent/offspring allele union; parental contribution includes stochastic reproduction; transmission includes segregation and mutation",
         reference_panel_semantics="reference_p/reference_q snapshot rows align with insect_ids; columns align with reference_plant_species; p is conditional choice without rejection",
         ecology_rule_version=runtime.c.model_version,
         genetics_version=runtime.c.genetics["schema_version"],
+        chemical_schema="shared-chemical-1",
+        plant_trait_order=["x_N", "x_S", "x_V"],
+        plant_defense_order=["D_N", "D_S"],
+        odor_trait_order=["V_S", "V_V"],
+        chemical_observation_window=runtime.c.feeding_window,
         slim_calls=runtime.genetic.engine_calls,
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),
         config_sha256=hashlib.sha256(payload.encode()).hexdigest(),

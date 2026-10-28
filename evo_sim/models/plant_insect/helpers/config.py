@@ -58,6 +58,7 @@ class _TraitConfig:
     tau: float
     outside_utility: float
     unmatched_insect_fitness: float
+    eta_shared: object = None  # Absent only in historical configurations.
 
     def validate(self):
         for name in ("insect_pop", "n", "generations", "record_every", "candidate_size"):
@@ -83,19 +84,34 @@ class _TraitConfig:
                 raise ValueError(f"{name} must be nonnegative")
         if self.sigma <= 0 or self.olfaction_mode not in ("template", "neutral"):
             raise ValueError("positive sigma and template/neutral mode required")
-        if self.mapping not in ("identity", "mixed"):
+        if self.mapping not in ("identity", "mixed", "shared_chemical_modules"):
             raise ValueError("mapping must be identity or mixed; use B for a custom sparse map")
         if type(self.shuffle_voc) is not bool:
             raise ValueError("shuffle_voc must be boolean")
-        B = np.asarray(self.B, float)
-        if (
-            B.ndim != 2
-            or B.shape[1] != self.n
-            or B.shape[0] < 1
-            or not np.isfinite(B).all()
-            or (B < 0).any()
-        ):
-            raise ValueError("B must be a finite nonnegative L by K matrix")
+        if self.mapping == "shared_chemical_modules":
+            if (
+                self.n != 2
+                or self.B is not None
+                or type(self.eta_shared) not in (int, float)
+                or not np.isfinite(self.eta_shared)
+                or not 0 <= self.eta_shared <= 1
+            ):
+                raise ValueError(
+                    "shared modules require n=2, retired B=null, explicit eta_shared in [0,1]"
+                )
+            B = np.empty((2, 0))  # Shape carrier only; no defense-to-odor matrix in this model.
+        else:
+            if self.eta_shared is not None:
+                raise ValueError("eta_shared cannot be silently used with legacy D/Z mapping")
+            B = np.asarray(self.B, float)
+            if (
+                B.ndim != 2
+                or B.shape[1] != self.n
+                or B.shape[0] < 1
+                or not np.isfinite(B).all()
+                or (B < 0).any()
+            ):
+                raise ValueError("B must be a finite nonnegative L by K matrix")
         w = np.asarray(self.weights, float)
         if (
             w.shape != (B.shape[0],)
@@ -116,12 +132,15 @@ class _VOCConfig(_TraitConfig):
 
     def validate(self):
         B, w = super().validate()
-        for name in ("rho_voc",):
-            if not 0 <= getattr(self, name) <= 1:
-                raise ValueError(f"{name} must be in [0,1]")
+        if self.mapping == "shared_chemical_modules":
+            if self.rho_voc is not None or self.voc_bounds is not None:
+                raise ValueError("shared modules retire rho_voc/voc_bounds; set them to null")
+        elif not 0 <= self.rho_voc <= 1:
+            raise ValueError("rho_voc must be in [0,1]")
         if self.voc_cost < 0:
             raise ValueError("sigma_Z and voc_cost must be nonnegative")
-        normalized_bounds(self.voc_bounds, "voc_bounds")
+        if self.mapping != "shared_chemical_modules":
+            normalized_bounds(self.voc_bounds, "voc_bounds")
         if self.choice_mode not in ("outside", "forced"):
             raise ValueError("choice_mode must be outside or forced")
         return B, w
@@ -263,7 +282,7 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in {"0.1.2", "0.1.3", "0.1.4"}
+            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5"}
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
             raise ValueError("explicit supported model version and sexual generations required")
@@ -335,7 +354,11 @@ class Config(_ResourceConfig):
             raise ValueError("record_observations must be boolean")
         if self.record_observations:
             panel = self.observation_reference_traits
-            shapes = {"D": (len(ps), self.n), "plant_voc_independent_trait": (len(ps), len(B))}
+            shapes = (
+                {"plant_chemical_traits": (len(ps), 3)}
+                if self.mapping == "shared_chemical_modules"
+                else {"D": (len(ps), self.n), "plant_voc_independent_trait": (len(ps), len(B))}
+            )
             if not isinstance(panel, dict) or set(panel) != set(shapes):
                 raise ValueError("observation_reference_traits requires a fixed D/Z panel")
             for name, shape in shapes.items():
@@ -369,4 +392,7 @@ class Config(_ResourceConfig):
 
 def config_payload(c):
     """Serialize the sole current model contract."""
-    return asdict(c)
+    payload = asdict(c)
+    if payload["eta_shared"] is None:
+        payload.pop("eta_shared")  # Preserve historical config fingerprints exactly.
+    return payload

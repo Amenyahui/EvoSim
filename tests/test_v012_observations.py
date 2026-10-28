@@ -21,7 +21,7 @@ def test_joint_response_preserves_individual_associations():
     c = config(insect_sizes=[2])
     B, weights = c.validate()
     insects = SimpleNamespace(
-        preference=np.array([[0.2, 0.6], [0.6, 0.2]]),
+        preference=np.array([[0.6, 0.6], [0.2, 0.2]]),
         resistance=np.array([[0.6, 0.2], [0.2, 0.6]]),
         species=np.zeros(2, int),
     )

@@ -166,4 +166,4 @@ def test_builtin_csv_inputs_are_complete_and_resolved():
         assert hashlib.sha256(Path(source["path"]).read_bytes()).hexdigest() == source["sha256"]
     p = loaded["parameters"]
     assert p["plant_sizes"] == [200, 200] and p["insect_sizes"] == [40]
-    assert len(p["genetics"]["loci"]) == 16 and len(p["genetics"]["alleles"]) == 48
+    assert len(p["genetics"]["loci"]) == 14 and len(p["genetics"]["alleles"]) == 40

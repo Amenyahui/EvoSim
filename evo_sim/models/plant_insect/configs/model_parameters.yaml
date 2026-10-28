@@ -23,18 +23,17 @@ parameters:
   candidate_size: 8
   olfaction_mode: template
   shuffle_voc: false
-  mapping: identity
-  B:
-  - [1.0, 0.0]
-  - [0.0, 1.0]
+  mapping: shared_chemical_modules
+  B: null
+  eta_shared: 1.0 # normalization convention, not an empirical emission rate
   weights: [0.5, 0.5]
   sigma: 0.2
   b: 1.0
   tau: 1.0
   outside_utility: 0.0
   unmatched_insect_fitness: 0.0
-  rho_voc: 0.5
-  voc_bounds: [0.0, 1.0]
+  rho_voc: null
+  voc_bounds: null
   voc_cost: 0.05
   choice_mode: outside
   insect_life_history: self_feeding_pre_reproductive
@@ -42,7 +41,7 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_pre_reproductive_feeding
   demand_window: one_generation_pre_reproductive_feeding
-  model_version: 0.1.4
+  model_version: 0.1.5
   life_history: nonoverlapping_sexual_generations
   demography:
     plant_survival: bernoulli
@@ -80,14 +79,14 @@ parameters:
       effect_scale: 0.5
       bounds: [0.0, 1.0]
     mode: sexual_qtl
-    schema_version: slim-qtl-1
+    schema_version: slim-qtl-2
     slim:
       executable: slim
       timeout_seconds: 120
     ploidy: 2
     inheritance: biparental_meiosis
     background:
-      plant: [0.0, 0.0, 0.0, 0.0]
+      plant: [0.0, 0.0, 0.0]
       insect: [0.0, 0.0, 0.0, 0.0]
     mutation_enabled:
       plant: true
@@ -106,14 +105,14 @@ parameters:
       founders:
         source_kind: theoretical_placeholder
         description: Two configured alleles at frequency 0.5 each; independent copies; positive alternative
-          +0.02 allele effect. Not sequencing data; baseline reference is P1-adapted by design.
+          +0.02 allele effect. Not sequencing data. Explicit D1/D2/Z2-to-x migration changes ancestral odor matching; no claimed initial adaptation.
       limits:
         source_kind: implementation_choice
         description: Conservative allele reservation and retained genotype scalar count; computational
           stops, not ecological caps.
       genome_map:
         source_kind: theoretical_placeholder
-        description: Eight independent abstract linkage groups per taxon; not physical chromosomes.
+        description: Six plant and eight insect independent abstract linkage groups; not physical chromosomes.
     recombination_model: slim_haldane_marker_map
   sexual_reproduction:
     plant_mating_system: hermaphroditic_obligate_outcrossing

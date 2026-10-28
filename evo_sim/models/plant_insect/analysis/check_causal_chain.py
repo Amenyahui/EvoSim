@@ -11,9 +11,10 @@ from evo_sim.core.config import merge_config
 from evo_sim.models.plant_insect import Config, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
+from evo_sim.models.plant_insect.helpers.chemistry import reference
 from evo_sim.models.plant_insect.helpers.inputs import read_config
 from evo_sim.models.plant_insect.helpers.traits import consumption
-from evo_sim.models.plant_insect.helpers.voc import conditional_probabilities, map_voc
+from evo_sim.models.plant_insect.helpers.voc import conditional_probabilities
 
 MODEL = Path(__file__).resolve().parents[1]
 
@@ -50,9 +51,7 @@ def distribution(values):
 def reference_arrays(snapshot, c):
     """Rebuild independently of the persisted diagnostics aggregations."""
     B, w = c.validate()
-    D = np.asarray(c.observation_reference_traits["D"], float)
-    Z = np.asarray(c.observation_reference_traits["plant_voc_independent_trait"], float)
-    V = map_voc(D, Z, B, c.rho_voc, c.voc_bounds)
+    D, V = reference(c, B)
     p = np.array([conditional_probabilities(V, a, c, w) for a in snapshot["A"]])
     p = p.reshape(len(snapshot["A"]), len(D))
     q = consumption(np.broadcast_to(D, (len(p), *D.shape)), snapshot["I"][:, None, :])
@@ -142,7 +141,7 @@ def mutation_scale(c):
     scale = c.genetics["phenotype_map"]["effect_scale"]
     rows = []
     for kind in ("plant", "insect"):
-        for coordinate in range(c.n + len(c.B)):
+        for coordinate in range(len(c.genetics["background"][kind])):
             mean, variance = 0.0, 0.0
             for locus in c.genetics["loci"]:
                 if locus["organism"] != kind:
@@ -267,7 +266,7 @@ def paired_checks(results, configs):
                 "D",
                 "I",
                 "A",
-                "plant_voc_independent_trait",
+                "plant_chemical_traits",
                 "plant_cells",
                 "insect_cells",
             ],
@@ -299,9 +298,9 @@ def paired_checks(results, configs):
             changed = results[name, seed]
             fields = ["plant_genotypes", "insect_genotypes", "plant_cells", "insect_cells"]
             fields += ["I", "A", "insect_sex"] if kind == "insect" else []
-            fields += ["D", "plant_voc_independent_trait"] if kind == "plant" else []
+            fields += ["D", "plant_chemical_traits"] if kind == "plant" else []
             if kind == "both":
-                fields += ["D", "I", "A", "plant_voc_independent_trait", "insect_sex"]
+                fields += ["D", "I", "A", "plant_chemical_traits", "insect_sex"]
             same_snapshot(ref["snapshots"][0], changed["snapshots"][0], fields)
             ca, cb = configs["intervention_baseline", seed], configs[name, seed]
             for field in (

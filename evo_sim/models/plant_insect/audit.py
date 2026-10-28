@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from evo_sim import __version__
 from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
 
@@ -51,7 +52,13 @@ def audit_run(path):
         assert hashlib.sha256((path / name).read_bytes()).hexdigest() == digest, name
     if status == "invalid_parameter":
         try:
-            Config(**cfg).validate()
+            invalid = Config(**cfg)
+            invalid.validate()
+            if (
+                invalid.model_version != __version__
+                or invalid.genetics["schema_version"] != "slim-qtl-2"
+            ):
+                raise ValueError("historical configurations are not executable in this version")
         except (ValueError, TypeError, KeyError):
             return dict(
                 status=status, states=0, transitions=0, max_overrun=0.0, max_balance_error=0.0
@@ -59,7 +66,12 @@ def audit_run(path):
         raise AssertionError("invalid_parameter record has valid configuration")
     c = Config(**cfg)
     c.validate()
-    assert c.model_version == meta["version"] and c.model_version in {"0.1.2", "0.1.3", "0.1.4"}
+    assert c.model_version == meta["version"] and c.model_version in {
+        "0.1.2",
+        "0.1.3",
+        "0.1.4",
+        "0.1.5",
+    }
     required_outputs = {
         "status.json",
         "events.csv",
@@ -120,7 +132,7 @@ def audit_run(path):
     first_extinct = {}
     seen_ids = [set(), set()]
     assert [int(s["generation"]) for s in states] == list(range(len(states)))
-    if c.model_version in {"0.1.2", "0.1.3", "0.1.4"}:
+    if c.model_version in {"0.1.2", "0.1.3", "0.1.4", "0.1.5"}:
         first = states[0]
         for kind, name, stream in (
             ("plant", "initial_plant_cells", 0),
@@ -137,8 +149,11 @@ def audit_run(path):
             assert np.array_equal(first[kind + "_cells"], expected)
     for t, state in enumerate(states):
         pl, hl = state["plant_species"], state["insect_species"]
-        D, I, A, Vtrait = (state[k] for k in ("D", "I", "A", "plant_voc_independent_trait"))
-        for kind, keys in enumerate((("D", "plant_voc_independent_trait"), ("I", "A"))):
+        chemical = c.genetics["schema_version"] == "slim-qtl-2"
+        D, I, A = (state[k] for k in ("D", "I", "A"))
+        plant_key = "plant_chemical_traits" if chemical else "plant_voc_independent_trait"
+        Vtrait = state[plant_key]
+        for kind, keys in enumerate((("D", plant_key), ("I", "A"))):
             labels = pl if kind == 0 else hl
             ids = state["plant_ids"] if kind == 0 else state["insect_ids"]
             assert ids.shape == labels.shape and len(np.unique(ids)) == len(ids)
@@ -179,8 +194,19 @@ def audit_run(path):
         close(state["dmax"], dmax)
         close(p.R, R)
         close(ev.dmax, dmax)
-        B = np.array(meta["resolved_B"])
-        V = np.clip(c.rho_voc * (D @ B.T) + (1 - c.rho_voc) * Vtrait, *c.voc_bounds)
+        if chemical:
+            assert meta["chemical_schema"] == "shared-chemical-1"
+            assert meta["plant_trait_order"] == ["x_N", "x_S", "x_V"]
+            assert meta["plant_defense_order"] == ["D_N", "D_S"]
+            assert meta["odor_trait_order"] == ["V_S", "V_V"]
+            assert meta["chemical_observation_window"] == c.feeding_window
+            assert Vtrait.shape == (len(pl), 3)
+            close(D, Vtrait[:, :2])
+            V = np.column_stack((c.eta_shared * Vtrait[:, 1], Vtrait[:, 2]))
+            assert meta["resolved_B"] is None
+        else:
+            B = np.array(meta["resolved_B"])
+            V = np.clip(c.rho_voc * (D @ B.T) + (1 - c.rho_voc) * Vtrait, *c.voc_bounds)
         close(V, state["V_emit"])
         assert sorted(map(tuple, state["V_cue"])) == sorted(map(tuple, V))
         if not c.shuffle_voc:
@@ -224,9 +250,10 @@ def audit_run(path):
             overrun = max(overrun, float(np.maximum(0, X - R).max()))
             balance = max(balance, float((np.abs(X - np.minimum(T, R)) / R).max()))
         close(p.defense_cost, c.plant_cost * D.sum(axis=1))
-        close(p.voc_cost, c.voc_cost * V.mean(axis=1))
+        volatile_cost = c.voc_cost * (Vtrait[:, 2] if chemical else V.mean(axis=1))
+        close(p.voc_cost, volatile_cost)
         Sp = c.sP0 + (1 - c.sP0) * (1 - X / R)
-        Fp = np.maximum(0, 1 - c.plant_cost * D.sum(axis=1) - c.voc_cost * V.mean(axis=1))
+        Fp = np.maximum(0, 1 - c.plant_cost * D.sum(axis=1) - volatile_cost)
         Si = ev.g.to_numpy()
         Fi = np.maximum(0, 1 - c.insect_cost * I.sum(axis=1))
         close(p.W_plant, Sp * Fp)
@@ -287,9 +314,10 @@ def audit_run(path):
             maternal_role = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0
             mother = valid & maternal_role
             assert np.array_equal(flags(par.is_maternal_role), maternal_role)
-            donor = (
-                valid & (F > 0) & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1)
-            )
+            donor = valid & (np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1)
+            if c.model_version in {"0.1.2", "0.1.3", "0.1.4"}:
+                # Reconstruct historical records using their original paternal gate.
+                donor &= F > 0
             radius = c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
             pools = []
             for i in range(len(ids)):
@@ -439,7 +467,7 @@ def audit_run(path):
             else:
                 # Runtime memory/sampler errors are recorded, not independently reproducible proofs.
                 assert meta["status"].get("message")
-    if c.model_version in {"0.1.2", "0.1.3", "0.1.4"}:
+    if c.model_version in {"0.1.2", "0.1.3", "0.1.4", "0.1.5"}:
         audit_extensions(path, c, meta, states, tables)
     return dict(
         status=status,
@@ -547,11 +575,15 @@ def audit_extensions(path, c, meta, states, tables):
     if not c.record_observations:
         return
     diagnostics = pd.read_csv(path / "diagnostics.csv", float_precision="round_trip")
-    D = np.asarray(founders["D"], float)
-    Z = np.asarray(founders["plant_voc_independent_trait"], float)
-    V = np.clip(
-        c.rho_voc * (D @ np.asarray(meta["resolved_B"]).T) + (1 - c.rho_voc) * Z, *c.voc_bounds
-    )
+    if c.genetics["schema_version"] == "slim-qtl-2":
+        X = np.asarray(founders["plant_chemical_traits"], float)
+        D, V = X[:, :2], np.column_stack((c.eta_shared * X[:, 1], X[:, 2]))
+    else:
+        D = np.asarray(founders["D"], float)
+        Z = np.asarray(founders["plant_voc_independent_trait"], float)
+        V = np.clip(
+            c.rho_voc * (D @ np.asarray(meta["resolved_B"]).T) + (1 - c.rho_voc) * Z, *c.voc_bounds
+        )
     weights = np.asarray(meta["resolved_weights"])
     expected_rows = 0
     for state in states:

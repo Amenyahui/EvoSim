@@ -13,6 +13,7 @@ state:
       - species
       - defense
       - voc_trait
+      - chemical_traits
       - cells
       - genotypes
     insects:

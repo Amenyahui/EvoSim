@@ -77,7 +77,8 @@ def test_fertilization_mutation_and_phenotype():
     genetic = GeneticState(c)
     before = copy.deepcopy(genetic.alleles)
     result = genetic.fertilize(g, np.array([0, 0]), np.array([0, 1]), [0], [1], "plant", 2, 1)[0]
-    assert len(genetic.events) == 16 and len({e["allele_id"] for e in genetic.events}) == 16
+    assert len(genetic.events) == 2 * len(genetic.loci["plant"])
+    assert len({e["allele_id"] for e in genetic.events}) == len(genetic.events)
     assert genetic.alleles[: len(before)] == before
     values, raw = genetic.phenotype(result["plant_genotypes"], "plant")
     expected = np.array(c.genetics["background"]["plant"]) + sum(
@@ -99,7 +100,7 @@ def test_per_offspring_mutation_probability():
         g, np.array([0, 0]), np.array([0, 1]), np.zeros(n, int), np.ones(n, int), "plant", 2, 1
     )
     observed = np.mean([r["mutations_maternal"] + r["mutations_paternal"] > 0 for r in result[3]])
-    expected = 1 - 0.99**16
+    expected = 1 - 0.99 ** (2 * len(genetic.loci["plant"]))
     assert abs(observed - expected) < 6 * np.sqrt(expected * (1 - expected) / n)
     print(f"QTL mutation probability: N={n}, observed={observed:.6f}, expected={expected:.6f}")
     increments = np.array(

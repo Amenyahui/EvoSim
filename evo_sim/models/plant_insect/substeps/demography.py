@@ -16,10 +16,10 @@ class SampleMaternallyProducedOffspring(SubstepAction):
         pop = community.plants if k == 0 else community.insects
         labels, ids = pop.species, pop.ids
         S = runtime.e["S_" + kind]
-        F = runtime.e["fp" if k == 0 else "fi"]
+        F_m = runtime.e["fp" if k == 0 else "fi"]
         lam = (runtime.lp if k == 0 else runtime.li)[labels]
         phi = runtime.plant_phi if k == 0 else np.ones(len(labels))
-        mu = lam * F * phi
+        mu = lam * F_m * phi
         if not np.isfinite(mu).all():
             raise ComputationalLimit("nonfinite offspring mean")
         valid = np.ones(len(labels), bool) if k == 0 else runtime.e["host"] >= 0
@@ -28,7 +28,8 @@ class SampleMaternallyProducedOffspring(SubstepAction):
             cells[valid] = community.plants.cells[runtime.e["host"][valid]]
         maternal_role = np.ones(len(labels), bool) if k == 0 else pop.sex == 0
         mother = valid & maternal_role
-        donor = valid & (F > 0) & (np.ones(len(labels), bool) if k == 0 else pop.sex == 1)
+        # Maternal output cost does not define pollen/sperm fertility.
+        donor = valid & (np.ones(len(labels), bool) if k == 0 else pop.sex == 1)
         radius = runtime.c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
         potential = mating_candidates(
             labels, cells, donor, mother, radius, runtime.c.spatial["grid_shape"]
@@ -66,8 +67,8 @@ class SampleMaternallyProducedOffspring(SubstepAction):
                     else ("female" if pop.sex[i] == 0 else "male"),
                     is_maternal_role=bool(maternal_role[i]),
                     S_i=S[i],
-                    F_i=F[i],
-                    W_i=S[i] * F[i],
+                    F_i=F_m[i],  # Stable field name for the maternal multiplier.
+                    W_i=S[i] * F_m[i],
                     phi_i=phi[i],
                     lambda_s=lam[i],
                     conditional_mu=mu[i],

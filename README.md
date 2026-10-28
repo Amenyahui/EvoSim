@@ -1,4 +1,4 @@
-# evoSim 0.1.4
+# evoSim 0.1.5
 
 植物—植食性昆虫的个体基（agent-based）共进化模拟器。每一代中，昆虫在周期空间栅格里局部遇见植物、按气味线索选择寄主、共享取食资源，植物与昆虫再经历存活、密度依赖繁殖、QTL 遗传、突变与扩散，提交下一代；可连续运行数百代，观察种群动态与性状的演化响应。
 
@@ -9,7 +9,7 @@
 - **不是深度学习框架**：代码组织参考 AgentTorch 风格（Runner / Controller / Registry，组件实现 `forward()`），但没有 PyTorch 后端，不提供 GPU、自动求导或参数校准。
 - **参数为理论示例**：所有数值配置均标注 illustrative，不是实测标定；模拟输出不能作为校准数据。
 
-v0.1.4 增加双方跨时间功能评估、双亲性状贡献差异、寄主关系与网络边持续性分析；设计参数放在独立 YAML。使用方法和边界见 [v0.1.4 说明](README_v0.1.4.md)。v0.1.3 已在 IBM 中实际接入 SLiM，替换自写配子形成和重组，QTL 突变在 Eidos 中按项目规则定义。YAML/CSV、生态和贡献账本继续衔接；使用 `slim-qtl-1` 协议。安装、职责分工、数学映射、验证范围与理论出处见 [v0.1.3 说明](README_v0.1.3.md)。物种边界仍固定，成本角色和生活史问题不因采用 SLiM 自动解决。
+v0.1.5 已按指导文件加入三维植物化学模块：D=(x_N,x_S)、V=(eta*x_S,x_V)，共享模块基本成本仅计一次。遗传协议升级为 slim-qtl-2（植物3维/昆虫4维），SLiM执行器仍为5.2；迁移与验证见 [化学功能实施记录](docs/plan/v0.1.5_chemical_shared_function.md)。本版同时明确 F_m 仅折减母源产出，删除父本资格中的母源成本门槛；保持原存活、空间、有性遗传与成本函数。理论审查、公式对照和验收见 [繁殖审查](docs/plan/v0.1.5_reproduction.md)。v0.1.4 增加的双方跨时间功能评估、双亲性状贡献差异、寄主关系与网络边持续性分析；设计参数放在独立 YAML。使用方法和边界见 [v0.1.4 说明](README_v0.1.4.md)。v0.1.3 已在 IBM 中实际接入 SLiM，替换自写配子形成和重组，QTL 突变在 Eidos 中按项目规则定义。YAML/CSV、生态和贡献账本继续衔接；历史使用 `slim-qtl-1`，当前为 `slim-qtl-2`。安装、职责分工、数学映射、验证范围与理论出处见 [v0.1.3 说明](README_v0.1.3.md)。物种边界仍固定，成本角色和生活史问题不因采用 SLiM 自动解决。
 
 ## 快速上手
 
@@ -24,27 +24,27 @@ python -m pip install -e .
 python example.py
 
 # 3. 小规模批次：2 代、独立遗传/无新突变，各两个重复
-python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v014_example
+python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v015_example
 ```
 
-省略 `--out` 时输出到 `results/results_v0.1.4/run<N>` 的下一个空闲编号；显式输出目录必须不存在，已有结果不会覆盖。
+省略 `--out` 时输出到 `results/results_v0.1.5/run<N>` 的下一个空闲编号；显式输出目录必须不存在，已有结果不会覆盖。
 
 实验跑完后，建议依次做独立审计和汇总作图：
 
 ```powershell
 # 4. 独立重建取食/人口/遗传账本，核对数值一致性（不依赖运行时函数）
-python -m evo_sim.models.plant_insect.audit --input results/v014_example
+python -m evo_sim.models.plant_insect.audit --input results/v015_example
 
 # 5. 汇总逐代人口/性状/等位基因
-python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input results/v014_example
+python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input results/v015_example
 
-python -m evo_sim.models.plant_insect.analysis.summarize_coevolution --input results/v014_example
+python -m evo_sim.models.plant_insect.analysis.summarize_coevolution --input results/v015_example
 
 # 6. 生成已有诊断图（PNG + PDF）
-python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input results/v014_example
+python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input results/v015_example
 
 # 7. 本版小规模因果对照：20 次运行，逐次独立审计
-python -m evo_sim.models.plant_insect.analysis.check_causal_chain --out results/v014_causal_example
+python -m evo_sim.models.plant_insect.analysis.check_causal_chain --out results/v015_causal_example
 ```
 
 v0.1.0、v0.1.1 及 v0.1.2 的结果属于历史版本，不属于本版验证。历史结果应使用生成它们时的代码审计；不改旧元数据以通过新审计。小规模因果检查只验证规则与对照设计，不证明专化、共存或共同演化。
@@ -126,6 +126,8 @@ evoSim/
 | 文档 | 内容 |
 | --- | --- |
 | [docs/model.md](docs/model.md) | 论文式模型说明：ODD、全部参数、理论公式（F01–F16 + QTL）与参考文献 |
+| [docs/plan/v0.1.5_chemical_shared_function.md](docs/plan/v0.1.5_chemical_shared_function.md) | 三模块化学规则、协议和CSV迁移、手算例及验收 |
+| [docs/plan/v0.1.5_reproduction.md](docs/plan/v0.1.5_reproduction.md) | 繁殖理论审查、母源限定成本、父本池与双亲贡献、测试记录 |
 | [docs/methods.md](docs/methods.md) | 当前材料与方法，含 SLiM 执行和 v0.1.4 功能观察 |
 | [docs/assumptions.md](docs/assumptions.md) | 全部建模假设与边界（生态/取食/嗅觉/空间/遗传/标定验证），逐条标注类别 |
 | [docs/parameters.md](docs/parameters.md) | YAML 通用参数、CSV 列说明、输入路径与实验覆盖规则 |
@@ -137,6 +139,6 @@ evoSim/
 | [docs/results.md](docs/results.md) | 输出内容、指标定义与 `results/results_v<版本>/run<N>` 目录文件契约 |
 | [docs/architecture.md](docs/architecture.md) | AgentTorch 风格框架的组件对应关系与每代调度顺序 |
 
-默认生态数值沿用 v0.1.1 的探索性配置，历史修改见 [修正说明](README_v0.1.1.md)。本次未按预期演化方向调参；六次历史 200 代运行已完成新分析，未重跑演化过程。验证记录见 [v0.1.4 说明](README_v0.1.4.md)。
+默认生态数值沿用 v0.1.1 的探索性配置，历史修改见 [修正说明](README_v0.1.1.md)。本次未按预期演化方向调参；v0.1.5 只开展正确性及边界验收，不执行长期演化或结果分析。历史 200 代重分析属于 [v0.1.4](README_v0.1.4.md)，不构成本版实验。
 
 代码格式、目录职责与检查命令见 [开发约定](CONTRIBUTING.md)。

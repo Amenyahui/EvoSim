@@ -127,13 +127,13 @@ def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_poo
     return result
 
 
-def settle_feeding(D, I, p_labels, h_labels, V_emit, host, c, capacity, dmax):
+def settle_feeding(D, I, p_labels, h_labels, V_emit, host, c, capacity, dmax, chemical=None):
     """Fitness uses the same x ledger on both sides; species only annotate competition."""
     found = host >= 0
     q = np.full(len(I), np.nan)
     q[found] = traits.consumption(D[host[found]], I[found])
     allocation = allocate_resources(host, q, capacity, dmax)
-    fp, defense_cost, voc_cost = voc.fecundity(D, V_emit, c)
+    fp, defense_cost, voc_cost = voc.fecundity(D, V_emit, c, chemical)
     fi = np.maximum(0, 1 - c.insect_cost * I.sum(axis=1))
     wp = (c.sP0 + (1 - c.sP0) * (1 - allocation["h"])) * fp
     wi = np.zeros(len(I))

@@ -13,7 +13,8 @@ def audit_genetics(path, c, meta):
     mapping = spec["phenotype_map"]
     lower, upper = mapping["bounds"]
     assert meta["genetics_version"] == spec["schema_version"]
-    slim = spec["schema_version"] == "slim-qtl-1"
+    slim = spec["schema_version"] in {"slim-qtl-1", "slim-qtl-2"}
+    chemical = spec["schema_version"] == "slim-qtl-2"
     calls = {}
     if slim:
         for call in meta["slim_calls"]:
@@ -41,8 +42,8 @@ def audit_genetics(path, c, meta):
             assert (json.loads(actual[key]) if isinstance(value, list) else actual[key]) == value
     alleles = pd.read_csv(path / "allele_catalog.csv", float_precision="round_trip")
     assert alleles.allele_id.tolist() == list(range(len(alleles)))
-    effects = np.array([json.loads(x) for x in alleles.effect])
-    assert np.isfinite(effects).all()
+    effects = [np.asarray(json.loads(x), float) for x in alleles.effect]
+    assert all(np.isfinite(x).all() for x in effects)
     keys = alleles.locus_id.tolist()
     founder_count = len(spec["alleles"])
     for i, a in enumerate(spec["alleles"]):
@@ -78,8 +79,8 @@ def audit_genetics(path, c, meta):
             )
     for i, key in enumerate(keys):
         assert key in by_locus
-        other = list(set(range(effects.shape[1])) - set(by_locus[key]["targets"]))
-        assert np.all(effects[i, other] == 0)
+        other = list(set(range(len(effects[i]))) - set(by_locus[key]["targets"]))
+        assert np.all(effects[i][other] == 0)
     transmissions = pd.read_csv(path / "gamete_transmissions.csv", float_precision="round_trip")
     transmission_groups = transmissions.groupby(["generation", "kind"], sort=False).indices
     assert sum(map(len, transmission_groups.values())) == len(transmissions)
@@ -107,21 +108,38 @@ def audit_genetics(path, c, meta):
                     ("insect", c.insect_sizes, ("I", "A")),
                 )
             ):
+                if chemical and kind == "plant":
+                    names = ("plant_chemical_traits",)
+                width = len(spec["background"][kind])
+                own_effects = np.zeros((len(effects), width))
+                for a, key in enumerate(keys):
+                    if by_locus[key]["organism"] == kind:
+                        assert effects[a].shape == (width,)
+                        own_effects[a] = effects[a]
                 g = state[kind + "_genotypes"]
                 ids, labels = state[kind + "_ids"], state[kind + "_species"]
                 local = [x for x in spec["loci"] if x["organism"] == kind]
                 assert g.shape == (len(ids), 2, len(local)) and g.dtype.kind in "iu"
                 assert ((g >= 0) & (g < len(alleles))).all()
                 raw = np.broadcast_to(
-                    np.asarray(spec["background"][kind], float), (len(ids), effects.shape[1])
+                    np.asarray(spec["background"][kind], float), (len(ids), width)
                 ).copy()
                 for l, locus in enumerate(local):
                     for h in range(2):
                         assert all(keys[int(a)] == locus["locus_id"] for a in g[:, h, l])
                         assert np.all(alleles.birth_generation.to_numpy()[g[:, h, l]] <= t)
-                        raw += effects[g[:, h, l]] * mapping["effect_scale"]
+                        raw += own_effects[g[:, h, l]] * mapping["effect_scale"]
                 derived = np.clip(raw, lower, upper)
-                for name, values in zip(names, (derived[:, : c.n], derived[:, c.n :])):
+                components = (
+                    (derived,)
+                    if chemical and kind == "plant"
+                    else (derived[:, : c.n], derived[:, c.n :])
+                )
+                if chemical and kind == "plant":
+                    np.testing.assert_allclose(state["D"], derived[:, :2], rtol=1e-12, atol=1e-14)
+                    expected_p.add(f"g{t:06d}_D")
+                    np.testing.assert_array_equal(exported_p[f"g{t:06d}_D"], state["D"])
+                for name, values in zip(names, components):
                     np.testing.assert_allclose(values, state[name], rtol=1e-12, atol=1e-14)
                     key = f"g{t:06d}_{name}"
                     expected_p.add(key)

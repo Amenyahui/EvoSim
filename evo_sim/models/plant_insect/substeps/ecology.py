@@ -5,8 +5,8 @@ import numpy as np
 
 from evo_sim.core.substep import SubstepAction, SubstepObservation, SubstepTransition
 
+from ..helpers import chemistry, spatial
 from ..helpers import ecology as shared
-from ..helpers import spatial, voc
 from ..helpers.demography import density_phi
 from ..helpers.observations import standardized
 from ..helpers.runtime import community_state, mean_or_na, resource_vector
@@ -37,8 +37,8 @@ class ObserveCues(SubstepObservation):
             )
         )
         D = community.plants.defense
-        V_emit = voc.map_voc(
-            D, community.plants.voc_trait, runtime.B, runtime.c.rho_voc, runtime.c.voc_bounds
+        V_emit = chemistry.plant_voc(
+            D, community.plants.voc_trait, runtime.c, runtime.B, community.plants.chemical_traits
         )
         V_cue = (
             V_emit[runtime.rng[1][0][0].permutation(len(D))]
@@ -92,6 +92,7 @@ class SettleFeeding(SubstepTransition):
             c,
             capacity,
             dmax,
+            chemical=community.plants.chemical_traits,
         )
         e["wi"] = e["g"] * e["fi"]
         e.update(

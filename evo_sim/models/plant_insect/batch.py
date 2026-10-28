@@ -86,7 +86,7 @@ def save_result(result, out):
                     for suffix in ("_genotypes", "_ids", "_species")
                 }:
                     genotypes[prefix + key] = value
-                if key in ("D", "I", "A", "plant_voc_independent_trait"):
+                if key in ("D", "I", "A", "plant_voc_independent_trait", "plant_chemical_traits"):
                     phenotypes[prefix + key] = value
         np.savez_compressed(out / "genotypes.npz", **genotypes)
         np.savez_compressed(out / "phenotypes.npz", **phenotypes)
