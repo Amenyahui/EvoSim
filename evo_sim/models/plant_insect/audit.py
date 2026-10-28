@@ -64,6 +64,10 @@ def audit_run(path):
                 status=status, states=0, transitions=0, max_overrun=0.0, max_balance_error=0.0
             )
         raise AssertionError("invalid_parameter record has valid configuration")
+    if meta["version"] == "0.1.6":
+        from .audit_v016 import audit_run_v016
+
+        return audit_run_v016(path, meta)
     c = Config(**cfg)
     c.validate()
     assert c.model_version == meta["version"] and c.model_version in {

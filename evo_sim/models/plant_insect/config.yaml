@@ -2,7 +2,7 @@ simulation_metadata:
   device: cpu
   calibration: false
   num_steps_per_episode: 3
-  num_substeps_per_step: 3
+  num_substeps_per_step: 1
 state:
   initialization_function:
     generator: initialize_community
@@ -25,86 +25,16 @@ state:
       - sex
       - cells
       - genotypes
+      - birth_host_id
+      - birth_host_species
+      - adult_cohort
 substeps:
   '0':
-    name: host_choice_and_feeding
-    active_agents:
-    - insects
-    observation:
-      insects:
-        cues:
-          generator: observe_cues
-          input_variables:
-            runtime: environment/runtime
-            agents: agents
-          output_variables:
-          - V_emit
-          - V_cue
-          arguments:
-            fixed: {}
-    policy:
-      insects:
-        choose:
-          generator: choose_hosts
-          input_variables:
-            runtime: environment/runtime
-            agents: agents
-          output_variables:
-          - host_choice
-          arguments:
-            fixed: {}
-    transition:
-      feeding:
-        generator: settle_feeding
-        input_variables:
-          runtime: environment/runtime
-          agents: agents
-        output_variables: []
-        arguments:
-          fixed: {}
-  '1':
-    name: survival_and_fecundity
-    active_agents:
-    - plants
-    - insects
-    policy:
-      plants:
-        reproduce:
-          generator: sample_maternal_offspring
-          input_variables:
-            runtime: environment/runtime
-            agents: agents
-          output_variables:
-          - offspring
-          arguments:
-            fixed:
-              taxon: 0
-      insects:
-        reproduce:
-          generator: sample_maternal_offspring
-          input_variables:
-            runtime: environment/runtime
-            agents: agents
-          output_variables:
-          - offspring
-          arguments:
-            fixed:
-              taxon: 1
-    transition:
-      collect:
-        generator: collect_offspring
-        input_variables:
-          runtime: environment/runtime
-          agents: agents
-        output_variables: []
-        arguments:
-          fixed: {}
-  '2':
-    name: inheritance_and_dispersal
+    name: adult_oviposition_larval_recruitment
     active_agents: []
     transition:
-      inherit:
-        generator: cross_fertilize_and_disperse
+      advance:
+        generator: advance_generation
         input_variables:
           runtime: environment/runtime
           agents: agents

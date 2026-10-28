@@ -190,7 +190,14 @@ def contribution_checks(result):
                 "realized contribution mismatch",
             )
             total += contribution
-        require(total == len(offspring) == pop["N_next"], "contribution sum mismatch")
+        require(total == len(offspring) == pop["N_offspring"], "birth contribution sum mismatch")
+        recruits = [x for x in offspring if x["survived_to_adult"]]
+        require(
+            sum(x["realized_recruitment_contribution"] for x in parents)
+            == len(recruits)
+            == pop["N_next"],
+            "recruitment contribution sum mismatch",
+        )
         checks.append(
             dict(
                 generation=t,
@@ -230,9 +237,24 @@ def focal_outcomes(result, kind):
         id_field = "plant_id" if kind == "plant" else "insect_id"
         by_id = {x[id_field]: x for x in ecological if x["generation"] == 0}
         ecology_fields = ("h", "X") if kind == "plant" else ("x", "g", "q", "candidate_count")
-        ecology = {
-            field: [by_id[x["individual_id"]][field] for x in parents] for field in ecology_fields
-        }
+        if kind == "insect":
+            # Maternal outcomes summarize her offspring; adults do not feed again.
+            ecology = {}
+            for field in ecology_fields:
+                ecology[field] = []
+                for parent in parents:
+                    larvae = [
+                        x
+                        for x in ecological
+                        if x["generation"] == 0 and x["maternal_id"] == parent["individual_id"]
+                    ]
+                    values = [x[field] for x in larvae]
+                    ecology[field].append(float(np.mean(values)) if values else np.nan)
+        else:
+            ecology = {
+                field: [by_id[x["individual_id"]][field] for x in parents]
+                for field in ecology_fields
+            }
         rows.append(
             dict(
                 species=species,

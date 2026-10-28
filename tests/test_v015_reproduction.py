@@ -144,12 +144,12 @@ def test_v015_native_zero_multiplier_fathers_and_contribution_audit():
             if kind == "insect":
                 assert parents[child["maternal_id"]]["sex_or_reproductive_role"] == "female"
                 assert parents[child["paternal_id"]]["sex_or_reproductive_role"] == "male"
-        start, end = result["snapshots"]
+        start = result["snapshots"][0]
         start_lookup = {int(i): row for row, i in enumerate(start[f"{kind}_ids"])}
         for row, child in enumerate(offspring):
             for copy, role in enumerate(("maternal_id", "paternal_id")):
                 source = start[f"{kind}_genotypes"][start_lookup[child[role]]]
-                for locus, allele in enumerate(end[f"{kind}_genotypes"][row, copy]):
+                for locus, allele in enumerate(json.loads(child["genotype"])[copy]):
                     assert allele in source[:, locus]
         with TemporaryDirectory() as tmp:
             folder = Path(tmp) / kind

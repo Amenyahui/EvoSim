@@ -49,6 +49,10 @@ class Batch:
     def open(cls, batch):
         """Load and check shared batch metadata once; create only the summary directory."""
         path = Path(batch)
+        if (path / "settings.json").exists() and read_settings(path).get("version") == "0.1.6":
+            raise ValueError(
+                "Legacy summaries assume self-feeding parents; v0.1.6 uses larvae. Read the stage-specific raw ledgers or summarize_lifecycle instead."
+            )
         audit = read_audit(path)
         status = pd.read_csv(path / "data" / "run_status.csv")
         assert audit["runs"] == len(status)

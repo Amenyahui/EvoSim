@@ -12,7 +12,6 @@ from evo_sim.models.plant_insect.analysis.summarize_coevolution import (
     cross_assay,
     edge_histories,
     read_design,
-    summarize,
 )
 from evo_sim.models.plant_insect.audit import audit
 from evo_sim.models.plant_insect.batch import run
@@ -128,17 +127,18 @@ def test_v014_saved_batch_analysis_and_tamper_detection():
         )
         audit(path)
         raw = {p: sha256(p) for p in (path / "data" / "check").rglob("*") if p.is_file()}
-        batch = Batch.open(path)
-        result = summarize(batch)
-        assert len(result["cross_assay"]) == 8  # 2 periods x 2 periods x 2 plant species.
-        frame = pd.DataFrame(result["contribution_differentials"])
-        terminal = frame[frame.generation == 1]
-        assert not terminal.contribution_committed.any()
-        assert terminal.realized_differential.isna().all()
+        # Historical analytical kernels above remain checked; their batch entry must
+        # reject the new lifecycle rather than treating mothers as feeding larvae.
+        raises(lambda: Batch.open(path))
+        from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
+            summarize as lifecycle_summary,
+        )
+
+        result = lifecycle_summary(path)
+        counts = result["lifecycle_counts"]
+        assert (counts.N_offspring >= counts.N_next).all()
         assert {p: sha256(p) for p in raw} == raw
-        saved = pd.read_csv(batch.summary_dir / "host_relations.csv")
-        assert saved.plant_abundance.notna().all() and saved.insect_abundance.notna().all()
-        assert (batch.summary_dir / "coevolution_metadata.json").is_file()
+        assert (path / "data/summary/host_background_flows.csv").is_file()
         events = path / "data/check/rep01/events.csv"
         events.write_bytes(events.read_bytes() + b"\n")
-        raises(lambda: summarize(batch))
+        raises(lambda: lifecycle_summary(path), AssertionError)

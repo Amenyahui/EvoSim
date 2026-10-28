@@ -66,8 +66,8 @@ def test_terminal_and_atomic_failure():
     original = GeneticState.fertilize
 
     def fail_second(self, *args, **kwargs):
-        if args[5] == "insect":
-            raise MemoryError("injected failure after plant gametes")
+        if args[5] == "plant":
+            raise MemoryError("injected failure after insect gametes and larval settlement")
         return original(self, *args, **kwargs)
 
     with patch.object(GeneticState, "fertilize", fail_second):

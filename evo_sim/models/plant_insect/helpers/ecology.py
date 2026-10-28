@@ -19,11 +19,11 @@ def allocate_resources(host, q, capacity, dmax):
         raise ValueError("host must be integer vector; q/dmax match it; capacity is a plant vector")
     if (
         not np.isfinite(capacity).all()
-        or (capacity <= 0).any()
+        or (capacity < 0).any()
         or not np.isfinite(dmax).all()
         or (dmax <= 0).any()
     ):
-        raise ValueError("resource and demand units must be positive and finite")
+        raise ValueError("resource must be nonnegative; demand must be positive; both finite")
     if ((host < -1) | (host >= len(capacity))).any():
         raise ValueError("host indices outside [-1,n_plants)")
     found = host >= 0
@@ -67,7 +67,9 @@ def allocate_resources(host, q, capacity, dmax):
         total_demand=total,
         gamma=gamma,
         X=consumed,
-        h=consumed / capacity,
+        h=np.divide(
+            consumed, capacity, out=np.zeros_like(consumed, dtype=float), where=capacity > 0
+        ),
         herbivore_load=load,
         resource_limited=limited,
         resource_exhausted=(consumed >= capacity * (1 - 1e-12)),

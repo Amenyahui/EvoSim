@@ -3,10 +3,10 @@ extends: model_parameters.yaml
 simulation_metadata:
   num_steps_per_episode: 2
 parameters:
-  model_version: 0.1.5
-  insect_life_history: self_feeding_pre_reproductive
-  feeding_window: one_generation_pre_reproductive_feeding
-  demand_window: one_generation_pre_reproductive_feeding
+  model_version: 0.1.6
+  insect_life_history: adult_oviposition_larval_feeding
+  feeding_window: one_generation_larval_feeding
+  demand_window: one_generation_larval_feeding
   seed: 20261025
   plant_sizes: [20, 20]
   insect_sizes: [24]

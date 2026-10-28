@@ -12,6 +12,7 @@ from .helpers.inputs import read_config
 from .helpers.runtime import fail, finalize, initialize_community
 from .substeps.demography import CollectOffspring, SampleMaternallyProducedOffspring
 from .substeps.ecology import ChooseHosts, ObserveCues, SettleFeeding
+from .substeps.lifecycle import AdvanceGeneration
 from .substeps.reproduction import CrossFertilizeAndDisperse
 
 MODEL_DIR = Path(__file__).resolve().parent
@@ -21,6 +22,7 @@ def get_registry():
     registry = Registry()
     for function, name, category in (
         (initialize_community, "initialize_community", "initialization"),
+        (AdvanceGeneration, "advance_generation", "transition"),
         (ObserveCues, "observe_cues", "observation"),
         (ChooseHosts, "choose_hosts", "policy"),
         (SettleFeeding, "settle_feeding", "transition"),
@@ -50,7 +52,7 @@ class PlantInsectRunner(Runner):
         remaining = max(0, total - self.state["current_step"])
         try:
             super().step(remaining if num_steps is None else min(num_steps, remaining))
-            # The terminal generation records ecology/moments without another birth draw.
+            # The terminal generation records adults/plants and reference observations only.
             if self.state["current_step"] >= total and not self.state["terminated"]:
                 super().step(1)
         except (ComputationalLimit, MemoryError, ArithmeticError, ValueError) as error:
@@ -65,6 +67,18 @@ def get_runner(config_path=None, *, config=None):
         raise ValueError("Provide config or config_path, not both")
     if config is None:
         config = read_config(config_path or MODEL_DIR / "configs/sexual_qtl_development.yaml")
+    if config["parameters"].get("model_version") == "0.1.6":
+        steps = list(config["substeps"].values())
+        transitions = list(steps[0].get("transition", {}).values()) if len(steps) == 1 else []
+        if (
+            len(steps) != 1
+            or steps[0]["active_agents"]
+            or steps[0].get("observation")
+            or steps[0].get("policy")
+            or len(transitions) != 1
+            or transitions[0]["generator"] != "advance_generation"
+        ):
+            raise ValueError("v0.1.6 requires the adult/larval advance_generation lifecycle")
     return PlantInsectRunner(config, get_registry())
 
 

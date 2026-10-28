@@ -67,6 +67,25 @@ def save_result(result, out):
             mutations="generation kind species offspring_id locus_id copy parent_allele_id allele_id delta mutation_stream",
             genetic_summary="generation kind species N record_type locus_id allele_id frequency observed_heterozygosity gene_diversity mutation_count trait mean variance clipped_fraction",
         )
+    if result.get("metadata", {}).get("version") == "0.1.6":
+        columns_by_table["allele_contributions"] += " stage"
+        columns_by_table["offspring"] += (
+            " reproduction_round adult_cohort survived_to_adult genotype"
+        )
+        columns_by_table["parents"] += (
+            " potential_egg_count recruited_count_as_mother recruited_count_sired realized_recruitment_contribution"
+        )
+        columns_by_table["networks"] = (
+            "generation reproduction_round adult_cohort insect_species plant_species N_accept Q_actual L_per_insect resource_share birth_count successful_recruits edge_semantics contribution_committed"
+        )
+        columns_by_table.update(
+            oviposition="event_id offspring_id reproduction_round adult_cohort maternal_id egg_index host_id plant_species accepted reason candidate_count candidate_plant_ids choice_order",
+            larvae=COLUMNS["events"]
+            + " reproduction_round adult_cohort maternal_id paternal_id birth_host_id birth_host_species survived_to_adult insect_life_stage",
+            host_groups="generation insect_species birth_host_species N status",
+            host_flows="reproduction_round adult_cohort insect_species stage source_host_species destination_host_species genetic_contribution",
+            lagged_networks="reproduction_round adult_cohort insect_species plant_species maternal_offspring paternal_offspring genetic_contribution recruitment_contribution edge_semantics",
+        )
     for name, columns in columns_by_table.items():
         table = pd.DataFrame(result.get(name, []))
         if table.empty:

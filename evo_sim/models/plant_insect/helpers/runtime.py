@@ -147,6 +147,11 @@ def initialize_community(config, initial=None):
         networks=[],
         snapshots=[],
         allele_contributions=[],
+        oviposition=[],
+        larvae=[],
+        host_flows=[],
+        host_groups=[],
+        lagged_networks=[],
     )
     if runtime.observe:
         runtime.result["diagnostics"] = []
@@ -203,7 +208,17 @@ def initialize_community(config, initial=None):
                 genotypes=gp,
                 chemical_traits=pvalues.get("plant_chemical_traits"),
             ),
-            InsectPopulation(np.arange(len(hl)), hl, I, A, genotypes=gh, sex=sex),
+            InsectPopulation(
+                np.arange(len(hl)),
+                hl,
+                I,
+                A,
+                genotypes=gh,
+                sex=sex,
+                birth_host_id=np.full(len(hl), -1, dtype=np.int64),
+                birth_host_species=np.full(len(hl), -1, dtype=int),
+                adult_cohort=np.zeros(len(hl), dtype=int),
+            ),
         )
         if runtime.c.spatial is not None:
             community.plants.cells, community.insects.cells = spatial.initial_positions(
@@ -257,8 +272,9 @@ def finalize(state):
         python=platform.python_version(),
         numpy=np.__version__,
         pandas=pd.__version__,
-        snapshot_semantics="t=0 initial; each transition t to t+1 draws demography once; final t records ecology and conditional moments without drawing offspring",
-        count_semantics="N_next is null when transition is not committed; N_offspring retains all sampled counts at safety stop",
+        snapshot_semantics="t=0 founder adults/plants; round t births larvae and recruits adult cohort t+1; terminal t contains only adult/plant snapshot and fixed reference observations",
+        lifecycle_schema="adult-oviposition-larval-recruitment-1",
+        count_semantics="N_offspring counts all births; N_next counts surviving recruited adults (plants: all offspring); no actual event rows on terminal or failed transitions",
         resource_semantics="edible dry mass per newly recruited plant per feeding window, not regrowth or offspring biomass conservation",
     )
     runtime.result.update(runtime.genetic.records())
@@ -266,10 +282,14 @@ def finalize(state):
     payload = json.dumps(config_payload(runtime.c), sort_keys=True, separators=(",", ":"))
     runtime.result["metadata"].update(
         software_version=__version__,
-        contribution_semantics="parent generation t to offspring generation t+1; realized counts only on committed transitions; missing for observation-only or failed transitions",
-        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers F_m, not paternal fertility; W_i/W_insect/W_plant are S*F_m proxies, not total fitness; realized_genetic_contribution=(maternal+paternal offspring)/2",
-        maternal_expectation_semantics="all plants or all females, including zero expectation for no host/survival/mate; nonmaternal roles are missing; all-individual mean counts those roles as zero",
-        allele_contribution_semantics="per-species per-locus parent/offspring allele union; parental contribution includes stochastic reproduction; transmission includes segregation and mutation",
+        contribution_semantics="offspring_* and realized_genetic_contribution count all births; recruited_* and realized_recruitment_contribution count recruited adults; parents at round t; children adult_cohort t+1",
+        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers, not paternal fertility; parental W_i=stage S*F_m is a proxy; larval W_insect=g is survival only, never multiplied by larval F_m; W_plant=S_plant*F_m; realized_genetic_contribution=(maternal+paternal births)/2",
+        maternal_expectation_semantics="plants: conditional seed Poisson after survival/mate; insects: potential egg Poisson for females with adult mates, before oviposition rejection; no-mate females zero, males missing; no larval-survival or historical feeding factor in maternal egg expectation",
+        allele_contribution_semantics="stage=birth or recruitment; each uses its own parental role-count weights and observed child genotypes; recruitment transmission residual also includes larval viability selection",
+        insect_lambda_semantics="Poisson lambda_egg * maternal F_m(I_m); no past maternal feeding gain; retained numeric examples are not old-model demographic equivalents",
+        host_background_semantics="birth host species; founders unknown; directed parental source to child destination at half each nuclear role; not independent populations or effective migration",
+        network_semantics="networks: larval resource and successful recruitment; lagged_networks: parent birth-host actual reproductive contribution; host_groups: reversible ecological categories; offspring: biparental DAG, no candidate lineage/speciation",
+        genetic_summary_mutation_semantics="snapshot allele/trait summaries describe recruited adults/plants; mutation_count counts all births in the cohort, including dead larvae",
         reference_panel_semantics="reference_p/reference_q snapshot rows align with insect_ids; columns align with reference_plant_species; p is conditional choice without rejection",
         ecology_rule_version=runtime.c.model_version,
         genetics_version=runtime.c.genetics["schema_version"],
@@ -287,6 +307,6 @@ def finalize(state):
         inheritance="SLiM 5.2 native addCrossed; copy 0 maternal, copy 1 paternal; separate chromosomes; compressed marker boundary r=(1-exp(-2*distance_Morgan))/2",
         mutation_semantics="per transmitted abstract QTL copy; not per nucleotide",
         crossover_semantics="switch_before_locus records marker ancestry changes; crossover_count is missing because compressed intervals do not retain full crossover counts",
-        spatial_semantics="periodic Chebyshev distance; independent founder positions; maternal dispersal",
+        spatial_semantics="periodic Chebyshev distance; adult mating at current coordinates; eggs searched from mother coordinates; recruited insects disperse from birth host once; plants disperse from mother",
     )
     return runtime.result

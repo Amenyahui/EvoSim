@@ -34,36 +34,22 @@ def main():
     for case in spec["cases"]:
         for rep in range(1, spec["replicates"] + 1):
             folder = out / "data" / case["name"] / f"rep{rep:02d}"
-            p = pd.read_csv(folder / "parents.csv")
-            b = pd.read_csv(folder / "plants.csv")
-            e = pd.read_csv(folder / "events.csv")
-            plant = p[p.kind == "plant"]
-            insect = p[p.kind == "insect"]
+            with np.load(folder / "snapshots/g000000.npz") as snapshot:
+                plant_count = len(snapshot["plant_ids"])
+                insect_count = len(snapshot["insect_ids"])
+                total_resource = float(snapshot["R"].sum())
             rows.append(
                 dict(
                     case=case["name"],
                     replicate=rep,
-                    plants=len(plant),
-                    insects=len(insect),
-                    total_resource=b.R.sum(),
-                    maximum_demand=e.dmax.sum(),
-                    potential_demand=e.d.sum(),
-                    actual_resource=e.x.sum(),
-                    mean_plant_damage=b.h.mean(),
-                    mean_phi=plant.phi_i.mean(),
-                    mean_plant_expected_maternal_offspring=plant.expected_maternal_offspring.mean(),
-                    mean_plant_potential_maternal_mu_before_survival_and_mate_limitation=(
-                        plant.lambda_s * plant.F_i * plant.phi_i
-                    ).mean(),
-                    mean_insect_expected_maternal_offspring=insect.expected_maternal_offspring.mean()
-                    if len(insect)
-                    else np.nan,
-                    insect_maternal_role_count=int(
-                        insect.expected_maternal_offspring.notna().sum()
-                    ),
-                    mean_insect_expected_maternal_offspring_per_individual=insect.expected_maternal_offspring.fillna(
-                        0
-                    ).mean(),
+                    plants=plant_count,
+                    insects=insect_count,
+                    total_resource=total_resource,
+                    observation_stage="adult_plant_snapshot_no_larvae",
+                    mean_plant_damage=np.nan,
+                    mean_phi=np.nan,
+                    mean_plant_expected_maternal_offspring=np.nan,
+                    mean_plant_potential_maternal_mu_before_survival_and_mate_limitation=np.nan,
                 )
             )
     frame = pd.DataFrame(rows)

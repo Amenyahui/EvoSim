@@ -87,8 +87,8 @@ def validate(c, K):
         if settings["timeout_seconds"] <= 0:
             raise ValueError("SLiM timeout must be positive")
     chemical = g["schema_version"] == "slim-qtl-2"
-    if chemical and c.model_version != "0.1.5":
-        raise ValueError("slim-qtl-2 chemical coordinates require model_version=0.1.5")
+    if chemical and c.model_version not in {"0.1.5", "0.1.6"}:
+        raise ValueError("slim-qtl-2 chemical coordinates require model_version=0.1.5/0.1.6")
     if chemical != (c.mapping == "shared_chemical_modules"):
         raise ValueError("chemical mapping and genetic schema disagree")
     widths = {"plant": 3 if chemical else c.n + K, "insect": c.n + K}

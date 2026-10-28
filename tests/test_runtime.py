@@ -55,13 +55,22 @@ def test_lifecycle():
 def test_config_validation():
     config = get_runner().config
     broken = deepcopy(config)
-    broken["substeps"]["0"]["policy"]["insects"]["choose"]["generator"] = "missing"
+    broken["substeps"]["0"]["transition"]["advance"]["generator"] = "missing"
     try:
         get_runner(config=broken)
     except ValueError:
         pass
     else:
         raise AssertionError("Unregistered policy accepted")
+    # A registered historical phase must not execute under a v0.1.6 label.
+    broken = deepcopy(config)
+    broken["substeps"]["0"]["transition"]["advance"]["generator"] = "settle_feeding"
+    try:
+        get_runner(config=broken)
+    except ValueError as error:
+        assert "adult/larval" in str(error)
+    else:
+        raise AssertionError("Historical lifecycle accepted under v0.1.6")
     with TemporaryDirectory() as tmp:
         p = Path(tmp) / "cycle.yaml"
         p.write_text("extends: cycle.yaml")

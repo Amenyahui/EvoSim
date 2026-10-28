@@ -5,12 +5,16 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 
-def species_units(value, sizes, name):
+def species_units(value, sizes, name, allow_zero=False):
     values = np.asarray(value, dtype=float)
     if values.ndim == 0:
         values = np.full(len(sizes), float(values))
-    if values.shape != (len(sizes),) or not np.isfinite(values).all() or (values <= 0).any():
-        raise ValueError(f"{name} must be positive finite scalar or one value per species")
+    if (
+        values.shape != (len(sizes),)
+        or not np.isfinite(values).all()
+        or (values < 0 if allow_zero else values <= 0).any()
+    ):
+        raise ValueError(f"{name} must be finite and nonnegative (demand strictly positive)")
     expanded = np.repeat(values, sizes)
     with np.errstate(over="ignore"):
         total = expanded.sum()
@@ -26,11 +30,15 @@ def resource_values(value, sizes, prefix):
             raise ValueError(f"{prefix} resource mapping must contain exactly {names}")
         value = [value[name] for name in names]
     values = np.asarray(value)
-    if values.dtype.kind not in "iuf" or not np.isfinite(values).all() or (values <= 0).any():
+    if (
+        values.dtype.kind not in "iuf"
+        or not np.isfinite(values).all()
+        or (values < 0 if prefix == "P" else values <= 0).any()
+    ):
         raise ValueError(
-            "resource and demand must be positive finite numeric values, not strings/bools"
+            "resource must be nonnegative and demand positive finite numeric values, not strings/bools"
         )
-    species_units(value, sizes, prefix)
+    species_units(value, sizes, prefix, allow_zero=prefix == "P")
     return value
 
 
@@ -162,7 +170,9 @@ class _CommunityConfig(_VOCConfig):
             raise ValueError("insect_pop must equal sum(insect_sizes); omit it to derive the total")
         self.insect_pop = total
         B, w = super().validate()
-        species_units(self.resource_capacity, self.plant_sizes, "resource_capacity")
+        species_units(
+            self.resource_capacity, self.plant_sizes, "resource_capacity", allow_zero=True
+        )
         species_units(self.max_feeding_demand, self.insect_sizes, "max_feeding_demand")
         if self.unmatched_insect_fitness != 0:
             raise ValueError("unmatched insects must have zero ecological performance")
@@ -178,7 +188,10 @@ class _ResourceConfig(_CommunityConfig):
     demand_window: object
 
     def validate(self):
-        if self.insect_life_history != "self_feeding_pre_reproductive":
+        if self.insect_life_history not in {
+            "self_feeding_pre_reproductive",
+            "adult_oviposition_larval_feeding",
+        }:
             raise ValueError("explicit self_feeding_pre_reproductive life history required")
         if type(self.sI0) not in (int, float) or not np.isfinite(self.sI0) or self.sI0 != 0:
             raise ValueError("self-feeding insects require sI0=0; survival equals feeding gain")
@@ -282,10 +295,15 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5"}
+            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6"}
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
             raise ValueError("explicit supported model version and sexual generations required")
+        if (
+            self.model_version == "0.1.6"
+            and self.insect_life_history != "adult_oviposition_larval_feeding"
+        ):
+            raise ValueError("v0.1.6 requires adult oviposition followed by larval feeding")
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
         ):

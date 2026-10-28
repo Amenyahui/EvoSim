@@ -54,13 +54,13 @@ def test_joint_response_preserves_individual_associations():
     assert all(np.isnan(row["joint_pq"]) and row["insect_count"] == 0 for row in rows)
 
 
-def test_unmatched_female_is_zero_not_excluded_from_maternal_mean():
+def test_unmated_female_is_zero_not_excluded_from_potential_egg_mean():
     c = config(plant_sizes=[0, 0], insect_sizes=[8], generations=1)
     c.sexual_reproduction["insect_founder_female_probability"] = 1.0
     result = simulate(c)
     females = [r for r in result["parents"] if r["generation"] == 0]
     assert len(females) == 8
-    assert all(r["is_maternal_role"] and r["reason"] == "no_host" for r in females)
+    assert all(r["is_maternal_role"] and r["reason"] == "no_compatible_mate" for r in females)
     assert all(r["expected_maternal_offspring"] == 0 for r in females)
     assert all(r["maternal_offspring_variance"] == 0 for r in females)
     assert all(r["realized_genetic_contribution"] == 0 for r in females)
@@ -94,7 +94,7 @@ def test_contribution_audit_boundaries_and_tampering():
         )
         for table, column in (
             ("parents", "realized_genetic_contribution"),
-            ("networks", "genetic_contribution"),
+            ("networks", "successful_recruits"),
             ("allele_contributions", "p_parent_weighted"),
             ("diagnostics", "joint_pq"),
         ):
@@ -102,6 +102,7 @@ def test_contribution_audit_boundaries_and_tampering():
             original = file.read_bytes()
             metadata = json.loads((path / "metadata.json").read_text())
             frame = pd.read_csv(file)
+            frame[column] = frame[column].astype(float)
             frame.loc[0, column] += 0.25
             frame.to_csv(file, index=False)
             metadata["output_sha256"][file.name] = hashlib.sha256(file.read_bytes()).hexdigest()

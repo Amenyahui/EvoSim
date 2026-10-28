@@ -36,12 +36,12 @@ parameters:
   voc_bounds: null
   voc_cost: 0.05
   choice_mode: outside
-  insect_life_history: self_feeding_pre_reproductive
+  insect_life_history: adult_oviposition_larval_feeding
   resource_unit: normalized_edible_dry_biomass
   demand_unit: normalized_edible_dry_biomass
-  feeding_window: one_generation_pre_reproductive_feeding
-  demand_window: one_generation_pre_reproductive_feeding
-  model_version: 0.1.5
+  feeding_window: one_generation_larval_feeding
+  demand_window: one_generation_larval_feeding
+  model_version: 0.1.6
   life_history: nonoverlapping_sexual_generations
   demography:
     plant_survival: bernoulli
