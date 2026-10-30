@@ -53,5 +53,13 @@ def draw_host(candidates, probabilities, rng):
 
 
 def consumption(D, I):
-    ratios = np.divide(I, D, out=np.full_like(D, np.inf, dtype=float), where=D > 0)
+    """Most limiting positive-defense component; absent defenses impose no limit."""
+    D, I = np.broadcast_arrays(np.asarray(D, float), np.asarray(I, float))
+    if D.ndim == 0 or D.shape[-1] == 0:
+        raise ValueError("defense and processing require a nonempty component axis")
+    if not np.isfinite(D).all() or not np.isfinite(I).all() or (D < 0).any() or (I < 0).any():
+        raise ValueError("defense and processing must be finite and nonnegative")
+    # A finite capacity divided by a tiny defense may overflow: q still saturates at 1.
+    with np.errstate(over="ignore"):
+        ratios = np.divide(I, D, out=np.full_like(D, np.inf, dtype=float), where=D > 0)
     return np.minimum(1, ratios.min(axis=-1))

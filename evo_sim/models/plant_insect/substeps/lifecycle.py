@@ -281,7 +281,7 @@ def transition(runtime, current, t):
     survived = np.zeros(len(hids), bool)
     for s, rng in enumerate(runtime.rng[2][1]):
         selected = child_hl == s
-        survived[selected] = rng.random(selected.sum()) < e["g"][selected]
+        survived[selected] = rng.random(selected.sum()) < e["survival_probability"][selected]
     sex = np.empty(len(hids), dtype=np.int8)
     for s, rng in enumerate(runtime.rng[7][1]):
         selected = child_hl == s
@@ -435,7 +435,7 @@ def transition(runtime, current, t):
             gamma=float(e["gamma"][p]),
             host_h=float(e["h"][p]),
             I_sum=float(hvalues["I"][i].sum()),
-            W_insect=float(e["g"][i]),
+            W_insect=float(e["survival_probability"][i]),
             survived_to_adult=bool(survived[i]),
             insect_life_stage="larva",
             same_species_others=int(e["same_species_others"][i]),
