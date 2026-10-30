@@ -5,6 +5,14 @@ import numpy as np
 from . import traits, voc
 
 
+def larval_survival_probability(g):
+    """Baseline survival is x/dmax, with no maternal expression cost applied again."""
+    probability = np.asarray(g, dtype=float)
+    if not np.isfinite(probability).all() or ((probability < 0) | (probability > 1)).any():
+        raise ValueError("larval resource fraction must be finite and in [0,1]")
+    return probability
+
+
 def allocate_resources(host, q, capacity, dmax):
     """Deterministic proportional sharing. Rejected q is NaN, its demand/x/g are zero."""
     host = np.asarray(host)
@@ -132,7 +140,7 @@ def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_poo
 def settle_feeding(
     D, I, p_labels, h_labels, V_emit, host, c, capacity, dmax, chemical=None, module_traits=None
 ):
-    """Fitness uses the same x ledger on both sides; species only annotate competition."""
+    """Return explicit larval survival separately from legacy maternal fitness proxies."""
     found = host >= 0
     q = np.full(len(I), np.nan)
     q[found] = traits.consumption(D[host[found]], I[found])
@@ -169,6 +177,7 @@ def settle_feeding(
     )
     return dict(
         allocation,
+        survival_probability=larval_survival_probability(allocation["g"]),
         q=q,
         wp=wp,
         wi=wi,

@@ -33,7 +33,7 @@
 
 ## 1. 目录、身份与时间
 
-开发与验收批次按软件版本默认写入codex/validation/v0.1.7/runN/，显式目录必须不存在。测试、冒烟和临时验证结果不写入 results/；正式科研实验需显式指定 --out results/...。批次有 settings.json、data/run_status.csv，逐运行在 data/<case>/repNN/，审计在 audits/，派生汇总在 data/summary/。计算停止与生物灭绝分开。
+开发与验收批次按软件版本默认写入codex/validation/v0.1.8/runN/，显式目录必须不存在。测试、冒烟和临时验证结果不写入 results/；正式科研实验需显式指定 --out results/...。批次有 settings.json、data/run_status.csv，逐运行在 data/<case>/repNN/，审计在 audits/，派生汇总在 data/summary/。计算停止与生物灭绝分开。
 
 主键含 case/replicate；个体再含 kind/individual_id，两类群 ID 不保证全局唯一。reproduction_round=t 是 Adult(t) 的繁殖轮，adult_cohort=t+1 是本轮子代成功补充的成年队列；offspring.generation=t+1 指子代队列。events/larvae.generation=t 指幼虫事件轮，不能仅按同名 generation 合并成年和幼虫记录。
 
