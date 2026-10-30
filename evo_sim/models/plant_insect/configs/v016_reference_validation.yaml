@@ -1,0 +1,22 @@
+# Prespecified bounded validation. Use --out codex/validation/<new-directory>.
+# No parameter tuning or claim of stable coexistence; retain every outcome.
+extends: v016_ancestral_matched.yaml
+simulation_metadata:
+  num_steps_per_episode: 50
+parameters:
+  seed: 20261021
+  genetics:
+    mutation_enabled:
+      plant: false
+      insect: false
+batch:
+  purpose: >-
+    Fifty-generation demographic qualification of the matched reference,
+    with P1 alone and two hosts. Four fixed seeds, no new mutation, no calibration.
+  replicates: 4
+  cases:
+  - name: P1_only
+    overrides:
+      plant_sizes: [200, 0]
+  - name: two_hosts
+    overrides: {}

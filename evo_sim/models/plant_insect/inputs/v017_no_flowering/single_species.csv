@@ -1,0 +1,3 @@
+species_id,organism,initial_size,resource_capacity,max_feeding_demand,offspring_lambda,source_kind,source
+P1,plant,40,1.0,,2.0,theoretical_placeholder,docs/model.md v0.1.7 single ancestral compatibility pool
+H1,insect,40,,1.0,4.0,theoretical_placeholder,docs/model.md v0.1.7 potential eggs per female

@@ -35,6 +35,10 @@ def choice_probabilities(scores, tau, outside, mode):
 
 
 def conditional_probabilities(V, A, c, w):
+    if c.genetics["schema_version"] == "slim-qtl-4":
+        return choice_probabilities(
+            traits.chemical_scores(V, A, c, w), c.tau, c.outside_utility, mode="forced"
+        )[:-1]
     if c.olfaction_mode == "neutral" or c.tau == 0:
         relative = np.zeros(len(V))
     else:

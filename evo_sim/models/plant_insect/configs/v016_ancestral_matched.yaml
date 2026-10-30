@@ -1,0 +1,19 @@
+# Theoretical resident starting condition: recognition and utilization favor P1.
+# This specifies initial adaptation, not proven long-term persistence.
+extends: sexual_qtl_development.yaml
+input_files:
+  alleles: ../inputs/ancestral_matched_alleles.csv
+parameters:
+  genetics:
+    provenance:
+      founders:
+        description: >-
+          Matched ancestral reference: increase effect_2 of both alleles at each
+          A_S QTL by 0.2, giving expected A=(0.62,0.62)=expected P1 VOC.
+          Expected I=(0.22,0.62)=expected P1 defense. Founder frequencies,
+          standing effect differences, positions, lambda and costs unchanged.
+          Background stays zero. Theoretical initial condition, not empirical calibration.
+batch:
+  purpose: >-
+    Matched ancestral reference for studying changes in an initially favored
+    P1 association; persistence and reciprocal adaptation must be assessed from outputs.

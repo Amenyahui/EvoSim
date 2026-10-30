@@ -1,0 +1,4 @@
+# Observation parameters only: none are read by the simulator.
+distance_threshold: 0.25
+minimum_cluster_size: 2
+persistence_generations: 3

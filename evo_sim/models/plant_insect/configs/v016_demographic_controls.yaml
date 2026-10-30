@@ -1,0 +1,48 @@
+# Bounded demographic mechanism controls, not a calibrated research baseline.
+# Use --out codex/validation/<new-directory>; do not place these checks in results/.
+# Matched means A1 background +0.4 only; PSMs, I, lambda and all defaults stay unchanged.
+extends: sexual_qtl_development.yaml
+simulation_metadata:
+  num_steps_per_episode: 20
+parameters:
+  seed: 20261021
+  genetics:
+    mutation_enabled:
+      plant: false
+      insect: false
+    provenance:
+      mutation:
+        description: Independent per-copy per-locus per-generation probability 0.01;
+          normal SD 0.02 in declared coordinate; distinct from legacy trait rates.;
+          disabled in these bounded demographic controls.
+batch:
+  purpose: Prespecified 20-generation initial-matching by mate-radius controls; exploratory
+    4 seeds, not persistence proof.
+  replicates: 4
+  cases:
+  - name: original_local
+    overrides: {}
+  - name: original_global
+    overrides:
+      sexual_reproduction:
+        insect_mate_radius: 5
+  - name: matched_local
+    overrides:
+      genetics:
+        background:
+          insect:
+          - 0.0
+          - 0.0
+          - 0.4
+          - 0.0
+  - name: matched_global
+    overrides:
+      genetics:
+        background:
+          insect:
+          - 0.0
+          - 0.0
+          - 0.4
+          - 0.0
+      sexual_reproduction:
+        insect_mate_radius: 5

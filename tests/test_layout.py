@@ -18,7 +18,8 @@ def test_versioned_output_directory():
         marker = first / "preserve.txt"
         marker.write_text("existing results")
         second = create_output_directory()
-        assert first.relative_to(tmp).as_posix() == "results/results_v0.1.6/run1"
+        assert first.relative_to(tmp).as_posix() == "codex/validation/v0.1.7/run1"
+        assert not (Path(tmp) / "results").exists()
         assert second.name == "run2" and marker.read_text() == "existing results"
         try:
             create_output_directory(first)

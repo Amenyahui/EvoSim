@@ -11,9 +11,30 @@ import pandas as pd
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit_v016 import check_rows
 from evo_sim.models.plant_insect.batch import save_result, write_json
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from tests.support import config, raises
+
+
+def test_v016_column_checks_preserve_mixed_values_and_key_validation():
+    frame = pd.DataFrame(
+        dict(id=[2, 1], value=[0.5, np.nan], flag=["False", "True"], label=["b", "a"])
+    )
+    expected = {
+        (1,): dict(value=None, flag=True, label="a"),
+        (2,): dict(value=0.5, flag=False, label="b"),
+    }
+    check_rows(frame, ("id",), expected, "mixed")
+    for column, value in (("value", 0.7), ("flag", "True"), ("label", "wrong")):
+        broken = frame.copy()
+        broken.loc[broken.id == 2, column] = value
+        raises(lambda: check_rows(broken, ("id",), expected, "mixed"), AssertionError)
+    raises(lambda: check_rows(frame.iloc[:1], ("id",), expected, "mixed"), AssertionError)
+    raises(
+        lambda: check_rows(pd.concat([frame, frame.iloc[:1]]), ("id",), expected, "mixed"),
+        AssertionError,
+    )
 
 
 def fixture(**changes):

@@ -69,11 +69,13 @@ def load_inputs(files, directory, parameters):
         raise ValueError(f"input_files requires paths keyed by {sorted(allowed)}")
     p = deepcopy(parameters)
     n, B = p["n"], p["B"]
+    schema = p.get("genetics", {}).get("schema_version")
+    modern = schema in {"slim-qtl-3", "slim-qtl-4"}
     chemical = p.get("mapping") == "shared_chemical_modules"
     if chemical:
         if n != 2 or B is not None:
             raise ValueError("shared chemical CSV requires n=2 and retired B=null")
-        k, width = 2, 4
+        k, width = 2, 8 if modern else 4
     else:
         if type(n) is not int or n < 1 or not isinstance(B, list) or not B:
             raise ValueError("CSV inputs require explicit positive n and nonempty B")
@@ -81,7 +83,7 @@ def load_inputs(files, directory, parameters):
 
     def coordinates(row, field, kind):
         values = [row.pop(f"{field}_{j}") for j in range(width)]
-        size = 3 if chemical and kind == "plant" else width
+        size = (4 if schema == "slim-qtl-3" else 3) if chemical and kind == "plant" else width
         if any(v is None for v in values[:size]) or any(v is not None for v in values[size:]):
             raise ValueError(f"{field}: required {size} values and empty unused cells for {kind}")
         return values[:size]
@@ -240,7 +242,11 @@ def load_inputs(files, directory, parameters):
             columns.update({f"D_{j + 1}": finite for j in range(n)})
             columns.update({f"Z_{j + 1}": finite for j in range(k)})
         rows = table("reference_traits", columns, ("species_id",))
-        expected = [f"P{i + 1}" for i in range(len(p["plant_sizes"]))]
+        expected = (
+            [row["species_id"] for row in rows]
+            if modern
+            else [f"P{i + 1}" for i in range(len(p["plant_sizes"]))]
+        )
         by_species = {row["species_id"]: row for row in rows}
         if set(by_species) != set(expected):
             raise ValueError("reference_traits.csv requires exactly the configured plant species")
@@ -250,6 +256,8 @@ def load_inputs(files, directory, parameters):
                     [by_species[s][name] for name in ("x_N", "x_S", "x_V")] for s in expected
                 ]
             }
+            if modern:
+                p["observation_reference_traits"]["reference_ids"] = expected
         else:
             p["observation_reference_traits"] = {
                 name: [[by_species[s][f"{prefix}_{j + 1}"] for j in range(size)] for s in expected]

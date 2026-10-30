@@ -67,7 +67,7 @@ def save_result(result, out):
             mutations="generation kind species offspring_id locus_id copy parent_allele_id allele_id delta mutation_stream",
             genetic_summary="generation kind species N record_type locus_id allele_id frequency observed_heterozygosity gene_diversity mutation_count trait mean variance clipped_fraction",
         )
-    if result.get("metadata", {}).get("version") == "0.1.6":
+    if result.get("metadata", {}).get("version") in {"0.1.6", "0.1.7"}:
         columns_by_table["allele_contributions"] += " stage"
         columns_by_table["offspring"] += (
             " reproduction_round adult_cohort survived_to_adult genotype"
@@ -85,6 +85,10 @@ def save_result(result, out):
             host_groups="generation insect_species birth_host_species N status",
             host_flows="reproduction_round adult_cohort insect_species stage source_host_species destination_host_species genetic_contribution",
             lagged_networks="reproduction_round adult_cohort insect_species plant_species maternal_offspring paternal_offspring genetic_contribution recruitment_contribution edge_semantics",
+        )
+    if result.get("metadata", {}).get("version") == "0.1.7":
+        columns_by_table["parents"] += (
+            " mating_row mating_col candidate_mate_ids candidate_mate_probabilities processing_expression_cost sensory_expression_cost"
         )
     for name, columns in columns_by_table.items():
         table = pd.DataFrame(result.get(name, []))
@@ -105,7 +109,14 @@ def save_result(result, out):
                     for suffix in ("_genotypes", "_ids", "_species")
                 }:
                     genotypes[prefix + key] = value
-                if key in ("D", "I", "A", "plant_voc_independent_trait", "plant_chemical_traits"):
+                if key in (
+                    "D",
+                    "I",
+                    "A",
+                    "plant_voc_independent_trait",
+                    "plant_chemical_traits",
+                    "insect_module_traits",
+                ):
                     phenotypes[prefix + key] = value
         np.savez_compressed(out / "genotypes.npz", **genotypes)
         np.savez_compressed(out / "phenotypes.npz", **phenotypes)
@@ -122,7 +133,7 @@ def create_output_directory(out=None):
         path = Path(out).resolve()
         path.mkdir(parents=True, exist_ok=False)
         return path
-    root = ROOT / "results" / f"results_v{__version__}"
+    root = ROOT / "codex" / "validation" / f"v{__version__}"
     root.mkdir(parents=True, exist_ok=True)
     numbers = [int(p.name[3:]) for p in root.iterdir() if re.fullmatch(r"run[0-9]+", p.name)]
     number = max(numbers, default=0) + 1
@@ -213,7 +224,11 @@ def run(spec, out=None, *, runtime_config=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--out", type=Path, help="Default: results/results_v<version>/run<N>")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="Default: codex/validation/v<version>/run<N>; specify results/ explicitly for research experiments",
+    )
     args = parser.parse_args()
     config = read_config(args.config)
     spec = dict(

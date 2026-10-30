@@ -37,6 +37,7 @@ class InsectPopulation:
     birth_host_id: np.ndarray | None = None
     birth_host_species: np.ndarray | None = None  # -1 = unknown founder history
     adult_cohort: np.ndarray | None = None
+    module_traits: np.ndarray | None = None
 
     def __len__(self):
         return len(self.ids)
@@ -86,6 +87,8 @@ class CommunityState:
             value = getattr(self.insects, name)
             if value is not None:
                 values["insect_" + name] = value
+        if self.insects.module_traits is not None:
+            values["insect_module_traits"] = self.insects.module_traits
         if self.plants.chemical_traits is not None:
             values["plant_chemical_traits"] = self.plants.chemical_traits
         else:
@@ -128,5 +131,6 @@ class CommunityState:
                 values.get("insect_birth_host_id"),
                 values.get("insect_birth_host_species"),
                 values.get("insect_adult_cohort"),
+                values.get("insect_module_traits"),
             ),
         )

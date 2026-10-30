@@ -1,10 +1,39 @@
-# evoSim v0.1.6 — 当前输出与解释边界
+# evoSim v0.1.7 / v0.1.6 — 输出与解释边界
 
-更新：2026-10-28。当前生活史 adult_oviposition_larval_feeding，化学 shared-chemical-1，遗传 slim-qtl-2，执行器 SLiM 5.2。本文是阶段字典；验收状态见 [实施记录](plan/v0.1.6_implementation.md)，不包含演化结果分析。
+更新：2026-10-29。v0.1.7当前使用slim-qtl-4（植物3轴/6QTL、昆虫8轴/16QTL）及expression-tuning-2，v0.1.6保留slim-qtl-2；执行器均为SLiM 5.2。含植物花期的slim-qtl-3、含交配前定居的expression-tuning-1仅保留历史草稿回读，不能按当前协议执行或重新解释；旧原始文件/source/metadata哈希不改写。以下新增项覆盖当前新协议，后续编号章节保留v0.1.6共同阶段字典，不能将旧I/A解释直接套到新协议。验收见 [v0.1.7基线修订记录](plan/v0.1.7_baseline_revision_2026-10-29.md)。
+
+## v0.1.7新增项与覆盖语义
+
+| 文件/字段 | 定义 |
+| --- | --- |
+| metadata.version、software_version | 前者是实际模型版本，后者是运行软件版本；默认旧配置仍可运行模型0.1.6 |
+| snapshots/phenotypes中的insect_module_traits | N×8原发感觉/处理表达与调谐；顺序由元数据insect_module_order保存 |
+| plant_chemical_traits | N×3原发x_N/x_S/x_V；当前协议不保存花期/theta状态 |
+| I / A | I为两类底物的派生有效容量；A为固定目录上的无符号感觉表达profile，实际选择还经过饱和和行为价性，不是旧偏好模板 |
+| parents.csv新增字段 | mating_row/col、candidate_mate_ids/probabilities、两项昆虫母源表达成本；植物存活、局部同池非自身候选的概率均匀 |
+| genetic_summary | 植物三化学轴与昆虫八模块轴的raw/clip及遗传统计；当前没有wrapped_fraction统计 |
+| reference_plant_species | 新协议中是显式参考化学型ID，可与祖先兼容池数量不同；不是实际寄主事件 |
+
+当前无adult_settlement.csv及metadata.settlement_semantics。成虫从出生寄主扩散后直接按成年位置建立局部兼容异性池，随后母体逐卵择主；parents的交配位置/候选字段仍用于审计该顺序，并非定居专属输出。历史expression-tuning-1中的定居账本按原身份保留，不补入新批次，也不据此回填新配偶池。
+
+`summarize_lineages --input <batch> --design <yaml>`仅观察已审计批次，输出`data/summary/lineages/`。阈值、最小规模及持续窗口不进入模拟：
+
+- memberships/clusters：同祖先池的无相位QTL拷贝距离图分群；小群标为unassigned，不能据此说已灭绝。
+- transitions/lineage_events/populations：补充子代双亲贡献、多对多分裂/合并及单元终止；祖先池灭绝与观察未检出分别记录。一个桥接基因型即可造成单链接合并，不能直接当作真实基因库融合。
+- mating：实际出生/补充子代加权的跨观察群双亲数及明确分母；无可分类双亲时比例缺失。
+- mating_opportunities：每个合格母体等权的保存候选池概率，不与子代加权的实际交配比例混为同一量。
+- networks：`maternal_source`记录母源群t→植物群t的幼虫消费/出生/补充；`recruit_cluster`记录成年补充群t+1→出生寄主植物群t，仅记录补充，消费字段缺失。
+- network_balances/metadata：两套网络与原始资源/出生/补充总账、观察设计/代码/输入指纹和限制。消费包括死亡幼虫；unknown/unassigned仍参与总量。
+
+这些节点是操作性候选谱系。持续窗口只使用当前及过去轮次，不能将未来存续倒填为早已确证物种。植物化学性状仍可演化，但当前没有额外植物适应性成种机制；没有输出经验意义的物种形成率或新物种数。唯一A–E绘图入口支持当前v0.1.7，生命周期和谱系数据汇总均可用。历史slim-qtl-3文件中的花期/回绕字段仅按原保存协议解释，不补入当前新输出。
+
+`plot_diagnostics`沿用A人口、B性状、C寄主利用/繁殖阶段、D空间、E遗传的布局和PNG/PDF/SVG导出。B使用植物x_S/x_V、x_N/x_S，以及昆虫met E₁/E₂、met μ₁/μ₂、sense E₁/E₂、sense μ₁/μ₂六对原发轴，均相对各运行第0代中心化；派生I/A不当作旧识别模板。C以幼虫实际消费计算寄主份额；没有H1灭绝时下排改为最后20代成年丰度和末轮成年→交配雌虫→潜在卵→幼虫出生→成年补充，不能把期末删失当灭绝。A追加终点成年快照，E保留位点平均H_e，不填充灭绝后的性状或遗传值。
+
+常规审计仍读取`audits/integrity_audit.json`。经独立逐运行审计的修正正式批次也可读取`data/summary/corrected_integrity_audit.json`，同时必须提供同目录的原始逐运行报告和`corrected_design_consistency.json`；读取时核对证据哈希、运行身份、元数据与设计指纹，不冒充批次审计CLI重跑。绘图前核对实际使用原始CSV/快照与metadata.output_sha256，绘图元数据另存当前绘图/汇总代码和输入指纹，保留原始模拟源码哈希。
 
 ## 1. 目录、身份与时间
 
-新批次默认 results/results_v0.1.6/runN/，显式目录必须不存在。批次有 settings.json、data/run_status.csv，逐运行在 data/<case>/repNN/，审计在 audits/，派生汇总在 data/summary/。计算停止与生物灭绝分开。
+开发与验收批次按软件版本默认写入codex/validation/v0.1.7/runN/，显式目录必须不存在。测试、冒烟和临时验证结果不写入 results/；正式科研实验需显式指定 --out results/...。批次有 settings.json、data/run_status.csv，逐运行在 data/<case>/repNN/，审计在 audits/，派生汇总在 data/summary/。计算停止与生物灭绝分开。
 
 主键含 case/replicate；个体再含 kind/individual_id，两类群 ID 不保证全局唯一。reproduction_round=t 是 Adult(t) 的繁殖轮，adult_cohort=t+1 是本轮子代成功补充的成年队列；offspring.generation=t+1 指子代队列。events/larvae.generation=t 指幼虫事件轮，不能仅按同名 generation 合并成年和幼虫记录。
 
@@ -41,9 +70,9 @@ offspring 的 birth_host_id/birth_host_species 是实际产卵植物；maternal_
 
 昆虫 offspring_cell/cell_row/col 表示出生寄主格；成年快照位置为幸存后扩散位置，两者可不同。幼虫出生至成年保持同一 ID。植物 offspring 仍从母株格扩散，其 survived_to_adult=True 是两类群通用记录字段，表示没有额外后代筛选，不将植物称为成虫。
 
-host_groups 是每代出生背景分类，无遗传独立性判据，空群可随后重新占据。populations.extinct_at_generation 是固定物种首次灭绝代；物种灭绝为吸收态，背景暂时 absent 不是物种灭绝或谱系终止。全部 offspring 的双亲构成 DAG，不生成候选独立谱系标签。
+host_groups 是每代出生背景分类，无遗传独立性判据，空群可随后重新占据。populations.extinct_at_generation 是固定物种（v0.1.7祖先兼容池）首次灭绝代；该灭绝为吸收态，背景暂时 absent 不是物种灭绝或谱系终止。全部 offspring 的双亲构成 DAG，原始记录不写入候选谱系资格；v0.1.7操作群在只读分析中另行识别。
 
-寄主背景群视图由 host_groups、larvae/events、host_flows 和 lagged_networks 按轮次、物种与背景连接得到；没有另行保存的候选谱系网络或独立背景网络 CSV。
+寄主背景群视图由 host_groups、larvae/events、host_flows 和 lagged_networks 按轮次、物种与背景连接得到；上述原始文件不另造背景网络CSV。v0.1.7候选谱系网络另写在批次data/summary/lineages/，不替换原始寄主背景账本。
 
 ## 4. 母源率、出生与补充贡献
 
@@ -82,4 +111,4 @@ standardized 的成年 A/I 参考 p/q 联合谱可作基因型潜在功能诊断
 
 新批次先 audit，再运行 analysis.summarize_lifecycle；它合并以下原始账本到 data/summary/，添加 case/replicate，不新增网络指标：lifecycle_counts（populations）、host_background_flows（host_flows）、host_background_groups（host_groups）、lifecycle_networks（networks）、parent_host_contributions（lagged_networks）。
 
-旧 summarize_qtl_run、summarize_coevolution 和依赖 Batch 的 plot_diagnostics **明确拒绝 v0.1.6**，避免沿用成年自主取食/单阶段贡献假设；历史结果的只读路径继续保留，需匹配原协议和审计。历史200代分析或旧测试数不能当本版验证，不改旧元数据/源码哈希，不重命名旧 Z 或旧贡献字段来冒充新运行。
+旧 summarize_qtl_run、summarize_coevolution 命令仍明确拒绝 v0.1.6。plot_diagnostics 通过 summarize_lifecycle.prepare_diagnostics 接入本版：复用阶段无关的性状/遗传汇总，种群追加终点成年快照，寄主份额按幼虫实际消费，C 图瓶颈为成年→合格雌虫→潜在卵→出生幼虫→补充成年。A–E 沿用历史布局及PNG/PDF/SVG导出，不调用旧版宏观分析来推断新生活史。历史结果的只读路径继续保留，需匹配原协议和审计。历史200代分析或旧测试数不能当本版验证，不改旧元数据/源码哈希，不重命名旧 Z 或旧贡献字段来冒充新运行。

@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from evo_sim import __version__
 from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
 
@@ -54,17 +53,16 @@ def audit_run(path):
         try:
             invalid = Config(**cfg)
             invalid.validate()
-            if (
-                invalid.model_version != __version__
-                or invalid.genetics["schema_version"] != "slim-qtl-2"
-            ):
+            if invalid.model_version not in {"0.1.6", "0.1.7"} or invalid.genetics[
+                "schema_version"
+            ] != ("slim-qtl-4" if invalid.model_version == "0.1.7" else "slim-qtl-2"):
                 raise ValueError("historical configurations are not executable in this version")
         except (ValueError, TypeError, KeyError):
             return dict(
                 status=status, states=0, transitions=0, max_overrun=0.0, max_balance_error=0.0
             )
         raise AssertionError("invalid_parameter record has valid configuration")
-    if meta["version"] == "0.1.6":
+    if meta["version"] in {"0.1.6", "0.1.7"}:
         from .audit_v016 import audit_run_v016
 
         return audit_run_v016(path, meta)

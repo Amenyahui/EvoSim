@@ -14,7 +14,7 @@ from evo_sim.models.plant_insect.analysis.common import (
 )
 
 
-def summarize(batch: Batch):
+def summarize(batch: Batch, *, print_summary=True):
     assert batch.audit["genetically_audited_runs"] == len(batch.status)
     genetic = []
     input_hashes = {}
@@ -75,7 +75,8 @@ def summarize(batch: Batch):
             interpretation="descriptive only; no independent replicate-based treatment-effect estimate",
         ),
     )
-    print(summary.to_string(index=False))
+    if print_summary:
+        print(summary.to_string(index=False))
 
 
 if __name__ == "__main__":

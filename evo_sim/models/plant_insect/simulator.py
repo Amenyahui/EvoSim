@@ -67,7 +67,7 @@ def get_runner(config_path=None, *, config=None):
         raise ValueError("Provide config or config_path, not both")
     if config is None:
         config = read_config(config_path or MODEL_DIR / "configs/sexual_qtl_development.yaml")
-    if config["parameters"].get("model_version") == "0.1.6":
+    if config["parameters"].get("model_version") in {"0.1.6", "0.1.7"}:
         steps = list(config["substeps"].values())
         transitions = list(steps[0].get("transition", {}).values()) if len(steps) == 1 else []
         if (

@@ -11,7 +11,7 @@ import numpy as np
 
 from evo_sim.core.substep import SubstepTransition
 
-from ..helpers import chemistry, spatial
+from ..helpers import chemistry, modules, spatial
 from ..helpers import ecology as feeding
 from ..helpers.agents import CommunityState
 from ..helpers.contributions import allele_contributions, commit_parent_contributions
@@ -124,6 +124,16 @@ def sample_parents(pop, kind, S, F, phi, runtime, generation):
                 else "eligible",
             )
         )
+    if modules.enabled(c):
+        for i, row in enumerate(rows):
+            pool = candidates[i]
+            probabilities = np.full(len(pool), 1 / len(pool)) if len(pool) else np.empty(0)
+            row.update(
+                mating_row=int(pop.cells[i, 0]),
+                mating_col=int(pop.cells[i, 1]),
+                candidate_mate_ids=json.dumps(pop.ids[pool].tolist()),
+                candidate_mate_probabilities=json.dumps(probabilities.tolist()),
+            )
     return counts, candidates, rows, survived
 
 
@@ -174,7 +184,11 @@ def observe(runtime, current, generation):
         snapshot.update(
             reference_p=probability,
             reference_q=q,
-            reference_plant_species=np.array([f"P{p + 1}" for p in range(sizes[0])]),
+            reference_plant_species=np.array(
+                runtime.c.observation_reference_traits["reference_ids"]
+                if modules.enabled(runtime.c)
+                else [f"P{p + 1}" for p in range(sizes[0])]
+            ),
         )
     for h in range(sizes[1]):
         for p in range(-1, sizes[0]):
@@ -199,11 +213,22 @@ def transition(runtime, current, t):
     c = runtime.c
     pl, hl = current.plants.species, current.insects.species
     insects, plants = current.insects, current.plants
+    modern = modules.enabled(c)
+    # Adults retain the birth-host-plus-dispersal cells when the local mate pool is built.
     runtime.stage = "adult_mating_and_potential_eggs"
-    fi = np.maximum(0, 1 - c.insect_cost * insects.resistance.sum(axis=1))
+    if modern:
+        fi, processing_cost, sensory_cost = modules.maternal_fecundity(insects.module_traits, c)
+    else:
+        fi = np.maximum(0, 1 - c.insect_cost * insects.resistance.sum(axis=1))
     counts, candidates, hrows, _ = sample_parents(
         insects, "insect", np.ones(len(insects)), fi, np.ones(len(insects)), runtime, t
     )
+    if modern:
+        for i, row in enumerate(hrows):
+            row.update(
+                processing_expression_cost=float(processing_cost[i]),
+                sensory_expression_cost=float(sensory_cost[i]),
+            )
     potential_count = sum(map(int, counts))
     if potential_count > c.max_individuals_safety:
         raise ComputationalLimit(
@@ -214,7 +239,7 @@ def transition(runtime, current, t):
     V = chemistry.plant_voc(plants.defense, plants.voc_trait, c, runtime.B, plants.chemical_traits)
     V_cue = V[runtime.rng[1][0][0].permutation(len(V))] if c.shuffle_voc else V.copy()
     choice = feeding.choose_hosts(
-        insects.preference[egg_mothers],
+        (insects.module_traits if modern else insects.preference)[egg_mothers],
         pl,
         hl[egg_mothers],
         V_cue,
@@ -251,6 +276,7 @@ def transition(runtime, current, t):
         capacity,
         dmax,
         chemical=plants.chemical_traits,
+        module_traits=hvalues.get("insect_module_traits"),
     )
     survived = np.zeros(len(hids), bool)
     for s, rng in enumerate(runtime.rng[2][1]):

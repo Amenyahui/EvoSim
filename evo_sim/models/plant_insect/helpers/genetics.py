@@ -8,6 +8,7 @@ from itertools import combinations
 
 import numpy as np
 
+from . import modules
 from .config import normalized_bounds, numeric
 from .demography import ComputationalLimit
 from .slim_backend import SlimError, reproduce
@@ -62,14 +63,20 @@ def validate(c, K):
         "max_alleles_safety",
         "max_genotype_values_safety",
     }
-    slim = isinstance(g, dict) and g.get("schema_version") in {"slim-qtl-1", "slim-qtl-2"}
+    slim = isinstance(g, dict) and g.get("schema_version") in {
+        "slim-qtl-1",
+        "slim-qtl-2",
+        "slim-qtl-3",
+        "slim-qtl-4",
+    }
     if slim:
         required.add("slim")
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
         g["mode"] != "sexual_qtl"
-        or g["schema_version"] not in {"sexual-qtl-1", "slim-qtl-1", "slim-qtl-2"}
+        or g["schema_version"]
+        not in {"sexual-qtl-1", "slim-qtl-1", "slim-qtl-2", "slim-qtl-3", "slim-qtl-4"}
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
@@ -86,12 +93,19 @@ def validate(c, K):
         numeric(settings["timeout_seconds"], "slim.timeout_seconds")
         if settings["timeout_seconds"] <= 0:
             raise ValueError("SLiM timeout must be positive")
-    chemical = g["schema_version"] == "slim-qtl-2"
-    if chemical and c.model_version not in {"0.1.5", "0.1.6"}:
+    modern = g["schema_version"] in {"slim-qtl-3", "slim-qtl-4"}
+    historical_flowering = g["schema_version"] == "slim-qtl-3"
+    chemical = g["schema_version"] in {"slim-qtl-2", "slim-qtl-3", "slim-qtl-4"}
+    if chemical and c.model_version not in {"0.1.5", "0.1.6", "0.1.7"}:
         raise ValueError("slim-qtl-2 chemical coordinates require model_version=0.1.5/0.1.6")
     if chemical != (c.mapping == "shared_chemical_modules"):
         raise ValueError("chemical mapping and genetic schema disagree")
-    widths = {"plant": 3 if chemical else c.n + K, "insect": c.n + K}
+    if modern != (c.model_version == "0.1.7"):
+        raise ValueError("v0.1.7 requires a declared module-coordinate protocol")
+    widths = {
+        "plant": 4 if historical_flowering else 3 if chemical else c.n + K,
+        "insect": 8 if modern else c.n + K,
+    }
     mapping = g["phenotype_map"]
     if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
         raise ValueError("phenotype_map requires explicit effect_scale and bounds")
@@ -152,7 +166,9 @@ def validate(c, K):
             or len(set(targets)) != len(targets)
             or any(type(x) is not int or not 0 <= x < width for x in targets)
         ):
-            raise ValueError("unique target indices within D/Z or I/A coordinates required")
+            raise ValueError(
+                "unique target indices within the declared phenotype coordinates required"
+            )
         mu = locus["mutation_rate"]
         if type(mu) not in (int, float) or not np.isfinite(mu) or not 0 <= mu <= 1:
             raise ValueError("mutation_rate per copy/locus/generation must be in [0,1]")
@@ -228,11 +244,13 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
-        if c.genetics["schema_version"] not in {"slim-qtl-1", "slim-qtl-2"}:
+        if c.genetics["schema_version"] not in {"slim-qtl-1", "slim-qtl-2", "slim-qtl-4"}:
             raise ValueError("SLiM QTL execution requires a declared supported native protocol")
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n
-        self.chemical = c.genetics["schema_version"] == "slim-qtl-2"
+        self.modern = modules.enabled(c)
+        self.module_spec = copy.deepcopy(c.functional_modules)
+        self.chemical = c.genetics["schema_version"] in {"slim-qtl-2", "slim-qtl-4"}
         self.seed = c.seed
         self.engine_calls = []
         self.loci = {
@@ -286,6 +304,14 @@ class GeneticState:
             axis=(1, 2)
         )
         values = np.clip(raw, *mapping["bounds"])
+        if self.modern:
+            if kind == "plant":
+                return {
+                    "D": values[:, :2],
+                    "plant_chemical_traits": values[:, :3],
+                }, raw
+            I, A = modules.effective(values, self.module_spec)
+            return {"I": I, "A": A, "insect_module_traits": values}, raw
         if self.chemical and kind == "plant":
             return {"D": values[:, :2], "plant_chemical_traits": values}, raw
         return {TRAITS[kind][0]: values[:, : self.n], TRAITS[kind][1]: values[:, self.n :]}, raw
@@ -323,7 +349,7 @@ class GeneticState:
         if any(((p < 0) | (p >= len(ids))).any() for p in (mothers, fathers)):
             raise ValueError("parent index outside current population")
         if (mothers == fathers).any() or (labels[mothers] != labels[fathers]).any():
-            raise ValueError("distinct conspecific parents required")
+            raise ValueError("distinct parents from the same ancestral compatibility pool required")
         if next_id + len(mothers) >= 2**63:
             raise ComputationalLimit("individual ID int64 limit")
         child_labels = labels[mothers]
@@ -458,7 +484,15 @@ class GeneticState:
         for kind, count in zip(KINDS, sizes):
             pop = state.plants if kind == "plant" else state.insects
             values, raw = self.phenotype(pop.genotypes, kind)
-            if self.chemical and kind == "plant":
+            if self.modern:
+                values = (
+                    {
+                        "plant_chemical_traits": values["plant_chemical_traits"],
+                    }
+                    if kind == "plant"
+                    else {"insect_module_traits": values["insect_module_traits"]}
+                )
+            elif self.chemical and kind == "plant":
                 values = {"plant_chemical_traits": values["plant_chemical_traits"]}
             prefix = "P" if kind == "plant" else "H"
             for s in range(count):

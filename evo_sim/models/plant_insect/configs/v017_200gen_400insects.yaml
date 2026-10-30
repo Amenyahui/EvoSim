@@ -1,0 +1,15 @@
+# User-requested 200-generation experiment; preserve existing biological parameters.
+extends: v017_modules.yaml
+simulation_metadata:
+  num_steps_per_episode: 200
+parameters:
+  plant_sizes: [200, 200]
+  insect_sizes: [400]
+  insect_pop: null
+batch:
+  purpose: >-
+    User-requested v0.1.7 200-generation run with 400 initial H1 insects;
+    P1/P2 remain at 200 each, mutation on/off and three fixed-seed replicates.
+    No adult settlement or plant flowering. Theoretical parameters;
+    no adjustment for persistence or speciation.
+  replicates: 3

@@ -1,0 +1,8 @@
+# Historical starting condition: P1 utilization is favored, recognition is mismatched.
+extends: sexual_qtl_development.yaml
+input_files:
+  alleles: ../inputs/alleles.csv
+batch:
+  purpose: >-
+    Recognition-mismatched initial condition for host establishment/failure.
+    Utilization already favors P1; this does not represent universal ancestral naivety.

@@ -1,0 +1,18 @@
+# Mechanism validation only; all numerical functional parameters are project assumptions.
+extends: v017_modules.yaml
+input_files:
+  species: ../inputs/v017_no_flowering/single_species.csv
+  competition: ../inputs/v017_no_flowering/single_competition.csv
+  founder_frequencies: ../inputs/v017_no_flowering/single_founder_frequencies.csv
+simulation_metadata:
+  num_steps_per_episode: 3
+batch:
+  purpose: v0.1.7 single compatible ancestors, expression/tuning and encounter smoke validation
+  replicates: 1
+  cases:
+  - name: qtl_mutating
+    overrides: {}
+  - name: mutation_off
+    overrides:
+      genetics:
+        mutation_enabled: {plant: false, insect: false}

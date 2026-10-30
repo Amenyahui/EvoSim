@@ -29,13 +29,15 @@ def test_yaml_is_complete_and_missing_parameters_fail():
         values = dict(
             loaded["parameters"], generations=loaded["simulation_metadata"]["num_steps_per_episode"]
         )
-        assert set(values) == {field.name for field in fields(Config)}, path
+        assert set(values) == {field.name for field in fields(Config)} - (
+            {"functional_modules"} if values["model_version"] != "0.1.7" else set()
+        ), path
         for case in loaded["batch"]["cases"]:
             Config(**merge_config(values, case["overrides"])).validate()
     assert all(
         field.default is MISSING and field.default_factory is MISSING
         for field in fields(Config)
-        if field.name != "eta_shared"
+        if field.name not in {"eta_shared", "functional_modules"}
     )
     values = dict(get_runner().config["parameters"], generations=1)
     for key in values:

@@ -58,9 +58,9 @@ parameters:
 现有场景仍可运行：
 
 ```powershell
-python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v013_slim_example
-python -m evo_sim.models.plant_insect.audit --input results/v013_slim_example
-python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input results/v013_slim_example
+python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out codex/validation/v013_slim_example
+python -m evo_sim.models.plant_insect.audit --input codex/validation/v013_slim_example
+python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input codex/validation/v013_slim_example
 ```
 
 `v012_*.yaml` 名称保留其场景来源，展开后的运行版本现为 0.1.3，遗传执行为 SLiM。它们不会重现旧版逐轨迹结果。要重现 v0.1.2，应检出旧 Git 标签并使用当时的环境；历史结果和元数据不修改。

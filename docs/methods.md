@@ -1,6 +1,6 @@
-# evoSim v0.1.6 — 当前材料与方法
+# evoSim v0.1.6 — 历史材料与方法
 
-更新：2026-10-28。对应 shared-chemical-1 / slim-qtl-2，SLiM 5.2。公式以 [model.md](model.md) 为准；本版只做小规模实现核查，检查状态见 [实施记录](plan/v0.1.6_implementation.md)。
+更新：2026-10-28。对应 shared-chemical-1 / slim-qtl-2，SLiM 5.2。本文保留 v0.1.6 方法，公式以 [v0.1.6 模型](history/model_v0.1.6.md) 为准；不能用于解释 v0.1.7 的功能模块。现行理论见 [model.md](model.md)、[assumptions.md](assumptions.md) 和 [parameters.md](parameters.md)。本版检查状态见 [实施记录](plan/v0.1.6_implementation.md)。
 
 ## 1. 实体、输入与初始化
 
@@ -42,4 +42,4 @@ Python 给出出生数、真实双亲索引与亲本基因型，SLiM addCrossed 
 
 标准化 A/I 参考反应为成年基因型的反事实功能诊断，不表示成虫当轮真实取食。参考 p 排除拒绝、q 是无竞争上限；观察不消耗模拟随机流或反馈选择。历史跨时间/绘图入口是否支持新生活史以 [results.md](results.md) 为准，不能无条件复用旧贡献定义。
 
-独立审计检查快照/等位重建、实际双亲、两阶段贡献、源→目的矩阵、资源和网络守恒及终点边界，不把实现正确当作生物验证。全部文献和支持层次见 [model.md§7–8](model.md) 与 [审定计划§9](plan/v0.1.6_plan.md)；Bruce/Hare 仅摘要核实，具体逐卵函数、有限资源与线性存活均含项目假设。
+独立审计检查快照/等位重建、实际双亲、两阶段贡献、源→目的矩阵、资源和网络守恒及终点边界，不把实现正确当作生物验证。全部文献和支持层次见 [v0.1.6 模型§7–8](history/model_v0.1.6.md) 与 [审定计划§9](plan/v0.1.6_plan.md)；Bruce/Hare 仅摘要核实，具体逐卵函数、有限资源与线性存活均含项目假设。

@@ -264,6 +264,7 @@ def species_map(value, keys, name, positive=False):
 
 @dataclass(kw_only=True)
 class Config(_ResourceConfig):
+    functional_modules: object = None
     model_version: object
     life_history: object
     plant_offspring_lambda: object
@@ -280,7 +281,7 @@ class Config(_ResourceConfig):
     sexual_reproduction: object
     observation_reference_traits: object
 
-    def validate(self):
+    def validate(self, *, historical_audit=False):
         for sizes in (self.plant_sizes, self.insect_sizes):
             if not sizes or any(type(x) is not int or x < 0 for x in sizes):
                 raise ValueError(
@@ -295,12 +296,12 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6"}
+            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6", "0.1.7"}
             or self.life_history != "nonoverlapping_sexual_generations"
         ):
             raise ValueError("explicit supported model version and sexual generations required")
         if (
-            self.model_version == "0.1.6"
+            self.model_version in {"0.1.6", "0.1.7"}
             and self.insect_life_history != "adult_oviposition_larval_feeding"
         ):
             raise ValueError("v0.1.6 requires adult oviposition followed by larval feeding")
@@ -370,10 +371,38 @@ class Config(_ResourceConfig):
         B, w = _ResourceConfig(**args).validate()
         if type(self.record_observations) is not bool:
             raise ValueError("record_observations must be boolean")
+        modern = self.model_version == "0.1.7"
+        if modern:
+            from .modules import validate as validate_modules
+
+            validate_modules(
+                self.functional_modules,
+                historical_flowering=self.genetics.get("schema_version") == "slim-qtl-3",
+                historical_audit=historical_audit,
+            )
+        elif self.functional_modules is not None:
+            raise ValueError("functional_modules belongs only to v0.1.7")
         if self.record_observations:
             panel = self.observation_reference_traits
+            if modern:
+                if not isinstance(panel, dict) or set(panel) != {
+                    "plant_chemical_traits",
+                    "reference_ids",
+                }:
+                    raise ValueError(
+                        "v0.1.7 reference panel requires chemical traits and reference_ids"
+                    )
+                ids = panel["reference_ids"]
+                if (
+                    not isinstance(ids, list)
+                    or not ids
+                    or any(not isinstance(x, str) or not x.strip() for x in ids)
+                    or len(set(ids)) != len(ids)
+                ):
+                    raise ValueError("unique nonempty reference IDs required")
+                panel = {"plant_chemical_traits": panel["plant_chemical_traits"]}
             shapes = (
-                {"plant_chemical_traits": (len(ps), 3)}
+                {"plant_chemical_traits": (len(ids) if modern else len(ps), 3)}
                 if self.mapping == "shared_chemical_modules"
                 else {"D": (len(ps), self.n), "plant_voc_independent_trait": (len(ps), len(B))}
             )
@@ -411,6 +440,8 @@ class Config(_ResourceConfig):
 def config_payload(c):
     """Serialize the sole current model contract."""
     payload = asdict(c)
+    if payload["functional_modules"] is None:
+        payload.pop("functional_modules")
     if payload["eta_shared"] is None:
         payload.pop("eta_shared")  # Preserve historical config fingerprints exactly.
     return payload

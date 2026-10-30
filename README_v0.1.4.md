@@ -20,9 +20,9 @@ SLiM 5.2 的安装与引擎配置沿用 [v0.1.3 说明](README_v0.1.3.md)。在�
 
 ```powershell
 # 新批次示例；目标目录必须不存在
-python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out results/v014_example
-python -m evo_sim.models.plant_insect.audit --input results/v014_example
-python -m evo_sim.models.plant_insect.analysis.summarize_coevolution --input results/v014_example
+python -m evo_sim --config evo_sim/models/plant_insect/configs/v012_base.yaml --out codex/validation/v014_example
+python -m evo_sim.models.plant_insect.audit --input codex/validation/v014_example
+python -m evo_sim.models.plant_insect.analysis.summarize_coevolution --input codex/validation/v014_example
 ```
 
 五张新 CSV 及 `coevolution_metadata.json` 写入批次 `data/summary/`。常规汇总和 A–E 绘图入口继续可用；本版没有另建绘图入口。默认新批次目录为 `results/results_v0.1.4/runN/`。

@@ -11,7 +11,7 @@ import pandas as pd
 from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
 
-from . import chemistry, genetics, spatial
+from . import chemistry, genetics, modules, spatial
 from . import ecology as shared
 from .agents import CommunityState, InsectPopulation, PlantPopulation
 from .config import Config, config_payload, resource_values
@@ -54,7 +54,17 @@ def ecology(state, c, B, w, rng_p, rng_H):
         options = dict(
             candidate_pools=spatial.candidate_pools(state.plants.cells, state.insects.cells, c),
         )
-    choice = shared.choose_hosts(A, pl, hl, V_cue, c, w, rng_p, rng_H, **options)
+    choice = shared.choose_hosts(
+        state.insects.module_traits if modules.enabled(c) else A,
+        pl,
+        hl,
+        V_cue,
+        c,
+        w,
+        rng_p,
+        rng_H,
+        **options,
+    )
     capacity = resource_vector(c.resource_capacity, c.plant_sizes, pl, "P")
     dmax = resource_vector(c.max_feeding_demand, c.insect_sizes, hl, "H")
     e = shared.settle_feeding(
@@ -68,6 +78,7 @@ def ecology(state, c, B, w, rng_p, rng_H):
         capacity,
         dmax,
         chemical=state.plants.chemical_traits,
+        module_traits=state.insects.module_traits,
     )
     # Explicit Speed beta=0 and common actual resource ledger. No fixed-size reproduction.
     e["wi"] = e["g"] * e["fi"]
@@ -123,12 +134,11 @@ def initialize_community(config, initial=None):
     community = None
     runtime.input_sources = deepcopy(config.get("input_sources", {}))
     runtime.B, runtime.w = runtime.c.validate()
-    if (
-        runtime.c.model_version != __version__
-        or runtime.c.genetics["schema_version"] != "slim-qtl-2"
-    ):
+    if runtime.c.model_version not in {"0.1.6", "0.1.7"} or runtime.c.genetics[
+        "schema_version"
+    ] != ("slim-qtl-4" if runtime.c.model_version == "0.1.7" else "slim-qtl-2"):
         raise ValueError(
-            f"Execution requires model_version={__version__} and slim-qtl-2; use the matching Git tag "
+            "Execution supports model_version=0.1.6/slim-qtl-2 and 0.1.7/slim-qtl-4; use the matching Git tag "
             "to rerun historical models. Saved historical results remain readable."
         )
     runtime.genetic = genetics.GeneticState(runtime.c)
@@ -215,6 +225,7 @@ def initialize_community(config, initial=None):
                 A,
                 genotypes=gh,
                 sex=sex,
+                module_traits=hvalues.get("insect_module_traits"),
                 birth_host_id=np.full(len(hl), -1, dtype=np.int64),
                 birth_host_species=np.full(len(hl), -1, dtype=int),
                 adult_cohort=np.zeros(len(hl), dtype=int),
@@ -277,6 +288,23 @@ def finalize(state):
         count_semantics="N_offspring counts all births; N_next counts surviving recruited adults (plants: all offspring); no actual event rows on terminal or failed transitions",
         resource_semantics="edible dry mass per newly recruited plant per feeding window, not regrowth or offspring biomass conservation",
     )
+    if modules.enabled(runtime.c):
+        runtime.result["metadata"].update(
+            functional_schema="expression-tuning-2",
+            module_assumptions="fixed chemical features independent of concentration; fixed Gaussian widths; conserved processing capacity with idle channel; expression outside sensory saturation",
+            compatibility_semantics="species fields are fixed ancestral compatibility pools, never dynamically inferred species",
+            insect_module_order=[
+                "met_E1",
+                "met_E2",
+                "met_mu1",
+                "met_mu2",
+                "sense_E1",
+                "sense_E2",
+                "sense_mu1",
+                "sense_mu2",
+            ],
+            A_semantics="derived unsigned sensory expression profile on fixed chemical catalog, not an odor template",
+        )
     runtime.result.update(runtime.genetic.records())
     architecture = json.dumps(runtime.c.genetics, sort_keys=True, separators=(",", ":"))
     payload = json.dumps(config_payload(runtime.c), sort_keys=True, separators=(",", ":"))

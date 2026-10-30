@@ -1,0 +1,32 @@
+# v0.1.7 development implementation; no molecular calibration or species certification.
+extends: model_parameters.yaml
+input_files:
+  loci: ../inputs/v017_no_flowering/loci.csv
+  alleles: ../inputs/v017_no_flowering/alleles.csv
+  founder_frequencies: ../inputs/v017_no_flowering/founder_frequencies.csv
+  reference_traits: ../inputs/v017_no_flowering/reference_traits.csv
+parameters:
+  model_version: 0.1.7
+  genetics:
+    schema_version: slim-qtl-4
+    background:
+      plant: [0.0, 0.0, 0.0]
+      insect: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    provenance:
+      mapping:
+        source_kind: theoretical_placeholder
+        description: Three plant chemical and eight insect additive coordinates, clipped to configured bounds. Fixed Gaussian expression/tuning modules are project assumptions; plant reproduction uses uniform local surviving donors.
+      founders:
+        source_kind: theoretical_placeholder
+        description: Independent polymorphic founder copies; functional module levels are illustrative, not inferred ancestral adaptations.
+      genome_map:
+        source_kind: theoretical_placeholder
+        description: Two QTLs per axis spaced 10 cM on the same abstract linkage group; groups are independent.
+  functional_modules:
+    chemical_features: [0.0, 1.0]
+    processing_width: 0.25
+    sensory_width: 0.25
+    processing_idle: 0.1
+    sensory_half: 0.2
+    sensory_valence: [1.0, -1.0]
+    sensory_cost: 0.05

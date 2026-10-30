@@ -12,6 +12,10 @@ def encounter_candidates(pool, size, rng):
 
 
 def chemical_scores(V, A, c, weights):
+    if c.genetics["schema_version"] == "slim-qtl-4":
+        from .modules import scores
+
+        return scores(V, A, c)
     if c.olfaction_mode == "neutral":
         return np.full(len(V), c.b)
     distance = (V - A) ** 2 @ weights

@@ -13,12 +13,73 @@ from evo_sim.models.plant_insect.audit import report_directory
 
 def audit_file(batch):
     """Path of the integrity audit report for a batch."""
-    return report_directory(batch) / "integrity_audit.json"
+    ordinary = report_directory(batch) / "integrity_audit.json"
+    corrected = Path(batch) / "data/summary/corrected_integrity_audit.json"
+    return corrected if not ordinary.exists() and corrected.exists() else ordinary
 
 
 def read_audit(batch):
     """Parsed integrity audit report for a batch."""
-    return json.loads(audit_file(batch).read_text(encoding="utf-8"))
+    path = audit_file(batch)
+    report = json.loads(path.read_text(encoding="utf-8"))
+    if path.name != "corrected_integrity_audit.json":
+        return report
+    # Independently audited corrected runs retain their original report, not a synthetic CLI audit.
+    assert report["status"] == "passed"
+    rows = report["runs"]
+    status = pd.read_csv(Path(batch) / "data/run_status.csv")
+    assert report["expected_runs"] == report["audited_runs"] == len(rows) == len(status)
+    keys = [(r["case"], r["replicate"], r["seed"]) for r in rows]
+    assert len(set(keys)) == len(keys)
+    assert set(keys) == set(
+        status[["case", "replicate", "seed"]].itertuples(index=False, name=None)
+    )
+    collected = []
+    for name, digest in report["source_reports"].items():
+        source = path.with_name(name)
+        assert sha256(source) == digest, source
+        collected.extend(json.loads(source.read_text(encoding="utf-8"))["runs"])
+    assert sorted(collected, key=lambda r: (r["case"], r["replicate"])) == sorted(
+        rows, key=lambda r: (r["case"], r["replicate"])
+    )
+    design_path = path.with_name("corrected_design_consistency.json")
+    assert sha256(design_path) == report["design_report_sha256"]
+    design = json.loads(design_path.read_text(encoding="utf-8"))
+    assert design["status"] == "passed"
+    assert sha256(Path(batch) / "settings.json") == design["settings_sha256"]
+    assert sha256(Path(batch) / "data/run_status.csv") == design["run_status_sha256"]
+    assert {(r["case"], r["replicate"]) for r in design["runs"]} == {k[:2] for k in keys}
+    for row in design["runs"]:
+        assert all(
+            row[key]
+            for key in (
+                "config_matches_formal",
+                "source_matches_frozen",
+                "input_sources_match_settings",
+                "run_status_matches_metadata",
+            )
+        )
+        assert (
+            sha256(run_path(batch, row["case"], row["replicate"]) / "metadata.json")
+            == row["metadata_sha256"]
+        )
+    for row in rows:
+        checked = row["audit"]
+        terminal = status.loc[
+            status.case.eq(row["case"]) & status.replicate.eq(row["replicate"]), "generation"
+        ].iloc[0]
+        assert row["original_files_unchanged"] and row["frozen_sources_match"]
+        assert checked["status"] == "completed"
+        assert checked["genetic_audit"] and checked["contribution_audit"]
+        assert checked["states"] == terminal + 1
+        assert checked["transitions"] == checked["contribution_transitions"] == terminal
+    return dict(
+        report,
+        run_reports=rows,
+        runs=len(rows),
+        genetically_audited_runs=len(rows),
+        audit_method="independent audit_run aggregate",
+    )
 
 
 def read_settings(batch):
@@ -46,10 +107,14 @@ class Batch:
     status: pd.DataFrame
 
     @classmethod
-    def open(cls, batch):
+    def open(cls, batch, *, allow_lifecycle=False):
         """Load and check shared batch metadata once; create only the summary directory."""
-        path = Path(batch)
-        if (path / "settings.json").exists() and read_settings(path).get("version") == "0.1.6":
+        path = Path(batch).resolve()
+        if (
+            (path / "settings.json").exists()
+            and read_settings(path).get("version") in {"0.1.6", "0.1.7"}
+            and not allow_lifecycle
+        ):
             raise ValueError(
                 "Legacy summaries assume self-feeding parents; v0.1.6 uses larvae. Read the stage-specific raw ledgers or summarize_lifecycle instead."
             )

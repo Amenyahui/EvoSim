@@ -45,10 +45,32 @@ def check_rows(frame, keys, expected, name):
     unique_keys(frame, keys, name)
     indexed = {tuple(row[k] for k in keys): row for row in frame.to_dict("records")}
     assert set(indexed) == set(expected), (name, "missing/extra keys", set(expected) ^ set(indexed))
+    checks = {}
     for key, values in expected.items():
         for column, value in values.items():
             assert column in frame.columns, (name, "missing column", column)
-            compare(indexed[key][column], value, (name, key, column))
+            kind = (
+                "missing"
+                if value is None or (isinstance(value, float) and np.isnan(value))
+                else "bool"
+                if isinstance(value, (bool, np.bool_))
+                else "str"
+                if isinstance(value, str)
+                else "numeric"
+            )
+            actual, wanted = checks.setdefault((column, kind), ([], []))
+            actual.append(indexed[key][column])
+            wanted.append(value)
+    for (column, kind), (actual, wanted) in checks.items():
+        context = (name, column, kind)
+        if kind == "missing":
+            assert pd.isna(actual).all(), context
+        elif kind == "bool":
+            assert [flag(value) for value in actual] == wanted, context
+        elif kind == "str":
+            assert actual == wanted, context
+        else:
+            close(actual, wanted, context)
 
 
 def vector(value, labels, prefix):
@@ -59,9 +81,63 @@ def vector(value, labels, prefix):
     )
 
 
+def module_profiles(values, c):
+    """Independent saved-data reconstruction, deliberately separate from runtime kernels."""
+    f = c.functional_modules
+    z = np.asarray(f["chemical_features"])
+    processing = np.exp(-0.5 * ((values[:, 2:4, None] - z) / f["processing_width"]) ** 2)
+    processing /= f["processing_idle"] + processing.sum(axis=2, keepdims=True)
+    I = np.sum(values[:, :2, None] * processing, axis=1)
+    sensing = np.exp(-0.5 * ((values[:, 6:8, None] - z) / f["sensory_width"]) ** 2)
+    return I, np.sum(values[:, 4:6, None] * sensing, axis=1)
+
+
+def module_scores(V, x, c):
+    f = c.functional_modules
+    if c.olfaction_mode == "neutral":
+        return np.full(len(V), c.b)
+    affinity = np.exp(
+        -0.5 * ((x[6:8, None] - np.asarray(f["chemical_features"])) / f["sensory_width"]) ** 2
+    )
+    activation = V @ affinity.T
+    return c.b + (activation / (f["sensory_half"] + activation)) @ (
+        x[4:6] * np.asarray(f["sensory_valence"])
+    )
+
+
+def module_choice(V, x, c, forced=False):
+    scores = module_scores(V, x, c)
+    if forced or c.choice_mode == "forced":
+        logits = (scores - scores.max()) * c.tau
+        mass = np.exp(logits)
+        return np.append(mass / mass.sum(), 0.0)
+    logits = (
+        np.append(scores, c.outside_utility / c.tau)
+        if c.tau >= 1
+        else np.append(scores * c.tau if c.tau else np.zeros(len(scores)), c.outside_utility)
+    )
+    logits = (logits - logits.max()) * (c.tau if c.tau >= 1 else 1)
+    mass = np.exp(logits)
+    probability = mass / mass.sum()
+    return probability / probability.sum()
+
+
+def pollen_distribution(theta, mother, pool, c):
+    """Read-only reconstruction of the superseded slim-qtl-3 flowering draft."""
+    kappa = c.functional_modules["flowering_kappa"]
+    if kappa == 0:
+        return None
+    log_weight = kappa * (np.cos(2 * np.pi * (theta[pool] - theta[mother])) - 1)
+    weight = np.exp(log_weight - np.max(log_weight))
+    return weight / weight.sum()
+
+
 def audit_snapshot_summaries(path, c, states, catalog, phenotype):
     """Snapshot exports and reference assays have no larval-stage assumptions."""
+    modern = c.genetics["schema_version"] in {"slim-qtl-3", "slim-qtl-4"}
+    historical_flowering = c.genetics["schema_version"] == "slim-qtl-3"
     summary = pd.read_csv(path / "genetic_summary.csv", float_precision="round_trip")
+    summary_groups = summary.groupby(["generation", "kind", "species"], sort=False)
     haplotypes = pd.read_csv(path / "haplotype_summary.csv", float_precision="round_trip")
     mutations = pd.read_csv(path / "mutations.csv", float_precision="round_trip")
     hap_expected, expected_count = {}, 0
@@ -73,8 +149,27 @@ def audit_snapshot_summaries(path, c, states, catalog, phenotype):
                 g, labels = state[kind + "_genotypes"], state[kind + "_species"]
                 raw = phenotype(g, kind, clip=False)
                 local = [l for l in c.genetics["loci"] if l["organism"] == kind]
-                traits = ("plant_chemical_traits",) if kind == "plant" else ("I", "A")
-                for name in ("D",) + traits if kind == "plant" else traits:
+                traits = (
+                    (
+                        (
+                            ("plant_chemical_traits", "plant_flowering_phase")
+                            if historical_flowering
+                            else ("plant_chemical_traits",)
+                        )
+                        if kind == "plant"
+                        else ("insect_module_traits",)
+                    )
+                    if modern
+                    else (("plant_chemical_traits",) if kind == "plant" else ("I", "A"))
+                )
+                export_traits = (
+                    ("D",) + traits
+                    if kind == "plant"
+                    else ("I", "A") + traits
+                    if modern
+                    else traits
+                )
+                for name in export_traits:
                     key = f"g{t:06d}_{name}"
                     export_keys.add(key)
                     np.testing.assert_array_equal(exported[key], state[name])
@@ -82,36 +177,56 @@ def audit_snapshot_summaries(path, c, states, catalog, phenotype):
                     species = f"{'P' if kind == 'plant' else 'H'}{s + 1}"
                     selected = labels == s
                     n = int(selected.sum())
-                    own = summary[
-                        (summary.generation == t)
-                        & (summary.kind == kind)
-                        & (summary.species == species)
-                    ]
+                    own = summary_groups.get_group((t, kind, species))
                     assert own.N.eq(n).all()
                     offset = 0
                     for name in traits:
-                        for j in range(state[name].shape[1]):
+                        trait_values = (
+                            state[name][:, None] if state[name].ndim == 1 else state[name]
+                        )
+                        for j in range(trait_values.shape[1]):
                             rows = own[
                                 (own.record_type == "trait") & (own.trait == f"{name}_{j + 1}")
                             ]
-                            assert len(rows) == 1
+                            assert len(rows) == 1, (
+                                "trait summary key",
+                                t,
+                                kind,
+                                species,
+                                name,
+                                j,
+                                len(rows),
+                            )
                             expected_count += 1
-                            x, unbounded = state[name][selected, j], raw[selected, offset + j]
+                            x, unbounded = trait_values[selected, j], raw[selected, offset + j]
                             lower, upper = c.genetics["phenotype_map"]["bounds"]
                             for column, value in dict(
                                 mean=x.mean() if n else np.nan,
                                 variance=x.var() if n else np.nan,
                                 raw_mean=unbounded.mean() if n else np.nan,
-                                clipped_fraction=np.mean((unbounded < lower) | (unbounded > upper))
-                                if n
-                                else np.nan,
+                                clipped_fraction=(
+                                    np.mean((unbounded < lower) | (unbounded > upper))
+                                    if n and name != "plant_flowering_phase"
+                                    else np.nan
+                                ),
+                                **(
+                                    {
+                                        "wrapped_fraction": np.mean(
+                                            (unbounded < 0) | (unbounded >= 1)
+                                        )
+                                        if n
+                                        else np.nan
+                                    }
+                                    if name == "plant_flowering_phase"
+                                    else {}
+                                ),
                             ).items():
                                 compare(
                                     rows.iloc[0][column],
                                     value,
                                     ("summary", t, species, name, j, column),
                                 )
-                        offset += state[name].shape[1]
+                        offset += trait_values.shape[1]
                     for l, locus in enumerate(local):
                         rows = own[
                             (own.record_type == "allele") & (own.locus_id == locus["locus_id"])
@@ -186,12 +301,21 @@ def audit_snapshot_summaries(path, c, states, catalog, phenotype):
     ref = np.asarray(c.observation_reference_traits["plant_chemical_traits"], float)
     D = ref[:, :2]
     V = np.column_stack((c.eta_shared * ref[:, 1], ref[:, 2]))
+    reference_ids = (
+        c.observation_reference_traits["reference_ids"]
+        if modern
+        else [f"P{p + 1}" for p in range(len(D))]
+    )
     weights = np.asarray(c.weights) / sum(c.weights)
     for state in states:
         t = int(state["generation"])
         A, I = state["A"], state["I"]
         d = ((A[:, None, :] - V[None, :, :]) ** 2) @ weights
-        if c.olfaction_mode == "neutral" or c.tau == 0:
+        if modern:
+            probability = np.array(
+                [module_choice(V, x, c, forced=True)[:-1] for x in state["insect_module_traits"]]
+            ).reshape(len(I), len(D))
+        elif c.olfaction_mode == "neutral" or c.tau == 0:
             probability = np.full(d.shape, 1 / len(D))
         else:
             logits = -((d - d.min(axis=1, keepdims=True)) / c.sigma) / c.sigma / 2
@@ -206,16 +330,16 @@ def audit_snapshot_summaries(path, c, states, catalog, phenotype):
         q = np.minimum(1, ratios.min(axis=2))
         close(state["reference_p"], probability, ("reference choice", t))
         close(state["reference_q"], q, ("reference performance", t))
-        assert state["reference_plant_species"].tolist() == [f"P{p + 1}" for p in range(len(D))]
+        assert state["reference_plant_species"].tolist() == reference_ids
         for s in range(len(c.insect_sizes)):
             selected = state["insect_species"] == s
             n = int(selected.sum())
             for p in range(len(D)):
                 a, b = probability[selected, p], q[selected, p]
                 joint = a * b
-                expected[t, f"H{s + 1}", f"P{p + 1}"] = dict(
+                expected[t, f"H{s + 1}", reference_ids[p]] = dict(
                     insect_count=n,
-                    panel="equal_ancestral_species",
+                    panel="fixed_chemical_reference" if modern else "equal_ancestral_species",
                     preference=a.mean() if n else np.nan,
                     q_unlimited=b.mean() if n else np.nan,
                     joint_pq=joint.mean() if n else np.nan,
@@ -236,10 +360,17 @@ def audit_run_v016(path, meta):
     """Audit all births, including dead larvae, separately from adult recruits."""
     assert __debug__, "scientific audits require assertions"
     c = Config(**meta["config"])
-    c.validate()
-    assert c.model_version == meta["version"] == "0.1.6"
-    assert meta["genetics_version"] == "slim-qtl-2"
-    assert meta["ecology_rule_version"] == "0.1.6"
+    modern = c.model_version == "0.1.7"
+    historical_settlement = modern and meta.get("functional_schema") == "expression-tuning-1"
+    c.validate(historical_audit=historical_settlement)
+    historical_flowering = c.genetics["schema_version"] == "slim-qtl-3"
+    assert c.model_version == meta["version"] in {"0.1.6", "0.1.7"}
+    assert meta["genetics_version"] == c.genetics["schema_version"]
+    assert meta["genetics_version"] in ({"slim-qtl-3", "slim-qtl-4"} if modern else {"slim-qtl-2"})
+    assert meta["ecology_rule_version"] == c.model_version
+    if modern:
+        assert meta["functional_schema"] in {"expression-tuning-1", "expression-tuning-2"}
+        assert not historical_flowering or historical_settlement
     payload = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(payload).hexdigest() == meta["config_sha256"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]
@@ -262,6 +393,8 @@ def audit_run_v016(path, meta):
         "mutations",
         "allele_catalog",
     )
+    if historical_settlement:
+        names += ("adult_settlement",)
     tables = {
         name: pd.read_csv(path / f"{name}.csv", float_precision="round_trip", low_memory=False)
         for name in names
@@ -423,10 +556,23 @@ def audit_run_v016(path, meta):
             assert ((cells >= 0) & (cells < shape)).all()
             values = phenotype(state[kind + "_genotypes"], kind)
             if kind == "plant":
+                if historical_flowering:
+                    close(
+                        state["plant_flowering_phase"],
+                        phenotype(state["plant_genotypes"], kind, clip=False)[:, 3] % 1,
+                        "flowering phase",
+                    )
                 close(
-                    state["plant_chemical_traits"], values, (state["generation"], kind, "phenotype")
+                    state["plant_chemical_traits"],
+                    values[:, :3] if modern else values,
+                    (state["generation"], kind, "phenotype"),
                 )
                 close(state["D"], values[:, :2], "plant defense")
+            elif modern:
+                close(state["insect_module_traits"], values, "insect modules")
+                I, A = module_profiles(values, c)
+                close(state["I"], I, "effective processing")
+                close(state["A"], A, "sensory profile")
             else:
                 close(state["I"], values[:, : c.n], "insect resistance")
                 close(state["A"], values[:, c.n :], "insect preference")
@@ -463,6 +609,7 @@ def audit_run_v016(path, meta):
         if name not in ("allele_catalog", "mutations", "gamete_transmissions")
     }
     keys = dict(
+        adult_settlement=("generation", "insect_id"),
         events=("generation", "insect_id"),
         larvae=("generation", "insect_id"),
         plants=("generation", "plant_id"),
@@ -509,13 +656,65 @@ def audit_run_v016(path, meta):
         D = state["D"]
         chemical = state["plant_chemical_traits"]
         V = np.column_stack((c.eta_shared * chemical[:, 1], chemical[:, 2]))
+        # Read-only reconstruction of superseded settlement; never called by current execution.
+        if historical_settlement:
+            hcells = hcells.copy()
+            enabled = c.functional_modules["adult_settlement_enabled"]
+            ranks = rng[1, 0, 0].permutation(len(hids)) if enabled else np.arange(len(hids))
+            for rank, i in enumerate(ranks):
+                origin = hcells[i].copy()
+                candidates = np.empty(0, int)
+                host, reason = -1, "disabled"
+                if enabled:
+                    available = np.flatnonzero(
+                        distance(origin, pcells, shape) <= c.spatial["search_radius"]
+                    )
+                    stream = rng[1, 1, int(hl[i])]
+                    candidates = stream.choice(
+                        available, min(c.candidate_size, len(available)), replace=False
+                    )
+                    reason = "no_candidate"
+                    if len(candidates):
+                        probabilities = module_choice(
+                            V[candidates], state["insect_module_traits"][i], c
+                        )
+                        selected = stream.choice(len(probabilities), p=probabilities)
+                        if selected < len(candidates):
+                            host = int(candidates[selected])
+                            hcells[i] = pcells[host]
+                        reason = "accepted" if host >= 0 else "rejected"
+                add(
+                    "adult_settlement",
+                    (t, int(hids[i])),
+                    enabled=enabled,
+                    host_id=int(pids[host]) if host >= 0 else -1,
+                    host_row=host,
+                    accepted=host >= 0,
+                    reason=reason,
+                    candidate_plant_ids=json.dumps(pids[candidates].tolist()),
+                    candidate_count=len(candidates),
+                    choice_order=rank if enabled else -1,
+                    origin_row=int(origin[0]),
+                    origin_col=int(origin[1]),
+                    mating_row=int(hcells[i, 0]),
+                    mating_col=int(hcells[i, 1]),
+                )
+        if modern:
+            processing_cost = c.insect_cost * state["insect_module_traits"][:, :2].sum(axis=1)
+            sensory_cost = c.functional_modules["sensory_cost"] * state["insect_module_traits"][
+                :, 4:6
+            ].sum(axis=1)
+            fi = np.maximum(0, 1 - processing_cost - sensory_cost)
+        else:
+            fi = np.maximum(0, 1 - c.insect_cost * state["I"].sum(axis=1))
         cue = V[rng[1, 0, 0].permutation(len(V))] if c.shuffle_voc else V
-        fi = np.maximum(0, 1 - c.insect_cost * state["I"].sum(axis=1))
         current_rows, birth_genotypes, child_rows, live_masks = {}, {}, {}, {}
 
         def parents(kind, S, F, phi):
             k = int(kind == "insect")
             labels, ids, cells = (state[kind + x] for x in ("_species", "_ids", "_cells"))
+            if modern and k:
+                cells = hcells
             maternal = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0
             donor = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1
             radius = c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
@@ -571,6 +770,29 @@ def audit_run_v016(path, meta):
                 )
                 if k:
                     expected["parents"][t, kind, int(ident)]["potential_egg_count"] = counts[i]
+            if modern:
+                for i, ident in enumerate(ids):
+                    pool = pools[i]
+                    probabilities = (
+                        pollen_distribution(state["plant_flowering_phase"], i, pool, c)
+                        if historical_flowering and not k and len(pool)
+                        else None
+                    )
+                    if probabilities is None:
+                        probabilities = (
+                            np.full(len(pool), 1 / len(pool)) if len(pool) else np.empty(0)
+                        )
+                    expected["parents"][t, kind, int(ident)].update(
+                        mating_row=int(cells[i, 0]),
+                        mating_col=int(cells[i, 1]),
+                        candidate_mate_ids=json.dumps(ids[pool].tolist()),
+                        candidate_mate_probabilities=json.dumps(probabilities.tolist()),
+                    )
+                    if k:
+                        expected["parents"][t, kind, int(ident)].update(
+                            processing_expression_cost=processing_cost[i],
+                            sensory_expression_cost=sensory_cost[i],
+                        )
             return counts, pools, survived
 
         hcounts, hpools, _ = parents("insect", np.ones(len(hids)), fi, np.ones(len(hids)))
@@ -594,34 +816,40 @@ def audit_run_v016(path, meta):
             )
             reason = "no_candidate"
             if len(candidates):
-                weights = np.asarray(c.weights) / np.sum(c.weights)
-                distances = (cue[candidates] - state["A"][m]) ** 2 @ weights
-                if c.choice_mode == "forced":
-                    relative = (
-                        np.zeros(len(candidates))
-                        if c.olfaction_mode == "neutral" or c.tau == 0
-                        else -((distances - distances.min()) / c.sigma) / c.sigma / 2
+                if modern:
+                    probabilities = module_choice(
+                        cue[candidates], state["insect_module_traits"][m], c
                     )
-                    logits = (relative - relative.max()) * c.tau
-                    values = np.exp(logits)
-                    probabilities = np.append(values / values.sum(), 0.0)
                 else:
-                    scores = (
-                        np.full(len(candidates), c.b)
-                        if c.olfaction_mode == "neutral"
-                        else c.b - (distances / c.sigma) / c.sigma / 2
-                    )
-                    logits = (
-                        np.append(scores, c.outside_utility / c.tau)
-                        if c.tau >= 1
-                        else np.append(
-                            scores * c.tau if c.tau else np.zeros(len(scores)), c.outside_utility
+                    weights = np.asarray(c.weights) / np.sum(c.weights)
+                    distances = (cue[candidates] - state["A"][m]) ** 2 @ weights
+                    if c.choice_mode == "forced":
+                        relative = (
+                            np.zeros(len(candidates))
+                            if c.olfaction_mode == "neutral" or c.tau == 0
+                            else -((distances - distances.min()) / c.sigma) / c.sigma / 2
                         )
-                    )
-                    logits = (logits - logits.max()) * (c.tau if c.tau >= 1 else 1)
-                    values = np.exp(logits)
-                    probabilities = values / values.sum()
-                    probabilities /= probabilities.sum()
+                        logits = (relative - relative.max()) * c.tau
+                        values = np.exp(logits)
+                        probabilities = np.append(values / values.sum(), 0.0)
+                    else:
+                        scores = (
+                            np.full(len(candidates), c.b)
+                            if c.olfaction_mode == "neutral"
+                            else c.b - (distances / c.sigma) / c.sigma / 2
+                        )
+                        logits = (
+                            np.append(scores, c.outside_utility / c.tau)
+                            if c.tau >= 1
+                            else np.append(
+                                scores * c.tau if c.tau else np.zeros(len(scores)),
+                                c.outside_utility,
+                            )
+                        )
+                        logits = (logits - logits.max()) * (c.tau if c.tau >= 1 else 1)
+                        values = np.exp(logits)
+                        probabilities = values / values.sum()
+                        probabilities /= probabilities.sum()
                 selected = stream.choice(len(probabilities), p=probabilities)
                 if selected < len(candidates):
                     hosts[j] = candidates[selected]
@@ -757,7 +985,11 @@ def audit_run_v016(path, meta):
 
         hg, hchildren = children("insect", mothers, fathers)
         child_hl = hl[mothers]
-        child_I = phenotype(hg, "insect")[:, : c.n]
+        child_I = (
+            module_profiles(phenotype(hg, "insect"), c)[0]
+            if modern
+            else phenotype(hg, "insect")[:, : c.n]
+        )
         R = vector(c.resource_capacity, pl, "P")
         dmax = vector(c.max_feeding_demand, child_hl, "H")
         ratios = np.divide(child_I, D[hosts], out=np.full_like(child_I, np.inf), where=D[hosts] > 0)
@@ -902,7 +1134,18 @@ def audit_run_v016(path, meta):
         )
         pcounts, ppools, psurvived = parents("plant", Sp, fp, phi)
         pm = np.repeat(np.arange(len(pids)), pcounts)
-        pf = np.array([rng[5, 0, int(pl[m])].choice(ppools[m]) for m in pm], int)
+        pf = np.array(
+            [
+                rng[5, 0, int(pl[m])].choice(
+                    ppools[m],
+                    p=pollen_distribution(state["plant_flowering_phase"], m, ppools[m], c)
+                    if historical_flowering
+                    else None,
+                )
+                for m in pm
+            ],
+            int,
+        )
         _, pchildren = children("plant", pm, pf)
         child_pcells = (
             pcells[pm]

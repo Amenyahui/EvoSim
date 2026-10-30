@@ -138,18 +138,22 @@ def figure_A(d, out, dpi):
         ax.set_ylim(bottom=0)
     for a in axes[2, :]:
         a.set_xlabel("Generation")
+    handles = [
+        Line2D([0], [0], color=C["gray"], lw=2, label=f"Mean of {len(REPS)} runs"),
+        Line2D([0], [0], color=C["gray"], lw=1, alpha=0.25, label="Individual run"),
+    ]
+    if ((ext.species == "H1") & ext.extinction_observed.eq(True)).any():
+        handles.append(
+            Line2D([0], [0], color=C["H1"], ls="none", marker="x", label="H1 extinction")
+        )
     fig.legend(
-        handles=[
-            Line2D([0], [0], color=C["gray"], lw=2, label=f"Mean of {len(REPS)} runs"),
-            Line2D([0], [0], color=C["gray"], lw=1, alpha=0.25, label="Individual run"),
-            Line2D([0], [0], color=C["H1"], ls="none", marker="x", label="H1 extinction"),
-        ],
+        handles=handles,
         loc="lower center",
         bbox_to_anchor=(0.54, 0.032),
-        ncol=3,
+        ncol=len(handles),
         frameon=False,
     )
-    fig.text(0.12, 0.085, "H1 means include extinct runs as N = 0.", size=8, color=C["gray"])
+    fig.text(0.12, 0.085, "Means include extinct runs as N = 0.", size=8, color=C["gray"])
     export(fig, out, "A_population_dynamics", dpi)
 
 
@@ -206,6 +210,7 @@ def figure_B(d, out, dpi):
     No unvalidated 'functional match' proxy: the model's interaction formulas are not in these CSVs.
     """
     t = d["trait_timeseries"].query("record_type=='trait'")
+    module = "insect_module_traits_1" in set(t.trait)
     chemical = "plant_chemical_traits_1" in set(t.trait)
     plant_pair = (
         ("plant_chemical_traits_1", "plant_chemical_traits_2") if chemical else ("D_1", "D_2")
@@ -224,10 +229,27 @@ def figure_B(d, out, dpi):
             "Δ x_V" if chemical else "Δ VOC 2",
         ),
         ("Insect detoxification", ("I_1", "I_2"), ("H1",), "Δ I₁", "Δ I₂"),
-        ("Plant defense", plant_pair, ("P1", "P2"), "Δ D₁", "Δ D₂"),
+        (
+            "Defense-only / shared chemical modules" if chemical else "Plant defense",
+            plant_pair,
+            ("P1", "P2"),
+            "Δ x_N" if chemical else "Δ D₁",
+            "Δ x_S" if chemical else "Δ D₂",
+        ),
         ("Insect recognition", ("A_1", "A_2"), ("H1",), "Δ A₁", "Δ A₂"),
     ]
-    fig, axes = plt.subplots(4, 2, figsize=(9.5, 11.2))
+    if module:
+        # v0.1.7 I/A are derived reference spectra, not inherited detox/recognition axes.
+        panels = [panels[0], panels[2]] + [
+            (name, tuple(f"insect_module_traits_{i}" for i in pair), ("H1",), xlab, ylab)
+            for name, pair, xlab, ylab in (
+                ("Processing expression", (1, 2), "Δ met E₁", "Δ met E₂"),
+                ("Processing tuning", (3, 4), "Δ met μ₁", "Δ met μ₂"),
+                ("Sensory expression", (5, 6), "Δ sense E₁", "Δ sense E₂"),
+                ("Sensory tuning", (7, 8), "Δ sense μ₁", "Δ sense μ₂"),
+            )
+        ]
+    fig, axes = plt.subplots(len(panels), 2, figsize=(9.5, 3.0 + 2.05 * len(panels)))
     fig.subplots_adjust(left=0.125, right=0.965, top=0.908, bottom=0.115, hspace=0.43, wspace=0.27)
     label(fig, "B", "Functional trait evolution · changes relative to generation 0")
     for j, case in enumerate(CASES):
@@ -261,7 +283,22 @@ def figure_B(d, out, dpi):
                 ax.set_ylabel(ylab + " (model units)")
             ax.ticklabel_format(axis="both", style="plain", useOffset=False)
             axstyle(ax, grid=False)
-            if j == 0:
+            if module:
+                short = (
+                    "Plant VOC",
+                    "Plant defense",
+                    "Metabolic expression",
+                    "Metabolic tuning",
+                    "Sensory expression",
+                    "Sensory tuning",
+                )[i]
+                ax.set_title(
+                    f"{CASE_NAMES[case]}\n{short}" if i == 0 else short,
+                    weight="semibold",
+                    pad=7,
+                    fontsize=9.2,
+                )
+            elif j == 0:
                 ax.text(
                     -0.26,
                     1.05,
@@ -307,7 +344,10 @@ def figure_C(d, out, dpi):
     pop = d["population_timeseries"]
     fig, axes = plt.subplots(2, 2, figsize=(10.2, 7.9))
     fig.subplots_adjust(left=0.105, right=0.98, top=0.885, bottom=0.158, hspace=0.47, wspace=0.3)
-    label(fig, "C", "Host use and extinction bottleneck")
+    evs = ex[(ex.species == "H1") & (ex.extinction_observed.eq(True))].copy()
+    extinct = not evs.empty
+    linestyles = {rep: ("-", "--", ":")[i % 3] for i, rep in enumerate(REPS)}
+    label(fig, "C", "Host use and " + ("extinction bottleneck" if extinct else "adult recruitment"))
     for j, case in enumerate(CASES):
         ax = axes[0, j]
         r = fr[fr.case == case]
@@ -319,6 +359,7 @@ def figure_C(d, out, dpi):
                 s.P2_resource_fraction,
                 color=C["off" if j == 0 else "on"],
                 lw=1.45,
+                ls=linestyles[rep],
                 alpha=0.65,
                 label=f"Run {rep:02}",
             )
@@ -330,9 +371,8 @@ def figure_C(d, out, dpi):
         ax.legend(frameon=False, fontsize=7.8, loc="upper left", ncol=3)
         axstyle(ax)
 
-    # Extinction-aligned dynamics for 5 extinct H1 runs; surviving run is not an extinction event.
+    # Censored surviving runs must never be treated as extinction events.
     ax = axes[1, 0]
-    evs = ex[(ex.species == "H1") & (ex.extinction_observed.eq(True))].copy()
     runs = []
     for _, e in evs.iterrows():
         case, rep, at = e["case"], int(e["replicate"]), int(e["event_or_censor_generation"])
@@ -345,22 +385,54 @@ def figure_C(d, out, dpi):
             sub.N_start,
             color=C["off" if case == "mutation_off" else "on"],
             lw=1.6,
+            ls=linestyles[rep],
             alpha=0.65,
             label=f"{'Off' if case == 'mutation_off' else 'On'} {rep:02}",
         )
-    ax.set_xlim(-20, 0)
+    if not extinct:
+        for case in CASES:
+            for rep in REPS:
+                sub = pop[
+                    (pop.case == case)
+                    & (pop.replicate == rep)
+                    & (pop.species == "H1")
+                    & (pop.generation >= HORIZON - 20)
+                ].sort_values("generation")
+                runs.append((case, rep, HORIZON, sub))
+                ax.plot(
+                    sub.generation,
+                    sub.N_start,
+                    color=C["off" if case == "mutation_off" else "on"],
+                    lw=1.6,
+                    ls=linestyles[rep],
+                    alpha=0.65,
+                    label=f"{'Off' if case == 'mutation_off' else 'On'} {rep:02}",
+                )
+    ax.set_xlim((-20, 0) if extinct else (HORIZON - 20, HORIZON))
     ax.set_ylim(bottom=0)
-    ax.axvline(0, lw=0.8, ls=":", color=C["gray"])
-    ax.set_xlabel("Generations relative to H1 extinction")
+    if extinct:
+        ax.axvline(0, lw=0.8, ls=":", color=C["gray"])
+    ax.set_xlabel("Generations relative to H1 extinction" if extinct else "Generation")
     ax.set_ylabel("H1 population size")
-    ax.set_title(f"Population collapse · {len(evs)} extinct runs", weight="semibold", pad=9)
+    ax.set_title(
+        f"Population collapse · {len(evs)} extinct runs"
+        if extinct
+        else "No H1 extinction · final 20 generations",
+        weight="semibold",
+        pad=9,
+    )
     ax.legend(loc="upper right", frameon=False, fontsize=7.3, ncol=2)
     axstyle(ax)
 
     # Final generation's numbers; categories differ biologically (survivors vs mated mothers).
     ax = axes[1, 1]
-    stages = ["N_start", "N_survived_to_reproduce", "N_mothers_with_mates", "N_offspring"]
-    x = np.arange(4)
+    larval = d.get("lifecycle_schema") == "adult-oviposition-larval-recruitment-1"
+    stages = (
+        ["N_start", "N_mothers_with_mates", "N_potential_eggs", "N_offspring", "N_next"]
+        if larval
+        else ["N_start", "N_survived_to_reproduce", "N_mothers_with_mates", "N_offspring"]
+    )
+    x = np.arange(len(stages))
     for case, rep, at, _ in runs:
         last = pop[
             (pop.case == case)
@@ -372,21 +444,37 @@ def figure_C(d, out, dpi):
             continue
         vals = last.iloc[0][stages].astype(float).to_numpy()
         col = C["off" if case == "mutation_off" else "on"]
-        ax.plot(x, vals, color=col, alpha=0.65, lw=1.25, marker="o", ms=3.3)
-    ax.set_xticks(x, ["Starting", "Surviving", "Mated\nmothers", "Offspring"])
-    ax.set_ylabel("Individuals / mothers / offspring")
-    ax.set_title("Last reproductive update before extinction", weight="semibold", pad=9)
+        ax.plot(x, vals, color=col, alpha=0.65, lw=1.25, ls=linestyles[rep], marker="o", ms=3.3)
+    ax.set_xticks(
+        x,
+        ["Adults", "Mated\nfemales", "Potential\neggs", "Larval\nbirths", "Adult\nrecruits"]
+        if larval
+        else ["Starting", "Surviving", "Mated\nmothers", "Offspring"],
+    )
+    ax.set_ylabel(
+        "Individuals / eggs (stage-specific)" if larval else "Individuals / mothers / offspring"
+    )
+    ax.set_title(
+        "Last reproductive update before extinction"
+        if extinct
+        else f"Final reproductive update · {HORIZON - 1} → {HORIZON}",
+        weight="semibold",
+        pad=9,
+    )
     ax.set_ylim(bottom=0)
     axstyle(ax)
     fig.text(
         0.105,
         0.043,
         "Each line is a run; no across-run mean for host share (avoids survivor bias)."
+        " Females/eggs/larvae/recruits are distinct stages."
+        if larval
+        else "Each line is a run; no across-run mean for host share (avoids survivor bias)."
         " Mated mothers are a subset, not an additional mortality stage.",
         fontsize=8,
         color=C["gray"],
     )
-    export(fig, out, "C_host_use_extinction", dpi)
+    export(fig, out, "C_host_use_extinction" if extinct else "C_host_use_recruitment", dpi)
 
 
 def cell_abundance(snapshot):
@@ -558,7 +646,7 @@ def figure_E(d, out, dpi):
 def main():
     import json
 
-    from .common import Batch, sha256, write_json
+    from .common import Batch, audit_file, read_audit, read_settings, run_path, sha256, write_json
 
     global REPS, HORIZON, GRID, SPATIAL_REPS
     ap = argparse.ArgumentParser(
@@ -575,7 +663,17 @@ def main():
         help="Explicit illustrative mutation-off runs; not a random sample",
     )
     a = ap.parse_args()
-    batch = Batch.open(a.input)
+    version = read_settings(a.input).get("version")
+    larval = version in {"0.1.6", "0.1.7"}
+    if larval:
+        path = a.input.resolve()
+        status = pd.read_csv(path / "data/run_status.csv")
+        checked = read_audit(path)
+        assert checked["runs"] == checked["genetically_audited_runs"] == len(status)
+        batch = Batch(path, path / "data/summary", checked, status)
+        batch.summary_dir.mkdir(exist_ok=True)
+    else:
+        batch = Batch.open(a.input)
     out = a.out or batch.path / "figures"
     if not batch.status.status.eq("completed").all():
         raise ValueError("A–E comparison requires complete runs; do not average censored runs")
@@ -594,14 +692,48 @@ def main():
         )
     )
     GRID = tuple(meta["config"]["spatial"]["grid_shape"])
+    raw_inputs = {}
+    if version == "0.1.7":
+        for run in batch.status.itertuples(index=False):
+            folder = run_path(batch.path, run.case, run.replicate)
+            metadata = folder / "metadata.json"
+            recorded = json.loads(metadata.read_text(encoding="utf-8"))
+            assert recorded["functional_schema"] == "expression-tuning-2"
+            assert recorded["genetics_version"] == "slim-qtl-4"
+            assert "adult_settlement_enabled" not in recorded["config"]["functional_modules"]
+            assert "flowering_kappa" not in recorded["config"]["functional_modules"]
+            names = [
+                "populations.csv",
+                "genetic_summary.csv",
+                "allele_catalog.csv",
+                "mutations.csv",
+                "networks.csv",
+            ]
+            generations = {HORIZON}
+            if run.case == "mutation_off" and run.replicate in SPATIAL_REPS:
+                generations.update(np.linspace(0, HORIZON, 5, dtype=int))
+            names += [f"snapshots/g{g:06d}.npz" for g in sorted(generations)]
+            for name in names:
+                source = folder / name
+                digest = sha256(source)
+                assert digest == recorded["output_sha256"][name], source
+                raw_inputs[str(source.relative_to(batch.path))] = digest
+            raw_inputs[str(metadata.relative_to(batch.path))] = sha256(metadata)
     from .analyze_macro import analyze
     from .summarize_qtl_run import summarize
     from .summarize_spatial import summarize as spatial_summary
 
-    summarize(batch)
-    spatial_summary(batch)
-    analyze(batch)
+    if larval:
+        from .summarize_lifecycle import prepare_diagnostics
+
+        prepare_diagnostics(batch)
+    else:
+        summarize(batch)
+        spatial_summary(batch)
+        analyze(batch)
     d = load_data(batch.summary_dir)
+    if larval:
+        d["lifecycle_schema"] = "adult-oviposition-larval-recruitment-1"
     for key in ["population_timeseries", "trait_timeseries"]:
         frame = d[key]
         columns = ["case", "replicate", "generation", "species"]
@@ -619,10 +751,29 @@ def main():
         batch.summary_dir / "plot_diagnostics_metadata.json",
         dict(
             source_sha256=sha256(Path(__file__)),
+            analysis_source_sha256={
+                p.name: sha256(p)
+                for p in [
+                    Path(__file__),
+                    Path(__file__).with_name("common.py"),
+                    Path(__file__).with_name("summarize_qtl_run.py"),
+                    Path(__file__).with_name("summarize_lifecycle.py"),
+                ]
+            },
             inputs={
                 str(p.relative_to(batch.path)): sha256(p) for p in batch.summary_dir.glob("*.csv")
             },
+            raw_inputs=raw_inputs,
+            audit_path=str(audit_file(batch.path).relative_to(batch.path)),
+            audit_sha256=sha256(audit_file(batch.path)),
+            audit_method=batch.audit.get("audit_method", "batch integrity audit"),
+            functional_schema=meta.get("functional_schema"),
+            genetics_schema=meta.get("genetics_version"),
             spatial_replicates=list(SPATIAL_REPS),
+            lifecycle_schema=d.get("lifecycle_schema", "historical_self_feeding"),
+            adapter_sha256=sha256(Path(__file__).with_name("summarize_lifecycle.py"))
+            if larval
+            else None,
             interpretation="Exploratory diagnostics; selected spatial examples; no causal inference",
         ),
     )

@@ -30,6 +30,8 @@ python -m tests
 
 ## 本地产物
 
+开发测试、冒烟运行、短程机制检查、实施验收、审计测试及其日志、汇总统一写入 `codex/validation/`，不得放入 `results/`；这一规则适用于所有后续版本，无需再次询问。批量运行省略 `--out` 时默认创建 `codex/validation/v<version>/run<N>`。`results/` 仅用于正式科研实验，须显式指定输出目录。已有历史实验数据不自动搬迁或改写；自动测试也可使用系统临时目录。
+
 `results/`、`tests/reports/` 和 `codex/` 已被 Git 忽略。codex 中的开发建议、验证日志和临时报告仅保存在本地；对使用者必要的说明应写入 README 或 docs，不能只链接到被忽略的文件。
 
 汇总命令仅接受 `--input`，统一写入批次的 `data/summary/`。`summarize_qtl_run` 一次分块读取同时生成性状和遗传多样性表；原独立 `summarize_genetics` 入口已合并。只有 `plot_diagnostics` 接受 `--out` 并创建图目录。内部汇总函数共用 `Batch` 对象。
