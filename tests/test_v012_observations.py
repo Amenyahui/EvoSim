@@ -13,6 +13,7 @@ import pandas as pd
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
+from evo_sim.models.plant_insect.helpers.modules import effective
 from evo_sim.models.plant_insect.helpers.observations import standardized
 from tests.support import config, raises
 
@@ -21,6 +22,7 @@ def test_joint_response_preserves_individual_associations():
     c = config(insect_sizes=[2])
     B, weights = c.validate()
     insects = SimpleNamespace(
+        module_traits=np.array([[0.6, 0.2, 0, 1, 1, 0, 0, 1], [0.2, 0.6, 0, 1, 1, 0, 1, 0]], float),
         preference=np.array([[0.6, 0.6], [0.2, 0.2]]),
         resistance=np.array([[0.6, 0.2], [0.2, 0.6]]),
         species=np.zeros(2, int),
@@ -32,7 +34,8 @@ def test_joint_response_preserves_individual_associations():
         insects=InsectPopulation(
             ids=np.arange(2),
             species=insects.species,
-            resistance=insects.resistance,
+            resistance=effective(insects.module_traits, c.functional_modules)[0],
+            module_traits=insects.module_traits,
             preference=insects.preference,
         )
     )
@@ -48,6 +51,7 @@ def test_joint_response_preserves_individual_associations():
         species=np.empty(0, int),
         resistance=np.empty((0, 2)),
         preference=np.empty((0, 2)),
+        module_traits=np.empty((0, 8)),
     )
     rows, p, q = standardized(state, c, B, weights, 1)
     assert p.shape == q.shape == (0, 2)

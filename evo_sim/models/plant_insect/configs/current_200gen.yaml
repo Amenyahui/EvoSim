@@ -1,0 +1,5 @@
+extends: current.yaml
+simulation_metadata:
+  num_steps_per_episode: 200
+batch:
+  purpose: User-requested 200-generation multilarva validation; theoretical parameters, not calibration.

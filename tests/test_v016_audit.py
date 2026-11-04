@@ -11,7 +11,7 @@ import pandas as pd
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
-from evo_sim.models.plant_insect.audit_v016 import check_rows
+from evo_sim.models.plant_insect.audit_lifecycle import check_rows
 from evo_sim.models.plant_insect.batch import save_result, write_json
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from tests.support import config, raises

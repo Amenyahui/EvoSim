@@ -10,10 +10,7 @@ from .helpers.config import config_payload
 from .helpers.demography import ComputationalLimit
 from .helpers.inputs import read_config
 from .helpers.runtime import fail, finalize, initialize_community
-from .substeps.demography import CollectOffspring, SampleMaternallyProducedOffspring
-from .substeps.ecology import ChooseHosts, ObserveCues, SettleFeeding
 from .substeps.lifecycle import AdvanceGeneration
-from .substeps.reproduction import CrossFertilizeAndDisperse
 
 MODEL_DIR = Path(__file__).resolve().parent
 
@@ -23,12 +20,6 @@ def get_registry():
     for function, name, category in (
         (initialize_community, "initialize_community", "initialization"),
         (AdvanceGeneration, "advance_generation", "transition"),
-        (ObserveCues, "observe_cues", "observation"),
-        (ChooseHosts, "choose_hosts", "policy"),
-        (SettleFeeding, "settle_feeding", "transition"),
-        (SampleMaternallyProducedOffspring, "sample_maternal_offspring", "policy"),
-        (CollectOffspring, "collect_offspring", "transition"),
-        (CrossFertilizeAndDisperse, "cross_fertilize_and_disperse", "transition"),
     ):
         registry.register(function, name, category)
     return registry
@@ -66,19 +57,22 @@ def get_runner(config_path=None, *, config=None):
     if config is not None and config_path is not None:
         raise ValueError("Provide config or config_path, not both")
     if config is None:
-        config = read_config(config_path or MODEL_DIR / "configs/sexual_qtl_development.yaml")
-    if config["parameters"].get("model_version") in {"0.1.6", "0.1.7"}:
-        steps = list(config["substeps"].values())
-        transitions = list(steps[0].get("transition", {}).values()) if len(steps) == 1 else []
-        if (
-            len(steps) != 1
-            or steps[0]["active_agents"]
-            or steps[0].get("observation")
-            or steps[0].get("policy")
-            or len(transitions) != 1
-            or transitions[0]["generator"] != "advance_generation"
-        ):
-            raise ValueError("v0.1.6 requires the adult/larval advance_generation lifecycle")
+        config = read_config(config_path or MODEL_DIR / "configs/current.yaml")
+    if config["parameters"].get("model_version") != "0.1.7":
+        raise ValueError(
+            "Only current model protocol 0.1.7 executes; use the frozen history for old protocols"
+        )
+    steps = list(config["substeps"].values())
+    transitions = list(steps[0].get("transition", {}).values()) if len(steps) == 1 else []
+    if (
+        len(steps) != 1
+        or steps[0]["active_agents"]
+        or steps[0].get("observation")
+        or steps[0].get("policy")
+        or len(transitions) != 1
+        or transitions[0]["generator"] != "advance_generation"
+    ):
+        raise ValueError("Current protocol requires the adult/larval advance_generation lifecycle")
     return PlantInsectRunner(config, get_registry())
 
 

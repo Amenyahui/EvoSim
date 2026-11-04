@@ -11,8 +11,7 @@ import pandas as pd
 from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
 
-from . import chemistry, genetics, modules, spatial
-from . import ecology as shared
+from . import ecology, genetics, modules, spatial
 from .agents import CommunityState, InsectPopulation, PlantPopulation
 from .config import Config, config_payload, resource_values
 from .contributions import mark_uncommitted
@@ -31,71 +30,13 @@ def streams(c):
             [rng(phase, 0, s) for s in range(len(c.plant_sizes))],
             [rng(phase, 1, s) for s in range(len(c.insect_sizes))],
         )
-        for phase in range(8)
+        for phase in range(9)
     }
 
 
 def resource_vector(value, sizes, labels, prefix):
     per = resource_values(value, [1] * len(sizes), prefix)
     return np.broadcast_to(per, (len(sizes),))[labels]
-
-
-def ecology(state, c, B, w, rng_p, rng_H):
-    """F01–F06,F15: same kernel, dynamic labels; empty arrays remain valid."""
-    D = state.plants.defense
-    I = state.insects.resistance
-    A = state.insects.preference
-    trait = state.plants.voc_trait
-    pl, hl = state.plants.species, state.insects.species
-    V_emit = chemistry.plant_voc(D, trait, c, B, state.plants.chemical_traits)
-    V_cue = V_emit[rng_p.permutation(len(D))] if c.shuffle_voc else V_emit.copy()
-    options = {}
-    if c.spatial is not None:
-        options = dict(
-            candidate_pools=spatial.candidate_pools(state.plants.cells, state.insects.cells, c),
-        )
-    choice = shared.choose_hosts(
-        state.insects.module_traits if modules.enabled(c) else A,
-        pl,
-        hl,
-        V_cue,
-        c,
-        w,
-        rng_p,
-        rng_H,
-        **options,
-    )
-    capacity = resource_vector(c.resource_capacity, c.plant_sizes, pl, "P")
-    dmax = resource_vector(c.max_feeding_demand, c.insect_sizes, hl, "H")
-    e = shared.settle_feeding(
-        D,
-        I,
-        pl,
-        hl,
-        V_emit,
-        choice["host"],
-        c,
-        capacity,
-        dmax,
-        chemical=state.plants.chemical_traits,
-        module_traits=state.insects.module_traits,
-    )
-    # Explicit Speed beta=0 and common actual resource ledger. No fixed-size reproduction.
-    e["wi"] = e["g"] * e["fi"]
-    e.update(
-        choice,
-        V_emit=V_emit,
-        V_cue=V_cue,
-        R=capacity,
-        dmax=dmax,
-        S_plant=c.sP0 + (1 - c.sP0) * (1 - e["h"]),
-        S_insect=e["g"],
-    )
-    return e
-
-
-def mean_or_na(values):
-    return float(np.mean(values)) if len(values) else np.nan
 
 
 def agent_state(community):
@@ -134,13 +75,6 @@ def initialize_community(config, initial=None):
     community = None
     runtime.input_sources = deepcopy(config.get("input_sources", {}))
     runtime.B, runtime.w = runtime.c.validate()
-    if runtime.c.model_version not in {"0.1.6", "0.1.7"} or runtime.c.genetics[
-        "schema_version"
-    ] != ("slim-qtl-4" if runtime.c.model_version == "0.1.7" else "slim-qtl-2"):
-        raise ValueError(
-            "Execution supports model_version=0.1.6/slim-qtl-2 and 0.1.7/slim-qtl-4; use the matching Git tag "
-            "to rerun historical models. Saved historical results remain readable."
-        )
     runtime.genetic = genetics.GeneticState(runtime.c)
     if initial is not None:
         raise ValueError("initialization comes only from the founder allele catalog")
@@ -168,6 +102,7 @@ def initialize_community(config, initial=None):
     runtime.result["genetic_summary"] = []
     runtime.result["haplotype_summary"] = []
     runtime.stored_genotype_values = 0
+    runtime.founder_feeding_diagnostics = {"status": "initialization_incomplete"}
     runtime.status = dict(status="completed", generation=0, message="")
     runtime.stage = "initialization"
     runtime.extinct = {}
@@ -240,6 +175,12 @@ def initialize_community(config, initial=None):
                 for k in range(2)
             ]
         community.validate()
+        runtime.founder_feeding_diagnostics = ecology.founder_feeding_diagnostics(
+            community.plants.defense,
+            community.insects.resistance,
+            resource_vector(runtime.c.resource_capacity, runtime.c.plant_sizes, pl, "P"),
+            resource_vector(runtime.c.max_feeding_demand, runtime.c.insect_sizes, hl, "H"),
+        )
         runtime.next_ids = [len(pl), len(hl)]
     except (ComputationalLimit, MemoryError, ArithmeticError, ValueError) as error:
         fail(state, error)
@@ -273,8 +214,11 @@ def finalize(state):
         version=runtime.c.model_version,
         config=config_payload(runtime.c),
         input_sources=runtime.input_sources,
+        founder_feeding_diagnostics=runtime.founder_feeding_diagnostics,
+        stored_genotype_values=runtime.stored_genotype_values,
+        genotype_storage_semantics="cumulative retained offspring genotype values plus retained snapshot genotype values; not peak live population",
         status=runtime.status,
-        resolved_B=None if chemistry.shared(runtime.c) else runtime.B.tolist(),
+        resolved_B=None,
         resolved_weights=runtime.w.tolist(),
         resolved_alpha=runtime.alpha.tolist(),
         resolved_plant_lambda=runtime.lp.tolist(),
@@ -330,7 +274,7 @@ def finalize(state):
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),
         config_sha256=hashlib.sha256(payload.encode()).hexdigest(),
         genetic_rng="NumPy founders: SeedSequence([seed,140,0,taxon,species]); SLiM seeds: SeedSequence([seed,140,4,taxon,generation]).generate_state(2)+1; first meiosis, second Eidos QTL mutation",
-        rng="SeedSequence([seed,130,phase,taxon,species]); 0 init, 1 ecology, 2 survival, 3 maternal births, 5 mate choice, 6 founder sex, 7 offspring sex",
+        rng="SeedSequence([seed,130,phase,taxon,species]); 0 init, 1 ecology, 2 survival, 3 maternal births, 5 mate choice, 6 founder sex, 7 offspring sex, 8 cue shuffle",
         spatial_rng="SeedSequence([seed,150,0]) plants; [seed,150,2] insects; [seed,150,1,taxon] maternal dispersal",
         inheritance="SLiM 5.2 native addCrossed; copy 0 maternal, copy 1 paternal; separate chromosomes; compressed marker boundary r=(1-exp(-2*distance_Morgan))/2",
         mutation_semantics="per transmitted abstract QTL copy; not per nucleotide",

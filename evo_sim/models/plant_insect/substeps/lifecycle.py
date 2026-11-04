@@ -1,7 +1,7 @@
-"""v0.1.6 adult reproduction -> larval resource window -> adult recruitment.
+"""Current adult reproduction -> larval resource window -> adult recruitment.
 
-One disposable transition owns the coupled plant/insect update. Biological kernels
-and SLiM transport are shared with the previous model; only event order changes.
+One disposable transition owns the coupled plant/insect update and publishes its
+stage ledgers only after both taxa and the next snapshot fit the storage budget.
 """
 
 import copy
@@ -124,16 +124,15 @@ def sample_parents(pop, kind, S, F, phi, runtime, generation):
                 else "eligible",
             )
         )
-    if modules.enabled(c):
-        for i, row in enumerate(rows):
-            pool = candidates[i]
-            probabilities = np.full(len(pool), 1 / len(pool)) if len(pool) else np.empty(0)
-            row.update(
-                mating_row=int(pop.cells[i, 0]),
-                mating_col=int(pop.cells[i, 1]),
-                candidate_mate_ids=json.dumps(pop.ids[pool].tolist()),
-                candidate_mate_probabilities=json.dumps(probabilities.tolist()),
-            )
+    for i, row in enumerate(rows):
+        pool = candidates[i]
+        probabilities = np.full(len(pool), 1 / len(pool)) if len(pool) else np.empty(0)
+        row.update(
+            mating_row=int(pop.cells[i, 0]),
+            mating_col=int(pop.cells[i, 1]),
+            candidate_mate_ids=json.dumps(pop.ids[pool].tolist()),
+            candidate_mate_probabilities=json.dumps(probabilities.tolist()),
+        )
     return counts, candidates, rows, survived
 
 
@@ -160,6 +159,8 @@ def contributions(rows, mothers, fathers, survived):
 
 
 def observe(runtime, current, generation):
+    values = current.plants.genotypes.size + current.insects.genotypes.size
+    runtime.genetic.preflight([0, 0], runtime.stored_genotype_values + values)
     snapshot = current.snapshot(generation)
     snapshot["V_emit"] = chemistry.plant_voc(
         current.plants.defense,
@@ -172,7 +173,7 @@ def observe(runtime, current, generation):
         runtime.c.resource_capacity, runtime.c.plant_sizes, current.plants.species, "P"
     )
     runtime.result["snapshots"].append(snapshot)
-    runtime.stored_genotype_values += current.plants.genotypes.size + current.insects.genotypes.size
+    runtime.stored_genotype_values += values
     sizes = (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes))
     runtime.result["genetic_summary"].extend(runtime.genetic.summary(current, generation, sizes))
     runtime.result["haplotype_summary"].extend(
@@ -186,8 +187,6 @@ def observe(runtime, current, generation):
             reference_q=q,
             reference_plant_species=np.array(
                 runtime.c.observation_reference_traits["reference_ids"]
-                if modules.enabled(runtime.c)
-                else [f"P{p + 1}" for p in range(sizes[0])]
             ),
         )
     for h in range(sizes[1]):
@@ -213,22 +212,17 @@ def transition(runtime, current, t):
     c = runtime.c
     pl, hl = current.plants.species, current.insects.species
     insects, plants = current.insects, current.plants
-    modern = modules.enabled(c)
     # Adults retain the birth-host-plus-dispersal cells when the local mate pool is built.
     runtime.stage = "adult_mating_and_potential_eggs"
-    if modern:
-        fi, processing_cost, sensory_cost = modules.maternal_fecundity(insects.module_traits, c)
-    else:
-        fi = np.maximum(0, 1 - c.insect_cost * insects.resistance.sum(axis=1))
+    fi, processing_cost, sensory_cost = modules.maternal_fecundity(insects.module_traits, c)
     counts, candidates, hrows, _ = sample_parents(
         insects, "insect", np.ones(len(insects)), fi, np.ones(len(insects)), runtime, t
     )
-    if modern:
-        for i, row in enumerate(hrows):
-            row.update(
-                processing_expression_cost=float(processing_cost[i]),
-                sensory_expression_cost=float(sensory_cost[i]),
-            )
+    for i, row in enumerate(hrows):
+        row.update(
+            processing_expression_cost=float(processing_cost[i]),
+            sensory_expression_cost=float(sensory_cost[i]),
+        )
     potential_count = sum(map(int, counts))
     if potential_count > c.max_individuals_safety:
         raise ComputationalLimit(
@@ -237,9 +231,9 @@ def transition(runtime, current, t):
     runtime.stage = "maternal_oviposition"
     egg_mothers = np.repeat(np.arange(len(insects)), counts)
     V = chemistry.plant_voc(plants.defense, plants.voc_trait, c, runtime.B, plants.chemical_traits)
-    V_cue = V[runtime.rng[1][0][0].permutation(len(V))] if c.shuffle_voc else V.copy()
+    V_cue = V[runtime.rng[8][0][0].permutation(len(V))] if c.shuffle_voc else V.copy()
     choice = feeding.choose_hosts(
-        (insects.module_traits if modern else insects.preference)[egg_mothers],
+        insects.module_traits[egg_mothers],
         pl,
         hl[egg_mothers],
         V_cue,
@@ -276,12 +270,12 @@ def transition(runtime, current, t):
         capacity,
         dmax,
         chemical=plants.chemical_traits,
-        module_traits=hvalues.get("insect_module_traits"),
+        module_traits=hvalues["insect_module_traits"],
     )
     survived = np.zeros(len(hids), bool)
     for s, rng in enumerate(runtime.rng[2][1]):
         selected = child_hl == s
-        survived[selected] = rng.random(selected.sum()) < e["g"][selected]
+        survived[selected] = rng.random(selected.sum()) < e["survival_probability"][selected]
     sex = np.empty(len(hids), dtype=np.int8)
     for s, rng in enumerate(runtime.rng[7][1]):
         selected = child_hl == s
@@ -315,8 +309,14 @@ def transition(runtime, current, t):
     nplants = sum(map(int, pcounts))
     if nplants + len(hids) > c.max_individuals_safety:
         raise ComputationalLimit("birth allocation exceeds safety; no transition committed")
+    # Birth genotypes include dead larvae; recruited genotypes are also retained in
+    # the next snapshot. Reserve that snapshot before publishing either taxon's births.
+    snapshot_values = 2 * (
+        len(genetic.loci["plant"]) * nplants + len(genetic.loci["insect"]) * int(survived.sum())
+    )
     genetic.preflight(
-        [nplants, 0], runtime.stored_genotype_values + hvalues["insect_genotypes"].size
+        [nplants, 0],
+        runtime.stored_genotype_values + hvalues["insect_genotypes"].size + snapshot_values,
     )
     pmothers = np.repeat(np.arange(len(plants)), pcounts)
     pfathers = draw_fathers(plants, pmothers, pcandidates, runtime, 0)
@@ -435,7 +435,7 @@ def transition(runtime, current, t):
             gamma=float(e["gamma"][p]),
             host_h=float(e["h"][p]),
             I_sum=float(hvalues["I"][i].sum()),
-            W_insect=float(e["g"][i]),
+            W_insect=float(e["survival_probability"][i]),
             survived_to_adult=bool(survived[i]),
             insect_life_stage="larva",
             same_species_others=int(e["same_species_others"][i]),

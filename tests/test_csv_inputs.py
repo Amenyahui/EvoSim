@@ -20,12 +20,12 @@ def experiment(folder, names):
     data = folder / "data"
     data.mkdir()
     for name in names:
-        (data / f"{name}.csv").write_bytes((MODEL / "inputs" / f"{name}.csv").read_bytes())
+        (data / f"{name}.csv").write_bytes((MODEL / "inputs/current" / f"{name}.csv").read_bytes())
     path = folder / "experiment.yaml"
     path.write_text(
         yaml.safe_dump(
             dict(
-                extends=str(MODEL / "configs/model_parameters.yaml"),
+                extends=str(MODEL / "configs/current_base.yaml"),
                 input_files={name: f"data/{name}.csv" for name in names},
             )
         ),
@@ -148,15 +148,25 @@ def test_csv_rejects_malformed_records_and_invalid_references():
         raises(lambda: read_config(path), FileNotFoundError)
 
 
-def test_csv_vector_columns_follow_configured_trait_width():
+def test_csv_vector_columns_follow_current_trait_width():
+    from tests.support import config
+
+    c = config()
+    parameters = dict(n=2, B=None, mapping=c.mapping, genetics=c.genetics)
+    locus = next(row["locus_id"] for row in c.genetics["loci"] if row["organism"] == "insect")
     with TemporaryDirectory() as tmp:
         folder = Path(tmp)
         path = folder / "alleles.csv"
-        path.write_text("allele_id,locus_id,effect_0,effect_1,effect_2\n0,locus,0.1,0.2,0.3\n")
-        p, _ = load_inputs(dict(alleles="alleles.csv"), folder, dict(n=1, B=[[1], [1]]))
-        assert p["genetics"]["alleles"][0]["effect"] == [0.1, 0.2, 0.3]
-        raises(lambda: load_inputs(dict(alleles="alleles.csv"), folder, dict(n=2, B=[[1], [1]])))
-        raises(lambda: load_inputs(dict(unknown="alleles.csv"), folder, dict(n=1, B=[[1]])))
+        path.write_text(
+            "allele_id,locus_id,"
+            + ",".join(f"effect_{i}" for i in range(8))
+            + f"\n0,{locus},0.1,0,0,0,0,0,0,0\n"
+        )
+        loaded, _ = load_inputs(dict(alleles="alleles.csv"), folder, parameters)
+        assert loaded["genetics"]["alleles"][0]["effect"] == [0.1] + [0.0] * 7
+        path.write_text(path.read_text().replace(",effect_7", "").replace(",0\n", "\n"))
+        raises(lambda: load_inputs(dict(alleles="alleles.csv"), folder, parameters))
+        raises(lambda: load_inputs(dict(unknown="alleles.csv"), folder, parameters))
 
 
 def test_builtin_csv_inputs_are_complete_and_resolved():
@@ -165,5 +175,5 @@ def test_builtin_csv_inputs_are_complete_and_resolved():
     for source in loaded["input_sources"].values():
         assert hashlib.sha256(Path(source["path"]).read_bytes()).hexdigest() == source["sha256"]
     p = loaded["parameters"]
-    assert p["plant_sizes"] == [200, 200] and p["insect_sizes"] == [40]
-    assert len(p["genetics"]["loci"]) == 14 and len(p["genetics"]["alleles"]) == 40
+    assert p["plant_sizes"] == [40] and p["insect_sizes"] == [40]
+    assert len(p["genetics"]["loci"]) == 22 and len(p["genetics"]["alleles"]) == 44

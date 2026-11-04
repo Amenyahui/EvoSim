@@ -3,10 +3,6 @@
 import numpy as np
 
 
-def shared(c):
-    return c.mapping == "shared_chemical_modules"
-
-
 def outputs(x, eta):
     x = np.asarray(x, float)
     if (
@@ -23,19 +19,11 @@ def outputs(x, eta):
 
 
 def plant_voc(D, independent, c, B=None, chemical=None):
-    if shared(c):
-        defense, V = outputs(chemical, c.eta_shared)
-        if not np.array_equal(defense, D):
-            raise ValueError("plant D is inconsistent with its genetic chemical modules")
-        return V
-    from .voc import map_voc
-
-    return map_voc(D, independent, np.asarray(c.B if B is None else B), c.rho_voc, c.voc_bounds)
+    defense, V = outputs(chemical, c.eta_shared)
+    if not np.array_equal(defense, D):
+        raise ValueError("plant D is inconsistent with its genetic chemical modules")
+    return V
 
 
 def reference(c, B=None):
-    panel = c.observation_reference_traits
-    if shared(c):
-        return outputs(panel["plant_chemical_traits"], c.eta_shared)
-    D = np.asarray(panel["D"], float)
-    return D, plant_voc(D, np.asarray(panel["plant_voc_independent_trait"], float), c, B)
+    return outputs(c.observation_reference_traits["plant_chemical_traits"], c.eta_shared)

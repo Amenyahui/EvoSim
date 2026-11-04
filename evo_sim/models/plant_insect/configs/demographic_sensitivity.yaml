@@ -1,0 +1,45 @@
+extends: current_single_ancestor.yaml
+simulation_metadata:
+  num_steps_per_episode: 20
+parameters:
+  seed: 20261102
+  genetics:
+    mutation_enabled:
+      plant: false
+      insect: false
+batch:
+  purpose: Prespecified 20-generation demographic mechanism sensitivity; diagnostic only.
+  replicates: 8
+  cases:
+  - name: baseline
+    overrides: {}
+  - name: resource2
+    overrides:
+      resource_capacity:
+        P1: 2.0
+  - name: resource4
+    overrides:
+      resource_capacity:
+        P1: 4.0
+  - name: fecundity8
+    overrides:
+      insect_offspring_lambda:
+        H1: 8.0
+  - name: search3
+    overrides:
+      spatial:
+        search_radius: 3
+  - name: mate3
+    overrides:
+      sexual_reproduction:
+        insect_mate_radius: 3
+  - name: dispersal2
+    overrides:
+      spatial:
+        insect_dispersal_radius: 2
+  - name: resource2_search3
+    overrides:
+      resource_capacity:
+        P1: 2.0
+      spatial:
+        search_radius: 3

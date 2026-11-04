@@ -1,3 +1,0 @@
-extends: sexual_qtl_development.yaml
-simulation_metadata:
-  num_steps_per_episode: 1

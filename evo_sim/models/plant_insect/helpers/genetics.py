@@ -14,7 +14,6 @@ from .demography import ComputationalLimit
 from .slim_backend import SlimError, reproduce
 
 KINDS = ("plant", "insect")
-TRAITS = {"plant": ("D", "plant_voc_independent_trait"), "insect": ("I", "A")}
 
 
 def validate_genome_map(loci):
@@ -63,49 +62,29 @@ def validate(c, K):
         "max_alleles_safety",
         "max_genotype_values_safety",
     }
-    slim = isinstance(g, dict) and g.get("schema_version") in {
-        "slim-qtl-1",
-        "slim-qtl-2",
-        "slim-qtl-3",
-        "slim-qtl-4",
-    }
-    if slim:
-        required.add("slim")
+    required.add("slim")
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
-        g["mode"] != "sexual_qtl"
-        or g["schema_version"]
-        not in {"sexual-qtl-1", "slim-qtl-1", "slim-qtl-2", "slim-qtl-3", "slim-qtl-4"}
+        c.model_version != "0.1.7"
+        or c.mapping != "shared_chemical_modules"
+        or g["mode"] != "sexual_qtl"
+        or g["schema_version"] != "slim-qtl-4"
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
-        or g["recombination_model"]
-        != ("slim_haldane_marker_map" if slim else "haldane_poisson_no_interference")
+        or g["recombination_model"] != "slim_haldane_marker_map"
     ):
-        raise ValueError("explicit supported biparental QTL protocol required")
-    if slim:
-        settings = g["slim"]
-        if not isinstance(settings, dict) or set(settings) != {"executable", "timeout_seconds"}:
-            raise ValueError("slim requires executable and timeout_seconds")
-        if not isinstance(settings["executable"], str) or not settings["executable"].strip():
-            raise ValueError("nonempty SLiM executable required")
-        numeric(settings["timeout_seconds"], "slim.timeout_seconds")
-        if settings["timeout_seconds"] <= 0:
-            raise ValueError("SLiM timeout must be positive")
-    modern = g["schema_version"] in {"slim-qtl-3", "slim-qtl-4"}
-    historical_flowering = g["schema_version"] == "slim-qtl-3"
-    chemical = g["schema_version"] in {"slim-qtl-2", "slim-qtl-3", "slim-qtl-4"}
-    if chemical and c.model_version not in {"0.1.5", "0.1.6", "0.1.7"}:
-        raise ValueError("slim-qtl-2 chemical coordinates require model_version=0.1.5/0.1.6")
-    if chemical != (c.mapping == "shared_chemical_modules"):
-        raise ValueError("chemical mapping and genetic schema disagree")
-    if modern != (c.model_version == "0.1.7"):
-        raise ValueError("v0.1.7 requires a declared module-coordinate protocol")
-    widths = {
-        "plant": 4 if historical_flowering else 3 if chemical else c.n + K,
-        "insect": 8 if modern else c.n + K,
-    }
+        raise ValueError("current model requires the native slim-qtl-4 module protocol")
+    settings = g["slim"]
+    if not isinstance(settings, dict) or set(settings) != {"executable", "timeout_seconds"}:
+        raise ValueError("slim requires executable and timeout_seconds")
+    if not isinstance(settings["executable"], str) or not settings["executable"].strip():
+        raise ValueError("nonempty SLiM executable required")
+    numeric(settings["timeout_seconds"], "slim.timeout_seconds")
+    if settings["timeout_seconds"] <= 0:
+        raise ValueError("SLiM timeout must be positive")
+    widths = {"plant": 3, "insect": 8}
     mapping = g["phenotype_map"]
     if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
         raise ValueError("phenotype_map requires explicit effect_scale and bounds")
@@ -244,13 +223,11 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
-        if c.genetics["schema_version"] not in {"slim-qtl-1", "slim-qtl-2", "slim-qtl-4"}:
+        if c.genetics["schema_version"] != "slim-qtl-4":
             raise ValueError("SLiM QTL execution requires a declared supported native protocol")
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n
-        self.modern = modules.enabled(c)
         self.module_spec = copy.deepcopy(c.functional_modules)
-        self.chemical = c.genetics["schema_version"] in {"slim-qtl-2", "slim-qtl-4"}
         self.seed = c.seed
         self.engine_calls = []
         self.loci = {
@@ -304,17 +281,10 @@ class GeneticState:
             axis=(1, 2)
         )
         values = np.clip(raw, *mapping["bounds"])
-        if self.modern:
-            if kind == "plant":
-                return {
-                    "D": values[:, :2],
-                    "plant_chemical_traits": values[:, :3],
-                }, raw
-            I, A = modules.effective(values, self.module_spec)
-            return {"I": I, "A": A, "insect_module_traits": values}, raw
-        if self.chemical and kind == "plant":
+        if kind == "plant":
             return {"D": values[:, :2], "plant_chemical_traits": values}, raw
-        return {TRAITS[kind][0]: values[:, : self.n], TRAITS[kind][1]: values[:, self.n :]}, raw
+        I, A = modules.effective(values, self.module_spec)
+        return {"I": I, "A": A, "insect_module_traits": values}, raw
 
     def effects(self, kind):
         """Per-taxon transport matrix; other taxon's allele IDs cannot occur in this genotype."""
@@ -327,7 +297,7 @@ class GeneticState:
         return result
 
     def preflight(self, sizes, stored_values):
-        """Conservative allocation ceiling: reserve even the all-loci-mutate case."""
+        """Bound cumulative birth/snapshot values and reserve all possible new alleles."""
         values = sum(2 * len(self.loci[k]) * sizes[i] for i, k in enumerate(KINDS))
         new_alleles = sum(
             2 * sum(x["mutation_rate"] > 0 for x in self.loci[k]) * sizes[i]
@@ -335,7 +305,7 @@ class GeneticState:
             if self.spec["mutation_enabled"][k]
         )
         if stored_values + values > self.spec["max_genotype_values_safety"]:
-            raise ComputationalLimit("genotype snapshot value limit; no descendants committed")
+            raise ComputationalLimit("cumulative genotype storage limit (births and snapshots)")
         if len(self.alleles) + new_alleles > self.spec["max_alleles_safety"]:
             raise ComputationalLimit(
                 "conservative allele allocation limit; no descendants committed"
@@ -412,6 +382,8 @@ class GeneticState:
                             role="maternal" if h == 0 else "paternal",
                             chromosome_id=locus["chromosome_id"],
                             generation=generation,
+                            reproduction_round=generation - 1,
+                            adult_cohort=generation,
                             kind=kind,
                             species=f"{prefix}{child_labels[i] + 1}",
                             offspring_id=int(child_ids[i]),
@@ -438,6 +410,8 @@ class GeneticState:
         for i, (m, f) in enumerate(zip(mothers, fathers)):
             row = dict(
                 generation=generation,
+                reproduction_round=generation - 1,
+                adult_cohort=generation,
                 kind=kind,
                 species=f"{prefix}{child_labels[i] + 1}",
                 offspring_id=int(child_ids[i]),
@@ -455,6 +429,8 @@ class GeneticState:
                     self.transmissions.append(
                         dict(
                             generation=generation,
+                            reproduction_round=generation - 1,
+                            adult_cohort=generation,
                             kind=kind,
                             offspring_id=int(child_ids[i]),
                             role="maternal" if h == 0 else "paternal",
@@ -484,16 +460,11 @@ class GeneticState:
         for kind, count in zip(KINDS, sizes):
             pop = state.plants if kind == "plant" else state.insects
             values, raw = self.phenotype(pop.genotypes, kind)
-            if self.modern:
-                values = (
-                    {
-                        "plant_chemical_traits": values["plant_chemical_traits"],
-                    }
-                    if kind == "plant"
-                    else {"insect_module_traits": values["insect_module_traits"]}
-                )
-            elif self.chemical and kind == "plant":
-                values = {"plant_chemical_traits": values["plant_chemical_traits"]}
+            values = (
+                {"plant_chemical_traits": values["plant_chemical_traits"]}
+                if kind == "plant"
+                else {"insect_module_traits": values["insect_module_traits"]}
+            )
             prefix = "P" if kind == "plant" else "H"
             for s in range(count):
                 mask = pop.species == s

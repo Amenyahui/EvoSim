@@ -1,10 +1,11 @@
 import numpy as np
 
-from evo_sim.models.plant_insect import get_runner, simulate
+from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.helpers.demography import maternal_moments, mating_candidates
+from evo_sim.models.plant_insect.helpers.runtime import community_state
 from evo_sim.models.plant_insect.helpers.spatial import disperse, distance, local_competition
-from evo_sim.models.plant_insect.substeps.demography import SampleMaternallyProducedOffspring
-from tests.support import config
+from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
+from tests.support import base_runner, config
 
 
 def test_periodic_mates_and_competition():
@@ -25,7 +26,7 @@ def test_periodic_mates_and_competition():
 
 
 def test_maternal_sampling_moments_and_survival():
-    runner = get_runner()
+    runner = base_runner()
     runner.config["parameters"]["plant_sizes"] = [3, 0]
     runner.init()
     runtime = runner.state["environment"]["runtime"]
@@ -33,16 +34,24 @@ def test_maternal_sampling_moments_and_survival():
     runtime.update = True
     runtime.plant_phi = np.ones(3)
     runtime.e = dict(S_plant=np.array([0.6, 0.4, 0.5]), fp=np.ones(3))
-    component = SampleMaternallyProducedOffspring(
-        runner.config,
-        {"runtime": "environment/runtime", "agents": "agents"},
-        ["offspring"],
-        {"fixed": {"taxon": 0}},
-    )
+    population = community_state(runner.state["agents"]).plants
+
+    def sample():
+        counts, candidates, rows, survived = sample_parents(
+            population,
+            "plant",
+            runtime.e["S_plant"],
+            runtime.e["fp"],
+            runtime.plant_phi,
+            runtime,
+            0,
+        )
+        return dict(offspring_count=counts, survived_to_reproduce=survived, candidates=candidates)
+
     samples = []
     for _ in range(12000):
         runtime.result["parents"] = []
-        values = component.forward(runner.state, {})["offspring"]
+        values = sample()
         samples.append(values["offspring_count"][0])
         assert np.all(values["offspring_count"][~values["survived_to_reproduce"]] == 0)
     q, mean, variance = maternal_moments(
@@ -63,12 +72,12 @@ def test_maternal_sampling_moments_and_survival():
         variance[0],
     )
     runtime.e["S_plant"] = np.array([1.0, 0.0, 0.0])
-    values = component.forward(runner.state, {})["offspring"]
+    values = sample()
     assert not values["offspring_count"].any()
     assert values["survived_to_reproduce"].tolist() == [True, False, False]
     runtime.e["S_plant"][:] = 1
     runtime.e["fp"][:] = 0
-    assert not component.forward(runner.state, {})["offspring"]["offspring_count"].any()
+    assert not sample()["offspring_count"].any()
 
 
 def test_single_sex_singleton_and_extinction():
@@ -81,19 +90,19 @@ def test_single_sex_singleton_and_extinction():
             for x in r["parents"]
             if x["kind"] == "insect"
         )
-        assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 8)
+        assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 16)
     r = simulate(config(plant_sizes=[1, 0], insect_sizes=[0]))
     assert not r["offspring"] and r["metadata"]["status"]["status"] == "all_species_extinct"
     r = simulate(config(plant_sizes=[0, 0], insect_sizes=[0]))
     assert r["metadata"]["status"]["generation"] == 0
     r = simulate(config(plant_sizes=[0, 0]))
     assert all(x["x"] == 0 for x in r["events"])
-    assert r["snapshots"][-1]["insect_genotypes"].shape == (0, 2, 8)
+    assert r["snapshots"][-1]["insect_genotypes"].shape == (0, 2, 16)
 
 
 def test_default_sexual_founders_can_reproduce():
     # Regression for the old 6-founder configuration with no compatible pair.
-    runner = get_runner()
+    runner = base_runner()
     runner.config["simulation_metadata"]["num_steps_per_episode"] = 1
     runner.init()
     runner.step()

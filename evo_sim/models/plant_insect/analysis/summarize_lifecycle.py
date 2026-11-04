@@ -1,4 +1,4 @@
-"""Stage-explicit v0.1.6 ledger summaries; no new ecological indices."""
+"""Stage-explicit current ledger summaries; no new ecological indices."""
 
 import numpy as np
 import pandas as pd
@@ -11,8 +11,13 @@ def prepare_diagnostics(batch):
     """Reuse stage-neutral trait/genetic summaries; add adult endpoints and larval resource shares."""
     from .summarize_qtl_run import summarize as summarize_genetics
 
-    assert read_settings(batch.path)["version"] in {"0.1.6", "0.1.7"}
+    assert read_settings(batch.path)["version"] == "0.1.7"
     assert batch.audit["genetically_audited_runs"] == len(batch.status)
+    if batch.status.generation.lt(1).any():
+        raise ValueError(
+            "Lifecycle diagnostic plots require a committed transition in every run; "
+            "use diagnose_initial_conditions for zero-generation snapshots"
+        )
     summarize_genetics(batch, print_summary=False)
     populations, extinctions, resources = [], [], []
     for run in batch.status.itertuples(index=False):
@@ -56,7 +61,7 @@ def prepare_diagnostics(batch):
                     total_actual_resource=total,
                     P2_resource_fraction=rows.loc[rows.plant_species == "P2", "Q_actual"].sum()
                     / total
-                    if total > 0
+                    if total > 0 and (rows.plant_species == "P2").any()
                     else np.nan,
                 )
             )
@@ -86,8 +91,8 @@ def prepare_diagnostics(batch):
 
 def summarize(batch):
     settings = read_settings(batch)
-    if settings.get("version") not in {"0.1.6", "0.1.7"}:
-        raise ValueError("summarize_lifecycle requires v0.1.6 adult/larval ledgers")
+    if settings.get("version") != "0.1.7":
+        raise ValueError("summarize_lifecycle requires the current adult/larval ledgers")
     status = pd.read_csv(batch / "data/run_status.csv")
     assert read_audit(batch)["runs"] == len(status)
     sources = dict(
@@ -123,3 +128,201 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def sensitivity_survival(runs, horizon):
+    """Known survival bounds; incomplete living runs are unknown after their last state."""
+    from math import sqrt
+
+    rows = []
+    for case, group in runs.groupby("case", sort=False):
+        for generation in range(horizon + 1):
+            extinct = (
+                group.audited
+                & group.extinction_generation.notna()
+                & group.extinction_generation.le(generation)
+            )
+            alive = ~extinct & group.last_generation.ge(generation) & group.audited
+            n = len(group)
+            a, e = int(alive.sum()), int(extinct.sum())
+            unknown = n - a - e
+            lo, hi = a / n, (a + unknown) / n
+            ci_lo = ci_hi = np.nan
+            if not unknown:
+                z = 1.959963984540054
+                center = (lo + z * z / (2 * n)) / (1 + z * z / n)
+                half = z * sqrt(lo * (1 - lo) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+                ci_lo, ci_hi = center - half, center + half
+            rows.append(
+                dict(
+                    case=case,
+                    generation=generation,
+                    n=n,
+                    alive=a,
+                    extinct=e,
+                    unknown=unknown,
+                    lower=lo,
+                    upper=hi,
+                    wilson_low=ci_lo,
+                    wilson_high=ci_hi,
+                )
+            )
+    return pd.DataFrame(rows)
+
+
+def summarize_sensitivity(path):
+    """Audit recorded runs and summarize abundance and stage denominators without imputing failure."""
+    import json
+    from pathlib import Path
+
+    from evo_sim.core.config import merge_config
+
+    from ..helpers.config import Config, config_payload
+    from .common import sha256
+
+    path = Path(path)
+    settings = read_settings(path)
+    spec = settings["spec"]
+    horizon = int(spec["base"]["generations"])
+    status_file = path / "data/run_status.csv"
+    status = pd.read_csv(status_file) if status_file.exists() else pd.DataFrame()
+    if not status.empty and status.duplicated(["case", "replicate"]).any():
+        raise ValueError("duplicate case/replicate")
+    runs, trajectories, diagnostics, evidence = [], [], [], {}
+    for case in spec["cases"]:
+        for rep in range(1, spec["replicates"] + 1):
+            name = case["name"]
+            match = (
+                status[(status.case == name) & (status.replicate == rep)]
+                if not status.empty
+                else status
+            )
+            record = dict(
+                case=name,
+                replicate=rep,
+                status="not_started",
+                audited=False,
+                complete=False,
+                safety_stop=False,
+                last_generation=np.nan,
+                extinction_generation=np.nan,
+                final_insects=np.nan,
+                audit_error="",
+            )
+            if match.empty:
+                runs.append(record)
+                continue
+            entry = match.iloc[0]
+            record.update(
+                status=entry.status,
+                seed=entry.seed,
+                safety_stop=entry.status == "computational_limit",
+            )
+            folder = run_path(path, name, rep)
+            trajectory_start, diagnostic_start = len(trajectories), len(diagnostics)
+            try:
+                checked = audit_run(folder)
+                if checked["status"] != entry.status:
+                    raise ValueError("status mismatch")
+                meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+                if int(meta["status"]["generation"]) != int(entry.generation):
+                    raise ValueError("generation mismatch")
+                expected = merge_config(spec["base"], case["overrides"])
+                expected["seed"] += rep - 1
+                if entry.status != "invalid_parameter":
+                    expected = config_payload(Config(**expected))
+                if meta["config"] != expected or int(entry.seed) != expected["seed"]:
+                    raise ValueError("case configuration or seed mismatch")
+                if meta["source_hash"] != settings["source_sha256"]:
+                    raise ValueError("batch and run source fingerprints differ")
+                if entry.status == "invalid_parameter":
+                    raise ValueError("invalid parameter: no ecological state")
+                terminal = int(entry.generation)
+                if entry.status == "completed" and terminal != horizon:
+                    raise ValueError("completed run did not reach horizon")
+                with np.load(folder / "snapshots" / f"g{terminal:06d}.npz") as state:
+                    final = len(state["insect_ids"])
+                pop = pd.read_csv(folder / "populations.csv")
+                ins = pop[pop.kind == "insect"]
+                counts = ins.groupby("generation").N_start.sum().to_dict()
+                counts[terminal] = final
+                # All insect pools must be absent; a per-species extinction alone is insufficient.
+                zero = [g for g, n in counts.items() if n == 0]
+                extinction = min(zero) if zero else np.nan
+                if final == 0 and not pd.isna(extinction):
+                    for g in range(int(extinction), horizon + 1):
+                        counts[g] = 0
+                record.update(
+                    audited=True,
+                    complete=entry.status in ("completed", "all_species_extinct"),
+                    last_generation=terminal,
+                    extinction_generation=extinction,
+                    final_insects=final,
+                )
+                trajectories.extend(
+                    dict(case=name, replicate=rep, generation=g, insects=n)
+                    for g, n in sorted(counts.items())
+                )
+                larvae = pd.read_csv(folder / "larvae.csv")
+                for g, frame in ins.groupby("generation"):
+                    female = frame.N_female.sum()
+                    mates = frame.N_mothers_with_mates.sum()
+                    eggs = frame.N_potential_eggs.sum()
+                    born = frame.N_offspring.sum()
+                    diag = dict(
+                        case=name,
+                        replicate=rep,
+                        generation=int(g),
+                        females=female,
+                        mated=mates,
+                        eggs=eggs,
+                        born=born,
+                        mate_fraction=mates / female if female else np.nan,
+                        acceptance=born / eggs if eggs else np.nan,
+                    )
+                    selected = larvae[larvae.generation == g]
+                    demand = selected.dmax.sum()
+                    consumed = selected.x.sum()
+                    diag.update(
+                        demand=demand,
+                        consumed=consumed,
+                        resource_gain=consumed / demand if demand else np.nan,
+                    )
+                    diagnostics.append(diag)
+                evidence[f"{name}/rep{rep:02d}"] = dict(
+                    audit=checked, metadata_sha256=sha256(folder / "metadata.json")
+                )
+            except (AssertionError, OSError, ValueError, KeyError, TypeError) as error:
+                del trajectories[trajectory_start:]
+                del diagnostics[diagnostic_start:]
+                record.update(
+                    audited=False,
+                    complete=False,
+                    last_generation=np.nan,
+                    extinction_generation=np.nan,
+                    final_insects=np.nan,
+                    audit_error=str(error) or type(error).__name__,
+                )
+            runs.append(record)
+    output = path / "data/summary"
+    output.mkdir(parents=True, exist_ok=True)
+    tables = dict(
+        runs=pd.DataFrame(runs),
+        trajectories=pd.DataFrame(trajectories),
+        diagnostics=pd.DataFrame(diagnostics),
+    )
+    tables["survival"] = sensitivity_survival(tables["runs"], horizon)
+    for name, frame in tables.items():
+        frame.to_csv(output / f"sensitivity_{name}.csv", index=False)
+    from .common import write_json
+
+    write_json(
+        output / "sensitivity_audit.json",
+        dict(
+            settings_sha256=sha256(path / "settings.json"),
+            status_sha256=sha256(status_file) if status_file.exists() else None,
+            source_sha256=sha256(Path(__file__)),
+            runs=evidence,
+        ),
+    )
+    return tables, settings

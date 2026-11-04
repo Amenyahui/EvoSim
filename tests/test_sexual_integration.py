@@ -152,7 +152,9 @@ def test_slim_failure_does_not_commit_or_fall_back():
     runner.init()
     runtime = runner.state["environment"]["runtime"]
     before = copy.deepcopy(runtime.genetic.alleles)
-    runner.step(1)
+    # The environment override takes precedence over the YAML executable.
+    with patch.dict("os.environ", {"EVOSIM_SLIM": "missing_evosim_slim_binary"}):
+        runner.step(1)
     assert runner.result["metadata"]["status"]["status"] == "backend_error"
     assert not runtime.genetic.engine_calls and not runner.result["offspring"]
     assert runtime.genetic.alleles == before and not runtime.genetic.events

@@ -1,0 +1,19 @@
+extends: current_base.yaml
+input_files:
+  species: ../inputs/current/single_species.csv
+  competition: ../inputs/current/single_competition.csv
+  founder_frequencies: ../inputs/current/single_founder_frequencies.csv
+simulation_metadata:
+  num_steps_per_episode: 3
+batch:
+  purpose: Current single compatibility-pool mutation and recombination controls; illustrative only.
+  replicates: 1
+  cases:
+  - name: qtl_mutating
+    overrides: {}
+  - name: mutation_off
+    overrides:
+      genetics:
+        mutation_enabled:
+          plant: false
+          insect: false

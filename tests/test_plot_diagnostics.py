@@ -4,6 +4,95 @@ import pandas as pd
 from evo_sim.models.plant_insect.analysis.plot_diagnostics import cell_abundance, centered_xy
 
 
+def test_lineage_plot_weighting_missingness_and_copy_denominators():
+    from evo_sim.models.plant_insect.analysis.plot_diagnostics import lineage_plot_tables
+
+    base = dict(case="x", replicate=1)
+    tables = {
+        "matched_opportunities": pd.DataFrame(
+            [
+                dict(
+                    **base,
+                    reproduction_round=0,
+                    group_system="birth_host",
+                    target_group="__all_cross__",
+                    weight_type="conditional_mu",
+                    weight=4,
+                    matched_weight=w,
+                    no_mate_weight=0,
+                    p_local=p,
+                    p_global=0.5,
+                )
+                for w, p in [(1, 0.2), (3, 0.8)]
+            ]
+        ),
+        "qtl_ancestry": pd.DataFrame(
+            [
+                dict(
+                    **base,
+                    reference_generation=1,
+                    generation=1,
+                    source_system="birth_host",
+                    target_system="candidate_cluster",
+                    stage="reference",
+                    status="available",
+                    target_group=target,
+                    source_group=source,
+                    qtl_copies=count,
+                    total_qtl_copies=total,
+                )
+                for target, source, count, total in [
+                    ("a", "P1", 1, 2),
+                    ("a", "unknown", 1, 2),
+                    ("b", "P1", 4, 4),
+                    ("b", "unknown", 0, 4),
+                ]
+            ]
+        ),
+        "networks": pd.DataFrame(
+            [
+                dict(
+                    **base,
+                    reproduction_round=0,
+                    edge_semantics="maternal_source",
+                    insect_cluster=label,
+                    plant_cluster="p",
+                    actual_consumption=x,
+                )
+                for label, x in [("a", 2), ("unassigned", 1)]
+            ]
+        ),
+        "memberships": pd.DataFrame(
+            [
+                dict(**base, generation=0, kind=kind, cluster_id=label, lineage_id=label)
+                for kind, label in [("insect", "a"), ("insect", "unassigned"), ("plant", "p")]
+            ]
+        ),
+        "network_balances": pd.DataFrame(
+            [
+                dict(
+                    **base,
+                    reproduction_round=0,
+                    birth_count=3,
+                    recruitment_count=1,
+                    actual_consumption=3,
+                )
+            ]
+        ),
+    }
+    data = lineage_plot_tables(tables)
+    o = data["opportunity"].iloc[0]
+    assert np.isclose(o.p_local, 0.65) and o.coverage == 0.5
+    a = data["ancestry"].set_index("source_group")
+    assert np.isclose(a.loc["P1", "fraction"], 5 / 6)
+    assert np.isclose(a.fraction.sum(), 1)
+    assert data["network"].actual_consumption.sum() == 3
+    tables["matched_opportunities"]["matched_weight"] = 0
+    tables["matched_opportunities"][["p_local", "p_global"]] = np.nan
+    o = lineage_plot_tables(tables)["opportunity"].iloc[0]
+    assert np.isnan(o.p_local) and np.isnan(o.ri_relative) and o.coverage == 0
+
+
 def test_plot_coordinates_and_extinction():
     p1, p2, h = cell_abundance(
         dict(
@@ -35,6 +124,7 @@ def test_summary_batch_has_no_figure_side_effect():
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "data").mkdir()
+        (root / "settings.json").write_text(json.dumps({"version": "0.1.7"}))
         (root / "audits").mkdir()
         (root / "audits/integrity_audit.json").write_text(json.dumps({"runs": 1}))
         (root / "data/run_status.csv").write_text("case,replicate,status\nx,1,completed\n")
@@ -112,19 +202,11 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
             "Larval\nbirths",
             "Adult\nrecruits",
         ]
+        from tests.support import raises
+
         legacy = dict(data)
         legacy.pop("lifecycle_schema")
-        with patch(
-            "evo_sim.models.plant_insect.analysis.plot_diagnostics.export",
-            side_effect=lambda fig, *args: captured.append(fig),
-        ):
-            figure_C(legacy, Path(tmp), 80)
-        assert [t.get_text() for t in captured[1].axes[-1].get_xticklabels()] == [
-            "Starting",
-            "Surviving",
-            "Mated\nmothers",
-            "Offspring",
-        ]
+        raises(lambda: figure_C(legacy, Path(tmp), 80))
         import matplotlib.pyplot as plt
 
         for fig in captured:
@@ -233,82 +315,40 @@ def test_v017_module_panels_and_surviving_recruitment():
         plt.close(fig)
 
 
-def test_corrected_audit_checks_evidence_and_run_identity():
+def test_current_batch_rejects_historical_protocols_and_report_fallback():
     import json
     from pathlib import Path
     from tempfile import TemporaryDirectory
 
-    from evo_sim.models.plant_insect.analysis.common import audit_file, read_audit, sha256
+    from evo_sim.models.plant_insect.analysis.common import Batch, audit_file, read_audit
     from tests.support import raises
 
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         summary = root / "data/summary"
         summary.mkdir(parents=True)
-        (root / "settings.json").write_text("{}")
-        status = root / "data/run_status.csv"
-        status.write_text("case,replicate,seed,generation,status\nx,1,123,200,completed\n")
-        folder = root / "data/x/rep01"
-        folder.mkdir(parents=True)
-        (folder / "metadata.json").write_text("{}")
-        row = dict(
-            case="x",
-            replicate=1,
-            seed=123,
-            original_files_unchanged=True,
-            frozen_sources_match=True,
-            audit=dict(
-                status="completed",
-                genetic_audit=True,
-                contribution_audit=True,
-                states=201,
-                transitions=200,
-                contribution_transitions=200,
-            ),
-        )
-        source = summary / "corrected_run_audits_x.json"
-        source.write_text(json.dumps(dict(runs=[row])))
-        design = summary / "corrected_design_consistency.json"
-        design.write_text(
-            json.dumps(
-                dict(
-                    status="passed",
-                    settings_sha256=sha256(root / "settings.json"),
-                    run_status_sha256=sha256(status),
-                    runs=[
-                        dict(
-                            case="x",
-                            replicate=1,
-                            metadata_sha256=sha256(folder / "metadata.json"),
-                            config_matches_formal=True,
-                            source_matches_frozen=True,
-                            input_sources_match_settings=True,
-                            run_status_matches_metadata=True,
-                        )
-                    ],
-                )
-            )
-        )
-        report = dict(
-            status="passed",
-            expected_runs=1,
-            audited_runs=1,
-            runs=[row],
-            source_reports={source.name: sha256(source)},
-            design_report_sha256=sha256(design),
-        )
-        target = summary / "corrected_integrity_audit.json"
-        target.write_text(json.dumps(report))
-        assert audit_file(root) == target
-        checked = read_audit(root)
-        assert checked["runs"] == checked["genetically_audited_runs"] == 1
-        assert checked["run_reports"] == [row]
-        (folder / "metadata.json").write_text('{"changed": true}')
-        raises(lambda: read_audit(root), AssertionError)
-        (folder / "metadata.json").write_text("{}")
-        source.write_text(json.dumps(dict(runs=[])))
-        raises(lambda: read_audit(root), AssertionError)
-        source.write_text(json.dumps(dict(runs=[row])))
-        row["seed"] = 124
-        target.write_text(json.dumps(report))
-        raises(lambda: read_audit(root), AssertionError)
+        (root / "settings.json").write_text(json.dumps({"version": "0.1.6"}))
+        (summary / "corrected_integrity_audit.json").write_text(json.dumps({"runs": 1}))
+        raises(lambda: Batch.open(root))
+        assert audit_file(root) == root / "audits/integrity_audit.json"
+        raises(lambda: read_audit(root), FileNotFoundError)
+
+
+def test_sensitivity_extinction_and_incomplete_bounds():
+    from evo_sim.models.plant_insect.analysis.summarize_lifecycle import sensitivity_survival
+
+    runs = pd.DataFrame(
+        [
+            dict(case="x", audited=True, last_generation=2, extinction_generation=2),
+            dict(case="x", audited=True, last_generation=5, extinction_generation=np.nan),
+            dict(case="x", audited=True, last_generation=1, extinction_generation=np.nan),
+            dict(case="x", audited=False, last_generation=np.nan, extinction_generation=0),
+        ]
+    )
+    at_two = sensitivity_survival(runs, 5).query("generation == 2").iloc[0]
+    assert (at_two.alive, at_two.extinct, at_two.unknown) == (1, 1, 2)
+    assert at_two.lower == 0.25 and at_two.upper == 0.75
+    assert np.isnan(at_two.wilson_low)
+    all_known = sensitivity_survival(runs.iloc[:2], 5).query("generation == 5").iloc[0]
+    assert (all_known.alive, all_known.extinct, all_known.unknown) == (1, 1, 0)
+    assert all_known.wilson_low < 0.5 < all_known.wilson_high
