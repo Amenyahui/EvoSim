@@ -128,7 +128,7 @@ def _rehash(folder):
         json.dumps(
             dict(
                 version="0.1.7",
-                genetics_version="slim-qtl-3",
+                genetics_version="slim-qtl-4",
                 output_sha256=hashes,
             )
         ),

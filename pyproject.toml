@@ -19,7 +19,7 @@ evosim = "evo_sim.models.plant_insect.batch:main"
 include = ["evo_sim*"]
 
 [tool.setuptools.package-data]
-"evo_sim.models.plant_insect" = ["config.yaml", "configs/*.yaml", "analysis/*.yaml", "inputs/*.csv", "inputs/v012/*.csv", "inputs/v017/*.csv", "inputs/v017_no_flowering/*.csv"]
+"evo_sim.models.plant_insect" = ["config.yaml", "configs/*.yaml", "analysis/*.yaml", "inputs/current/*.csv"]
 "evo_sim.models.plant_insect.helpers" = ["*.slim"]
 
 [tool.ruff]

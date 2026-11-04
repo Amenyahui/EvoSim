@@ -3,25 +3,14 @@
 import numpy as np
 
 
-def map_voc(D, B, bounds):
-    return np.clip(D @ B.T, *bounds)
-
-
 def encounter_candidates(pool, size, rng):
     return rng.choice(pool, min(size, len(pool)), replace=False)
 
 
 def chemical_scores(V, A, c, weights):
-    if c.genetics["schema_version"] == "slim-qtl-4":
-        from .modules import scores
+    from .modules import scores
 
-        return scores(V, A, c)
-    if c.olfaction_mode == "neutral":
-        return np.full(len(V), c.b)
-    distance = (V - A) ** 2 @ weights
-    # Divide sequentially: sigma**2 can underflow even when a zero distance is exact.
-    with np.errstate(over="ignore"):
-        return c.b - (distance / c.sigma) / c.sigma / 2
+    return scores(V, A, c)
 
 
 def choice_probabilities(scores, tau, outside):

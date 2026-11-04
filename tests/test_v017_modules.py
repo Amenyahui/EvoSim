@@ -2,7 +2,6 @@
 
 import copy
 import json
-from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -14,13 +13,12 @@ from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.helpers import ecology, modules, voc
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
-from evo_sim.models.plant_insect.helpers.inputs import load_inputs
 from tests.support import raises
 from tests.test_v016_audit import reject_rehashed_tampering
 
 CONFIG = (
     Path(__file__).resolve().parents[1]
-    / "evo_sim/models/plant_insect/configs/v017_single_ancestor.yaml"
+    / "evo_sim/models/plant_insect/configs/current_single_ancestor.yaml"
 )
 
 
@@ -142,23 +140,25 @@ def test_v017_current_contract_rejects_removed_settlement_and_preserves_formal_d
     for removed_value in (True, False):
         old = module_config()
         old.functional_modules["adult_settlement_enabled"] = removed_value
-        old.validate(historical_audit=True)
         raises(old.validate)
         raises(lambda: simulate(old))
-    loaded = get_runner(CONFIG.with_name("v017_200gen_400insects.yaml")).config
+    loaded = get_runner(CONFIG.with_name("current_200gen.yaml")).config
     assert loaded["simulation_metadata"]["num_steps_per_episode"] == 200
-    assert loaded["batch"]["replicates"] == 3
+    assert loaded["batch"]["replicates"] == 4
     base = loaded["parameters"]
-    assert base["plant_sizes"] == [200, 200] and base["insect_sizes"] == [400]
+    assert base["plant_sizes"] == [40] and base["insect_sizes"] == [40]
     assert base["genetics"]["schema_version"] == "slim-qtl-4"
     assert "adult_settlement_enabled" not in base["functional_modules"]
     assert "flowering_kappa" not in base["functional_modules"]
-    cases = loaded["batch"]["cases"]
-    assert [case["name"] for case in cases] == ["qtl_mutating", "mutation_off"]
-    assert base["seed"] == 20261021
-    for case, mutation in zip(cases, (True, False), strict=True):
+    assert [case["name"] for case in loaded["batch"]["cases"]] == [
+        "resource10",
+        "resource30",
+        "resource100",
+    ]
+    assert base["seed"] == 20261102
+    for case in loaded["batch"]["cases"]:
         values = merge_config(base, case["overrides"])
-        assert values["genetics"]["mutation_enabled"] == dict(plant=mutation, insect=mutation)
+        assert values["genetics"]["mutation_enabled"] == dict(plant=False, insect=False)
 
 
 def test_v017_native_lifecycle_independent_audit_and_tamper_rejection():
@@ -260,26 +260,14 @@ def test_v017_adults_mate_at_existing_cells_and_failure_is_atomic():
     )
 
 
-def test_superseded_flowering_protocol_is_readable_but_not_executable():
-    values = asdict(module_config())
-    values["genetics"]["schema_version"] = "slim-qtl-3"
-    values["genetics"]["background"]["plant"].append(0.0)
-    values["functional_modules"]["flowering_kappa"] = 2.0
-    values["functional_modules"]["adult_settlement_enabled"] = True
-    legacy, _ = load_inputs(
-        dict(
-            loci="loci.csv",
-            alleles="alleles.csv",
-            founder_frequencies="single_founder_frequencies.csv",
-        ),
-        CONFIG.parents[1] / "inputs/v017",
-        values,
-    )
-    old = Config(**legacy)
-    old.validate(historical_audit=True)
-    raises(old.validate)
-    assert len([l for l in old.genetics["loci"] if l["organism"] == "plant"]) == 8
-    raises(lambda: GeneticState(old))
-    raises(lambda: simulate(old))
-    legacy["genetics"]["schema_version"] = "slim-qtl-4"
-    raises(Config(**legacy).validate)
+def test_superseded_protocols_and_removed_modules_are_rejected():
+    for protocol in ("slim-qtl-1", "slim-qtl-2", "slim-qtl-3"):
+        old = module_config()
+        old.genetics["schema_version"] = protocol
+        raises(old.validate)
+        raises(lambda: simulate(old))
+    for field, value in (("flowering_kappa", 2.0), ("adult_settlement_enabled", True)):
+        old = module_config()
+        old.functional_modules[field] = value
+        raises(old.validate)
+        raises(lambda: simulate(old))

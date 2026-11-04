@@ -1,0 +1,31 @@
+extends: current_single_ancestor.yaml
+simulation_metadata:
+  num_steps_per_episode: 5
+parameters:
+  seed: 20261102
+  resource_capacity:
+    P1: 10.0
+  parameter_provenance:
+    resources:
+      kind: theoretical_placeholder
+      source: Sarfraz et al. 2009, doi:10.14411/eje.2009.073, supports multi-larva development on a plant.
+        R/dmax=10 is a researcher-selected normalized reference, not a measured capacity; the same limitation
+        applies to theoretical diagnostic overrides R=30 and R=100. See docs/parameters.md#r1.
+  genetics:
+    mutation_enabled:
+      plant: false
+      insect: false
+batch:
+  purpose: Five-generation resource mechanism acceptance; diagnostic, not persistence.
+  replicates: 4
+  cases:
+  - name: resource10
+    overrides: {}
+  - name: resource30
+    overrides:
+      resource_capacity:
+        P1: 30.0
+  - name: resource100
+    overrides:
+      resource_capacity:
+        P1: 100.0

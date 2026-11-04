@@ -1,4 +1,0 @@
-# Development experiment; edit common scientific parameters in model_parameters.yaml.
-extends: model_parameters.yaml
-simulation_metadata:
-  num_steps_per_episode: 5

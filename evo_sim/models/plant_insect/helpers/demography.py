@@ -9,19 +9,6 @@ class ComputationalLimit(RuntimeError):
     pass
 
 
-def density_phi(alpha, counts):
-    """F07 [R3,R4]: rows are recipients; counts are pre-feeding numbers."""
-    with np.errstate(over="raise", invalid="raise", divide="raise"):
-        return 1 / (1 + np.asarray(alpha, float) @ np.asarray(counts, float))
-
-
-def alpha_from_K(lam, K):
-    """F08 [R3,R4], ideal single species only; K is never a hard ceiling."""
-    if not np.isfinite([lam, K]).all() or lam <= 1 or K <= 0:
-        raise ValueError("positive ideal K and lambda>1 required")
-    return (lam - 1) / K
-
-
 def validate_sexual(c):
     spec = c.sexual_reproduction
     fixed = dict(

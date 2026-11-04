@@ -8,17 +8,18 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from evo_sim.models.plant_insect import get_runner, simulate
+from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import run, save_result, write_json
 from evo_sim.models.plant_insect.helpers.config import config_payload
 from evo_sim.models.plant_insect.helpers.ecology import settle_feeding
-from evo_sim.models.plant_insect.substeps.demography import SampleMaternallyProducedOffspring
-from tests.support import config, raises
+from evo_sim.models.plant_insect.helpers.runtime import community_state
+from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
+from tests.support import base_runner, config, raises
 
 
 def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
-    runner = get_runner()
+    runner = base_runner()
     runner.config["parameters"].update(plant_sizes=[3, 1], insect_sizes=[4])
     runner.init()
     runtime = runner.state["environment"]["runtime"]
@@ -27,6 +28,7 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
     runtime.c.sexual_reproduction.update(pollen_radius=0, insect_mate_radius=0)
     runner.state["agents"]["plants"]["cells"][:] = [[0, 0], [0, 0], [5, 5], [0, 0]]
     runner.state["agents"]["insects"]["sex"][:] = [0, 1, 0, 1]
+    runner.state["agents"]["insects"]["cells"][:] = [[0, 0], [0, 0], [5, 5], [5, 5]]
     runtime.e = dict(
         S_plant=np.ones(4),
         fp=np.array([1.0, 0.0, 1.0, 1.0]),
@@ -39,38 +41,52 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
         runtime.rng[3][kind][:] = [
             SimpleNamespace(poisson=lambda mu: mu.astype(int)) for _ in runtime.rng[3][kind]
         ]
-        component = SampleMaternallyProducedOffspring(
-            runner.config,
-            {"runtime": "environment/runtime", "agents": "agents"},
-            ["offspring"],
-            {"fixed": {"taxon": kind}},
+        population = getattr(
+            community_state(runner.state["agents"]), "plants" if kind == 0 else "insects"
         )
-        runtime.result["parents"] = []
-        sampled = component.forward(runner.state, {})["offspring"]
-        rows = runtime.result["parents"]
-        assert sampled["candidates"][0].tolist() == [1]  # Surviving F_m=0 father.
+        survival = runtime.e["S_plant"] if kind == 0 else np.ones(4)
+        fecundity = runtime.e["fp" if kind == 0 else "fi"]
+
+        def sample():
+            counts, candidates, rows, _ = sample_parents(
+                population,
+                "plant" if kind == 0 else "insect",
+                survival,
+                fecundity,
+                np.ones(4),
+                runtime,
+                0,
+            )
+            return counts, candidates, rows
+
+        counts, candidates, rows = sample()
+        assert candidates[0].tolist() == [1]  # A zero-cost-multiplier father remains eligible.
         assert rows[1]["eligible_as_donor"] and rows[1]["F_i"] == 0
-        assert sampled["offspring_count"][0] == (2 if kind == 0 else 4)
-        assert not sampled["offspring_count"][1:].any()
+        assert counts[0] == (2 if kind == 0 else 4)
+        assert not counts[1:].any()
         assert rows[0]["expected_maternal_offspring"] == (2 if kind == 0 else 4)
         if kind == 0:
-            assert rows[0]["eligible_as_donor"]  # Same plant can serve both roles.
+            assert rows[0]["eligible_as_donor"]
             assert rows[1]["eligible_as_mother"] and rows[1]["conditional_mu"] == 0
-            assert not sampled["candidates"][2].size  # Outside mating radius.
-            assert not sampled["candidates"][3].size  # Different species cannot substitute.
+            assert not candidates[2].size  # Outside pollen radius.
+            assert not candidates[3].size  # A different compatibility pool cannot donate.
         else:
             assert not rows[0]["eligible_as_donor"] and not rows[1]["eligible_as_mother"]
             assert np.isnan(rows[1]["expected_maternal_offspring"])
-            assert rows[2]["expected_maternal_offspring"] == 0  # No-host female, not NA.
-            assert not rows[3]["eligible_as_donor"]  # Dead male cannot donate.
-        runtime.e["fp" if kind == 0 else "fi"][:] = 0
-        assert not component.forward(runner.state, {})["offspring"]["offspring_count"].any()
-        runtime.e["fp" if kind == 0 else "fi"][0] = 1
-        runtime.e["S_plant" if kind == 0 else "S_insect"][1] = 0
-        no_father = component.forward(runner.state, {})["offspring"]
-        assert not no_father["candidates"][0].size
-        assert not no_father["offspring_count"].any()
-        assert runtime.result["parents"][-4]["expected_maternal_offspring"] == 0
+            assert rows[2]["expected_maternal_offspring"] == 0
+            assert rows[3][
+                "eligible_as_donor"
+            ]  # Current adults are not sampled for survival again.
+        fecundity[:] = 0
+        assert not sample()[0].any()
+        fecundity[0] = 1
+        if kind == 0:
+            survival[1] = 0
+        else:
+            population.cells[1] = [5, 5]
+        counts, candidates, rows = sample()
+        assert not candidates[0].size and not counts.any()
+        assert rows[0]["expected_maternal_offspring"] == 0
 
 
 def test_v015_cost_functions_and_maternal_mean():
@@ -87,6 +103,7 @@ def test_v015_cost_functions_and_maternal_mean():
         np.full(2, 10.0),
         np.ones(2),
         chemical=np.column_stack((D, np.ones(2))),
+        module_traits=np.array([[1, 1, 0, 1, 0, 0, 0, 1], [0, 0, 0, 1, 0, 0, 0, 1]], float),
     )
     np.testing.assert_allclose(result["fp"], [0, 0.75])
     np.testing.assert_allclose(result["fi"], [0, 1])
@@ -105,7 +122,7 @@ def test_v015_native_zero_multiplier_fathers_and_contribution_audit():
             choice_mode="forced",
             plant_cost=1.2 if kind == "plant" else 0.0,
             voc_cost=0.0,
-            insect_cost=1.2,
+            insect_cost=0.9,
             resource_capacity={"P1": 1000.0, "P2": 1000.0},
         )
         c.plant_offspring_lambda["P1"] = 100.0

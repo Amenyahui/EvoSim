@@ -42,7 +42,7 @@ def test_yaml_is_complete_and_missing_parameters_fail():
     values = dict(get_runner().config["parameters"], generations=1)
     for key in values:
         missing = {k: v for k, v in values.items() if k != key}
-        if key == "eta_shared":
+        if key in {"eta_shared", "functional_modules"}:
             raises(lambda: Config(**missing).validate())
         else:
             raises(lambda: Config(**missing), TypeError)
@@ -67,13 +67,13 @@ def test_yaml_is_complete_and_missing_parameters_fail():
 
 def test_nested_yaml_and_case_overrides_preserve_other_parameters():
     raises(lambda: merge_config({}, None))
-    original = read_config(CONFIGS / "model_parameters.yaml")
+    original = read_config(CONFIGS / "current_base.yaml")
     with TemporaryDirectory() as tmp:
         path = Path(tmp) / "experiment.yaml"
         path.write_text(
             yaml.safe_dump(
                 dict(
-                    extends=str(CONFIGS / "model_parameters.yaml"),
+                    extends=str(CONFIGS / "current_base.yaml"),
                     parameters=dict(
                         genetics=dict(mutation_enabled=dict(plant=False)),
                         spatial=dict(grid_shape=[8, 12], initial_plant_cells=[[1, 2]]),

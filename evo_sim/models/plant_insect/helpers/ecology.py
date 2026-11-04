@@ -13,6 +13,60 @@ def larval_survival_probability(g):
     return probability
 
 
+def founder_feeding_diagnostics(D, I, capacity, dmax):
+    """Probe validated internal founder arrays, without encounters, competition or RNG."""
+    D, I, capacity, dmax = (np.asarray(value, float) for value in (D, I, capacity, dmax))
+    count = len(D) * len(I)
+    result = dict(scope="all_initial_pairs_without_encounter_or_choice", pair_count=count)
+    if not count:
+        return dict(result, status="no_initial_pairs")
+    delta, tolerance = 1e-4, 1e-12
+    perturbations = []
+    for axis in range(D.shape[1]):
+        lower, upper = D.copy(), D.copy()
+        lower[:, axis] = np.maximum(0, lower[:, axis] - delta)
+        upper[:, axis] = np.minimum(1, upper[:, axis] + delta)
+        perturbations.append((lower, upper))
+    q_min, q_max, q_sum, unsaturated, limited = 1.0, 0.0, 0.0, 0, 0
+    q_sensitive = np.zeros(D.shape[1], dtype=np.int64)
+    g_sensitive = np.zeros_like(q_sensitive)
+    resource_masked = np.zeros_like(q_sensitive)
+    # ponytail: one insect against all plants bounds memory by the initial plant count.
+    for response, demand in zip(I, dmax, strict=True):
+        q = traits.consumption(D, response)
+        q_min, q_max = min(q_min, float(q.min())), max(q_max, float(q.max()))
+        q_sum += float(q.sum())
+        unsaturated += int(np.count_nonzero(q < 1 - tolerance))
+        with np.errstate(over="ignore"):
+            resource_ceiling = capacity / demand
+        limited += int(np.count_nonzero(resource_ceiling < q))
+        for axis, (lower, upper) in enumerate(perturbations):
+            q_lower = traits.consumption(lower, response)
+            q_upper = traits.consumption(upper, response)
+            q_changed = q_lower - q_upper > tolerance
+            g_changed = (
+                np.minimum(q_lower, resource_ceiling) - np.minimum(q_upper, resource_ceiling)
+                > tolerance
+            )
+            q_sensitive[axis] += np.count_nonzero(q_changed)
+            g_sensitive[axis] += np.count_nonzero(g_changed)
+            resource_masked[axis] += np.count_nonzero(q_changed & ~g_changed)
+    return dict(
+        result,
+        status="counterfactual_initial_pairs",
+        q_min=q_min,
+        q_max=q_max,
+        q_mean=q_sum / count,
+        q_unsaturated_fraction=unsaturated / count,
+        defense_delta=delta,
+        response_tolerance=tolerance,
+        q_sensitive_fraction=(q_sensitive / count).tolist(),
+        single_larva_g_sensitive_fraction=(g_sensitive / count).tolist(),
+        single_larva_resource_masked_q_sensitive_fraction=(resource_masked / count).tolist(),
+        single_larva_resource_limited_fraction=limited / count,
+    )
+
+
 def allocate_resources(host, q, capacity, dmax):
     """Deterministic proportional sharing. Rejected q is NaN, its demand/x/g are zero."""
     host = np.asarray(host)
@@ -60,6 +114,24 @@ def allocate_resources(host, q, capacity, dmax):
             break
         correction = np.ones(len(capacity))
         correction[excess] = np.nextafter(capacity[excess] / consumed[excess], 0.0)
+        gamma *= correction
+        x[found] *= correction[host[found]]
+        consumed = np.bincount(host[found], weights=x[found], minlength=len(capacity))
+    excess = consumed > capacity
+    if excess.any():
+        # ponytail: bounded common-factor search only for hosts still over budget.
+        low = np.zeros(len(capacity))
+        high = np.ones(len(capacity))
+        for _ in range(64):
+            middle = (low + high) / 2
+            trial = np.bincount(
+                host[found], weights=x[found] * middle[host[found]], minlength=len(capacity)
+            )
+            feasible = trial <= capacity
+            low[excess & feasible] = middle[excess & feasible]
+            high[excess & ~feasible] = middle[excess & ~feasible]
+        correction = np.ones(len(capacity))
+        correction[excess] = low[excess]
         gamma *= correction
         x[found] *= correction[host[found]]
         consumed = np.bincount(host[found], weights=x[found], minlength=len(capacity))
@@ -140,23 +212,18 @@ def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_poo
 def settle_feeding(
     D, I, p_labels, h_labels, V_emit, host, c, capacity, dmax, chemical=None, module_traits=None
 ):
-    """Return explicit larval survival separately from legacy maternal fitness proxies."""
+    """Return larval survival plus separate maternal output and plant fitness diagnostics."""
     found = host >= 0
     q = np.full(len(I), np.nan)
     q[found] = traits.consumption(D[host[found]], I[found])
     allocation = allocate_resources(host, q, capacity, dmax)
     fp, defense_cost, voc_cost = voc.fecundity(D, V_emit, c, chemical)
-    if c.genetics["schema_version"] == "slim-qtl-4":
-        from .modules import maternal_fecundity
+    from .modules import maternal_fecundity
 
-        if module_traits is None:
-            raise ValueError("module feeding diagnostics require original expression/tuning traits")
-        fi = maternal_fecundity(module_traits, c)[0]
-    else:
-        fi = np.maximum(0, 1 - c.insect_cost * I.sum(axis=1))
+    if module_traits is None:
+        raise ValueError("module feeding diagnostics require original expression/tuning traits")
+    fi = maternal_fecundity(module_traits, c)[0]
     wp = (c.sP0 + (1 - c.sP0) * (1 - allocation["h"])) * fp
-    wi = np.zeros(len(I))
-    wi[found] = (c.sI0 + (1 - c.sI0) * allocation["g"][found]) * fi[found]
     loads = np.zeros((len(c.insect_sizes), len(D)), int)
     demands = np.zeros_like(loads, dtype=float)
     np.add.at(loads, (h_labels[found], host[found]), 1)
@@ -180,7 +247,6 @@ def settle_feeding(
         survival_probability=larval_survival_probability(allocation["g"]),
         q=q,
         wp=wp,
-        wi=wi,
         fp=fp,
         fi=fi,
         defense_cost=defense_cost,

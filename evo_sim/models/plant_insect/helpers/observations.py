@@ -11,15 +11,8 @@ def standardized(state, c, B, w, generation):
     """Return summaries and individual p/q on an equal panel, without ecological RNG."""
     D, V = reference(c, B)
     probability = np.empty((len(state.insects), len(D)))
-    modern = c.genetics["schema_version"] == "slim-qtl-4"
-    ids = (
-        c.observation_reference_traits["reference_ids"]
-        if modern
-        else [f"P{p + 1}" for p in range(len(D))]
-    )
-    for i, preference in enumerate(
-        state.insects.module_traits if modern else state.insects.preference
-    ):
+    ids = c.observation_reference_traits["reference_ids"]
+    for i, preference in enumerate(state.insects.module_traits):
         probability[i] = conditional_probabilities(V, preference, c, w)
     q = consumption(
         np.broadcast_to(D, (len(state.insects), *D.shape)),
@@ -48,7 +41,7 @@ def standardized(state, c, B, w, generation):
                     variance_p=float(preference.var()) if n else np.nan,
                     variance_q=float(capacity.var()) if n else np.nan,
                     variance_pq=float(joint.var()) if n else np.nan,
-                    panel="fixed_chemical_reference" if modern else "equal_ancestral_species",
+                    panel="fixed_chemical_reference",
                 )
             )
     return rows, probability, q

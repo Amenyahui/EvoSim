@@ -71,7 +71,7 @@ def test_shared_qtl_shapes_native_inheritance_and_chemical_audit():
     genetic = GeneticState(c)
     for kind, sizes, width, count in (
         ("plant", c.plant_sizes, 3, 6),
-        ("insect", c.insect_sizes, 4, 8),
+        ("insect", c.insect_sizes, 8, 16),
     ):
         g = genetic.founders(sizes, kind)
         values, raw = genetic.phenotype(g, kind)
@@ -79,7 +79,7 @@ def test_shared_qtl_shapes_native_inheritance_and_chemical_audit():
         if kind == "plant":
             assert values["plant_chemical_traits"].shape[1] == 3
     result = simulate(c)
-    assert result["metadata"]["genetics_version"] == "slim-qtl-2"
+    assert result["metadata"]["genetics_version"] == "slim-qtl-4"
     assert result["metadata"]["plant_trait_order"] == ["x_N", "x_S", "x_V"]
     for state in result["snapshots"]:
         assert "plant_voc_independent_trait" not in state
@@ -102,9 +102,11 @@ def test_chemical_csv_requires_empty_unused_plant_coordinate():
     with TemporaryDirectory() as tmp:
         path = Path(tmp) / "a.csv"
         path.write_text(
-            f"allele_id,locus_id,effect_0,effect_1,effect_2,effect_3\n0,{locus},0.1,0,0,\n"
+            "allele_id,locus_id,"
+            + ",".join(f"effect_{i}" for i in range(8))
+            + f"\n0,{locus},0.1,0,0,,,,,\n"
         )
         loaded, _ = load_inputs(dict(alleles="a.csv"), path.parent, parameters)
         assert loaded["genetics"]["alleles"][0]["effect"] == [0.1, 0.0, 0.0]
-        path.write_text(path.read_text().replace("0.1,0,0,\n", "0.1,0,0,0\n"))
+        path.write_text(path.read_text().replace("0.1,0,0,,,,,\n", "0.1,0,0,0,,,,\n"))
         raises(lambda: load_inputs(dict(alleles="a.csv"), path.parent, parameters))

@@ -14,6 +14,7 @@ import yaml
 
 from evo_sim.core.io import atomic_csv
 
+from . import lineage_observations
 from .common import Batch, audit_file, batch_parser, read_settings, run_path, sha256, write_json
 
 UNASSIGNED = "unassigned"
@@ -29,6 +30,8 @@ TABLE_COLUMNS = {
     "mating_opportunities": "reproduction_round kind eligible_mothers classified_mothers candidate_edges cross_cluster_candidate_edges classified_probability_mass cross_probability_mass probability_weighted_cross_fraction opportunity_status",
     "networks": "reproduction_round insect_generation plant_generation edge_semantics insect_cluster plant_cluster actual_consumption birth_count recruitment_count",
     "network_balances": "reproduction_round birth_count recruitment_count actual_consumption maternal_network_births maternal_network_recruits maternal_network_consumption recruit_network_recruits",
+    "matched_opportunities": "reproduction_round group_system compatibility_pool mother_group target_group weight_type mothers weight no_mate_mothers no_mate_weight unknown_mother_count unknown_mother_weight unknown_local_edges local_edges unknown_global_edges global_edges excluded_mothers excluded_weight matched_mothers matched_weight p_local p_global ri_relative status",
+    "qtl_ancestry": "reference_generation generation k source_system source_group target_system target_group target_lineage_id stage qtl_copies total_qtl_copies fraction unknown_fraction status",
 }
 
 
@@ -118,14 +121,11 @@ def _source(mapping, ident):
     return mapping.get(int(ident), UNKNOWN) if pd.notna(ident) else UNKNOWN
 
 
-def _summarize_run(folder, design):
+def _summarize_run(folder, design, ancestry_reference_generation=None):
     """Return tables from one saved run without calling simulation functions."""
     metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-    if metadata["version"] != "0.1.7" or metadata.get("genetics_version") not in {
-        "slim-qtl-3",
-        "slim-qtl-4",
-    }:
-        raise ValueError("lineages require v0.1.7 / slim-qtl-3 or slim-qtl-4 saved ledgers")
+    if metadata["version"] != "0.1.7" or metadata.get("genetics_version") != "slim-qtl-4":
+        raise ValueError("lineages require current 0.1.7 / slim-qtl-4 saved ledgers")
     hashes = {}
 
     def checked(name):
@@ -471,12 +471,26 @@ def _summarize_run(folder, design):
                 recruit_network_recruits=int(recruit_count),
             )
         )
+    tables["matched_opportunities"] = lineage_observations.opportunities(states, parents, mappings)
+    if ancestry_reference_generation is not None:
+        loci = pd.read_csv(checked("genetic_loci.csv"))
+        transmissions = pd.read_csv(checked("gamete_transmissions.csv"))
+        tables["qtl_ancestry"] = lineage_observations.ancestry(
+            states, offspring, mappings, ancestry_reference_generation, loci, transmissions
+        )
+        for row in tables["qtl_ancestry"]:
+            if row["target_system"] == "candidate_cluster":
+                row["target_lineage_id"] = (
+                    groups[row["generation"], "insect"]
+                    .get(row["target_group"], {})
+                    .get("lineage_id", UNASSIGNED)
+                )
     return tables, hashes
 
 
-def summarize(batch, design):
+def summarize(batch, design, ancestry_reference_generation=None):
     """Summarize an audited v0.1.7 batch; return output tables for further inspection."""
-    batch = batch if isinstance(batch, Batch) else Batch.open(Path(batch), allow_lifecycle=True)
+    batch = batch if isinstance(batch, Batch) else Batch.open(Path(batch))
     if read_settings(batch.path).get("version") != "0.1.7":
         raise ValueError("lineages require a v0.1.7 batch")
     settings = read_design(design)
@@ -488,7 +502,7 @@ def summarize(batch, design):
                 dict(case=run.case, replicate=run.replicate, status="invalid_parameter")
             )
             continue
-        tables, hashes = _summarize_run(folder, settings)
+        tables, hashes = _summarize_run(folder, settings, ancestry_reference_generation)
         for name, rows in tables.items():
             collected[name].extend(
                 dict(case=run.case, replicate=run.replicate, **row) for row in rows
@@ -517,7 +531,14 @@ def summarize(batch, design):
         output / "metadata.json",
         dict(
             observation_schema="operational-qtl-lineages-1",
+            matched_opportunities_schema="matched-mating-opportunities-1",
+            qtl_ancestry_schema="reference-qtl-copy-ancestry-1",
+            qtl_ancestry_status="enabled"
+            if ancestry_reference_generation is not None
+            else "not_requested",
             analysis_source_sha256=sha256(Path(__file__)),
+            observation_helper_sha256=sha256(Path(lineage_observations.__file__)),
+            ancestry_reference_generation=ancestry_reference_generation,
             design=settings,
             design_sha256=sha256(design) if not isinstance(design, dict) else None,
             input_sha256=inputs,
@@ -536,6 +557,10 @@ def summarize(batch, design):
                 "maternal_source networks describe maternal ancestry, not larval cluster membership",
                 "recruit_cluster networks link t+1 recruits to host plant clusters at t",
                 "pool extinction is distinct from loss of a detected operational cluster",
+                "matched opportunities use the same completely classified mothers and weights in each local/global comparison; global males remain within the compatibility pool",
+                "QTL copy ancestry is anchored at the explicit reference generation; it is not whole-genome ancestry, new gene flow, or cohort-specific persistence",
+                "birth targets use birth hosts; adult targets are contemporaneous operational clusters, not fixed future identities",
+                "networks are maternal-source or recruit-cluster observations; no species-supported nodes are inferred",
             ],
         ),
     )
@@ -545,8 +570,9 @@ def summarize(batch, design):
 def main():
     parser = batch_parser(__doc__)
     parser.add_argument("--design", type=Path, required=True)
+    parser.add_argument("--ancestry-reference-generation", type=int)
     args = parser.parse_args()
-    summarize(args.input, args.design)
+    summarize(args.input, args.design, args.ancestry_reference_generation)
 
 
 if __name__ == "__main__":

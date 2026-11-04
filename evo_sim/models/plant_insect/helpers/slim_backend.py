@@ -29,7 +29,8 @@ def engine_info(settings):
             executable = str(candidate)
     if executable is None:
         raise SlimError(
-            f"SLiM executable not found: {requested}; configure genetics.slim.executable"
+            f"SLiM 5.2 executable not found: {requested}; install SLiM 5.2 and configure "
+            "EVOSIM_SLIM or genetics.slim.executable (see README.md)"
         )
     try:
         result = subprocess.run(

@@ -33,7 +33,11 @@ def test_layout():
     from evo_sim.models.plant_insect import get_runner
 
     config = get_runner().config
-    spec = dict(config["batch"], base=dict(config["parameters"], generations=1))
+    spec = dict(
+        replicates=1,
+        cases=[dict(name="first", overrides={}), dict(name="second", overrides={})],
+        base=dict(config["parameters"], generations=1),
+    )
     spec["base"]["generations"] = 1
     with TemporaryDirectory() as tmp:
         batch = Path(tmp) / "batch"
@@ -95,6 +99,6 @@ if __name__ == "__main__":
 def test_long_run_inherits_cases():
     from evo_sim.models.plant_insect.helpers.inputs import read_config
 
-    c = read_config(ROOT / "evo_sim/models/plant_insect/configs/sexual_qtl_200gen.yaml")
-    assert c["batch"]["replicates"] == 3
-    assert [x["name"] for x in c["batch"]["cases"]] == ["qtl_mutating", "mutation_off"]
+    c = read_config(ROOT / "evo_sim/models/plant_insect/configs/current_200gen.yaml")
+    assert c["batch"]["replicates"] == 4
+    assert [x["name"] for x in c["batch"]["cases"]] == ["resource10", "resource30", "resource100"]

@@ -45,10 +45,28 @@ def test_larval_survival_probability_boundaries_and_cost_separation():
         np.testing.assert_array_equal(result["survival_probability"], result["x"])
         assert (result["fi"] < 1).all()
         if resource:
-            assert (result["wi"] < result["survival_probability"]).all()
+            assert (result["fi"] < result["survival_probability"]).all()
 
 
 def test_competing_larvae_conserve_resources_and_fraction():
+    host = np.repeat(np.arange(3), [42, 61, 1000])
+    capacity = np.array([30.0, 30.0, 300.0])
+    for order in (np.arange(len(host)), np.arange(len(host))[::-1]):
+        selected = host[order]
+        result = ecology.allocate_resources(
+            selected, np.ones(len(host)), capacity, np.ones(len(host))
+        )
+        assert (result["X"] <= capacity).all()
+        np.testing.assert_allclose(result["X"], capacity, rtol=1e-12)
+        for plant in range(len(capacity)):
+            values = result["x"][selected == plant]
+            assert np.all(values == values[0])
+    for count in (10, 15):
+        result = ecology.allocate_resources(
+            np.zeros(count, dtype=int), np.ones(count), np.array([10.0]), np.ones(count)
+        )
+        np.testing.assert_allclose(result["g"], np.ones(count) if count == 10 else 10 / 15)
+        np.testing.assert_allclose(result["g"].sum(), 10)
     host = np.array([0, 0, 1, 1, -1])
     q = np.array([1.0, 0.5, 1.0, 0.0, np.nan])
     capacity, dmax = np.array([1.0, 0.0]), np.array([2.0, 2.0, 1.0, 1.0, 1.0])

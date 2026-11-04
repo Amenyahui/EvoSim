@@ -68,22 +68,18 @@ def load_inputs(files, directory, parameters):
     if not isinstance(files, dict) or not files or not set(files) <= allowed:
         raise ValueError(f"input_files requires paths keyed by {sorted(allowed)}")
     p = deepcopy(parameters)
-    n, B = p["n"], p["B"]
-    schema = p.get("genetics", {}).get("schema_version")
-    modern = schema in {"slim-qtl-3", "slim-qtl-4"}
-    chemical = p.get("mapping") == "shared_chemical_modules"
-    if chemical:
-        if n != 2 or B is not None:
-            raise ValueError("shared chemical CSV requires n=2 and retired B=null")
-        k, width = 2, 8 if modern else 4
-    else:
-        if type(n) is not int or n < 1 or not isinstance(B, list) or not B:
-            raise ValueError("CSV inputs require explicit positive n and nonempty B")
-        k, width = len(B), n + len(B)
+    if (
+        p.get("n") != 2
+        or p.get("B") is not None
+        or p.get("mapping") != "shared_chemical_modules"
+        or p.get("genetics", {}).get("schema_version") != "slim-qtl-4"
+    ):
+        raise ValueError("CSV inputs require current n=2/B=null shared modules and slim-qtl-4")
+    width = 8
 
     def coordinates(row, field, kind):
         values = [row.pop(f"{field}_{j}") for j in range(width)]
-        size = (4 if schema == "slim-qtl-3" else 3) if chemical and kind == "plant" else width
+        size = 3 if kind == "plant" else width
         if any(v is None for v in values[:size]) or any(v is not None for v in values[size:]):
             raise ValueError(f"{field}: required {size} values and empty unused cells for {kind}")
         return values[:size]
@@ -177,8 +173,6 @@ def load_inputs(files, directory, parameters):
                     f"{field}_{j}": (
                         lambda value, convert=convert: convert(value) if value else None
                     )
-                    if chemical
-                    else convert
                     for j in range(width)
                 }
             )
@@ -211,15 +205,13 @@ def load_inputs(files, directory, parameters):
 
     if "alleles" in files:
         columns = dict(allele_id=int, locus_id=nonempty)
-        columns.update(
-            {f"effect_{j}": optional_number if chemical else finite for j in range(width)}
-        )
+        columns.update({f"effect_{j}": optional_number for j in range(width)})
         rows = table("alleles", columns, ("allele_id",))
         kinds = {l["locus_id"]: l["organism"] for l in genetics.get("loci", [])}
         for row in rows:
-            if chemical and row["locus_id"] not in kinds:
+            if row["locus_id"] not in kinds:
                 raise ValueError("allele references unknown locus")
-            row["effect"] = coordinates(row, "effect", kinds.get(row["locus_id"], "legacy"))
+            row["effect"] = coordinates(row, "effect", kinds[row["locus_id"]])
         genetics["alleles"] = rows
 
     if "founder_frequencies" in files:
@@ -236,33 +228,14 @@ def load_inputs(files, directory, parameters):
 
     if "reference_traits" in files:
         columns = dict(species_id=nonempty)
-        if chemical:
-            columns.update({name: finite for name in ("x_N", "x_S", "x_V")})
-        else:
-            columns.update({f"D_{j + 1}": finite for j in range(n)})
-            columns.update({f"Z_{j + 1}": finite for j in range(k)})
+        columns.update({name: finite for name in ("x_N", "x_S", "x_V")})
         rows = table("reference_traits", columns, ("species_id",))
-        expected = (
-            [row["species_id"] for row in rows]
-            if modern
-            else [f"P{i + 1}" for i in range(len(p["plant_sizes"]))]
-        )
-        by_species = {row["species_id"]: row for row in rows}
-        if set(by_species) != set(expected):
-            raise ValueError("reference_traits.csv requires exactly the configured plant species")
-        if chemical:
-            p["observation_reference_traits"] = {
-                "plant_chemical_traits": [
-                    [by_species[s][name] for name in ("x_N", "x_S", "x_V")] for s in expected
-                ]
-            }
-            if modern:
-                p["observation_reference_traits"]["reference_ids"] = expected
-        else:
-            p["observation_reference_traits"] = {
-                name: [[by_species[s][f"{prefix}_{j + 1}"] for j in range(size)] for s in expected]
-                for name, prefix, size in (("D", "D", n), ("plant_voc_independent_trait", "Z", k))
-            }
+        p["observation_reference_traits"] = {
+            "plant_chemical_traits": [
+                [row[name] for name in ("x_N", "x_S", "x_V")] for row in rows
+            ],
+            "reference_ids": [row["species_id"] for row in rows],
+        }
     return p, sources
 
 

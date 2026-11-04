@@ -6,11 +6,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from evo_sim.models.plant_insect import get_runner, simulate
+from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.helpers import ecology
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
-from tests.support import config, raises
+from tests.support import base_runner, config, raises
 
 
 def test_directed_background_sources_are_not_cross_pair_counts():
@@ -42,7 +42,7 @@ def test_directed_background_sources_are_not_cross_pair_counts():
 
 
 def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
-    runner = get_runner()
+    runner = base_runner()
     runner.config["simulation_metadata"]["num_steps_per_episode"] = 1
     runner.config["parameters"].update(
         plant_sizes=[1, 0],
@@ -62,6 +62,7 @@ def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
     plants["defense"][:] = 0
     plants["chemical_traits"][:] = 0
     insects["sex"][:] = [0, 1]
+    insects["module_traits"][:, :2] = [[0, 0], [1, 1]]
     insects["resistance"][:] = [[0, 0], [1, 1]]
     runtime.rng[3][1][0] = SimpleNamespace(poisson=lambda mu: np.full(len(mu), 10, int))
     runtime.rng[2][1][0] = SimpleNamespace(random=lambda n: np.linspace(0.05, 0.95, n))
@@ -82,7 +83,7 @@ def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
     assert sum(r["realized_genetic_contribution"] for r in parents) == 10
     assert sum(r["realized_recruitment_contribution"] for r in parents) == 3
     tx = [r for r in result["gamete_transmissions"] if r["kind"] == "insect"]
-    assert len(tx) == 10 * 2 * 8
+    assert len(tx) == 10 * 2 * 16
     assert {r["offspring_id"] for r in tx} == {r["offspring_id"] for r in children}
     assert len({r["event_id"] for r in result["oviposition"]}) == 10
     assert {r["event_id"] for r in result["oviposition"]} == {
@@ -132,7 +133,7 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
         eggs = [r for r in result["oviposition"] if r["reproduction_round"] == t]
         lookup = {int(i): j for j, i in enumerate(snapshot["insect_ids"])}
         np.testing.assert_array_equal(
-            seen_A[t], [snapshot["A"][lookup[r["maternal_id"]]] for r in eggs]
+            seen_A[t], [snapshot["insect_module_traits"][lookup[r["maternal_id"]]] for r in eggs]
         )
         children = [
             r for r in result["offspring"] if r["kind"] == "insect" and r["reproduction_round"] == t
@@ -143,7 +144,14 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
             raw = np.array(catalog.spec["background"]["insect"], float)
             for allele in g.ravel():
                 raw += catalog.spec["phenotype_map"]["effect_scale"] * effects[allele]
-            derived.append(np.clip(raw, *catalog.spec["phenotype_map"]["bounds"])[: c.n])
+            from evo_sim.models.plant_insect.helpers.modules import effective
+
+            derived.append(
+                effective(
+                    np.clip(raw, *catalog.spec["phenotype_map"]["bounds"])[None, :],
+                    c.functional_modules,
+                )[0][0]
+            )
         np.testing.assert_allclose(seen_I[t], np.array(derived).reshape(-1, c.n))
         parents = [r for r in result["parents"] if r["generation"] == t and r["kind"] == "insect"]
         assert all(r["S_i"] == 1 and r["survived_to_mating_stage"] for r in parents)
@@ -185,7 +193,7 @@ def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
     result = simulate(c)
     assert result["oviposition"] and not result["larvae"]
     assert all(not r["accepted"] for r in result["oviposition"])
-    runner = get_runner()
+    runner = base_runner()
     runner.config["simulation_metadata"]["num_steps_per_episode"] = 0
     runner.init()
     runtime = runner.state["environment"]["runtime"]
@@ -199,7 +207,7 @@ def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
         for left, right in zip(streams[phase], runtime.rng[phase]):
             for a, b in zip(left, right):
                 assert a.bit_generator.state == b.bit_generator.state
-    runner = get_runner()
+    runner = base_runner()
     runner.init()
     runtime = runner.state["environment"]["runtime"]
     streams = copy.deepcopy(runtime.rng)

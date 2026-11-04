@@ -19,6 +19,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Polygon
+from matplotlib.ticker import MaxNLocator
 
 C = {
     "P1": "#326955",
@@ -210,45 +211,30 @@ def figure_B(d, out, dpi):
     No unvalidated 'functional match' proxy: the model's interaction formulas are not in these CSVs.
     """
     t = d["trait_timeseries"].query("record_type=='trait'")
-    module = "insect_module_traits_1" in set(t.trait)
-    chemical = "plant_chemical_traits_1" in set(t.trait)
-    plant_pair = (
-        ("plant_chemical_traits_1", "plant_chemical_traits_2") if chemical else ("D_1", "D_2")
-    )
-    odor_pair = (
-        ("plant_chemical_traits_2", "plant_chemical_traits_3")
-        if chemical
-        else ("plant_voc_independent_trait_1", "plant_voc_independent_trait_2")
-    )
     panels = [
         (
-            "Shared / VOC-only chemical modules" if chemical else "Independent VOC trait",
-            odor_pair,
+            "Shared / VOC-only chemical modules",
+            ("plant_chemical_traits_2", "plant_chemical_traits_3"),
             ("P1", "P2"),
-            "Δ x_S" if chemical else "Δ VOC 1",
-            "Δ x_V" if chemical else "Δ VOC 2",
+            "Δ x_S",
+            "Δ x_V",
         ),
-        ("Insect detoxification", ("I_1", "I_2"), ("H1",), "Δ I₁", "Δ I₂"),
         (
-            "Defense-only / shared chemical modules" if chemical else "Plant defense",
-            plant_pair,
+            "Defense-only / shared chemical modules",
+            ("plant_chemical_traits_1", "plant_chemical_traits_2"),
             ("P1", "P2"),
-            "Δ x_N" if chemical else "Δ D₁",
-            "Δ x_S" if chemical else "Δ D₂",
+            "Δ x_N",
+            "Δ x_S",
         ),
-        ("Insect recognition", ("A_1", "A_2"), ("H1",), "Δ A₁", "Δ A₂"),
+    ] + [
+        (name, tuple(f"insect_module_traits_{i}" for i in pair), ("H1",), xlab, ylab)
+        for name, pair, xlab, ylab in (
+            ("Processing expression", (1, 2), "Δ met E₁", "Δ met E₂"),
+            ("Processing tuning", (3, 4), "Δ met μ₁", "Δ met μ₂"),
+            ("Sensory expression", (5, 6), "Δ sense E₁", "Δ sense E₂"),
+            ("Sensory tuning", (7, 8), "Δ sense μ₁", "Δ sense μ₂"),
+        )
     ]
-    if module:
-        # v0.1.7 I/A are derived reference spectra, not inherited detox/recognition axes.
-        panels = [panels[0], panels[2]] + [
-            (name, tuple(f"insect_module_traits_{i}" for i in pair), ("H1",), xlab, ylab)
-            for name, pair, xlab, ylab in (
-                ("Processing expression", (1, 2), "Δ met E₁", "Δ met E₂"),
-                ("Processing tuning", (3, 4), "Δ met μ₁", "Δ met μ₂"),
-                ("Sensory expression", (5, 6), "Δ sense E₁", "Δ sense E₂"),
-                ("Sensory tuning", (7, 8), "Δ sense μ₁", "Δ sense μ₂"),
-            )
-        ]
     fig, axes = plt.subplots(len(panels), 2, figsize=(9.5, 3.0 + 2.05 * len(panels)))
     fig.subplots_adjust(left=0.125, right=0.965, top=0.908, bottom=0.115, hspace=0.43, wspace=0.27)
     label(fig, "B", "Functional trait evolution · changes relative to generation 0")
@@ -283,33 +269,20 @@ def figure_B(d, out, dpi):
                 ax.set_ylabel(ylab + " (model units)")
             ax.ticklabel_format(axis="both", style="plain", useOffset=False)
             axstyle(ax, grid=False)
-            if module:
-                short = (
-                    "Plant VOC",
-                    "Plant defense",
-                    "Metabolic expression",
-                    "Metabolic tuning",
-                    "Sensory expression",
-                    "Sensory tuning",
-                )[i]
-                ax.set_title(
-                    f"{CASE_NAMES[case]}\n{short}" if i == 0 else short,
-                    weight="semibold",
-                    pad=7,
-                    fontsize=9.2,
-                )
-            elif j == 0:
-                ax.text(
-                    -0.26,
-                    1.05,
-                    name,
-                    transform=ax.transAxes,
-                    rotation=90,
-                    va="top",
-                    weight="semibold",
-                    fontsize=9,
-                    color="#3E4B4D",
-                )
+            short = (
+                "Plant VOC",
+                "Plant defense",
+                "Metabolic expression",
+                "Metabolic tuning",
+                "Sensory expression",
+                "Sensory tuning",
+            )[i]
+            ax.set_title(
+                f"{CASE_NAMES[case]}\n{short}" if i == 0 else short,
+                weight="semibold",
+                pad=7,
+                fontsize=9.2,
+            )
     handles = [Line2D([0], [0], color=C[s], lw=2, label=s) for s in ("P1", "P2", "H1")]
     handles += [
         Line2D(
@@ -426,12 +399,9 @@ def figure_C(d, out, dpi):
 
     # Final generation's numbers; categories differ biologically (survivors vs mated mothers).
     ax = axes[1, 1]
-    larval = d.get("lifecycle_schema") == "adult-oviposition-larval-recruitment-1"
-    stages = (
-        ["N_start", "N_mothers_with_mates", "N_potential_eggs", "N_offspring", "N_next"]
-        if larval
-        else ["N_start", "N_survived_to_reproduce", "N_mothers_with_mates", "N_offspring"]
-    )
+    if d.get("lifecycle_schema") != "adult-oviposition-larval-recruitment-1":
+        raise ValueError("Current recruitment diagnostics require stage-explicit larval ledgers")
+    stages = ["N_start", "N_mothers_with_mates", "N_potential_eggs", "N_offspring", "N_next"]
     x = np.arange(len(stages))
     for case, rep, at, _ in runs:
         last = pop[
@@ -447,13 +417,9 @@ def figure_C(d, out, dpi):
         ax.plot(x, vals, color=col, alpha=0.65, lw=1.25, ls=linestyles[rep], marker="o", ms=3.3)
     ax.set_xticks(
         x,
-        ["Adults", "Mated\nfemales", "Potential\neggs", "Larval\nbirths", "Adult\nrecruits"]
-        if larval
-        else ["Starting", "Surviving", "Mated\nmothers", "Offspring"],
+        ["Adults", "Mated\nfemales", "Potential\neggs", "Larval\nbirths", "Adult\nrecruits"],
     )
-    ax.set_ylabel(
-        "Individuals / eggs (stage-specific)" if larval else "Individuals / mothers / offspring"
-    )
+    ax.set_ylabel("Individuals / eggs (stage-specific)")
     ax.set_title(
         "Last reproductive update before extinction"
         if extinct
@@ -467,10 +433,7 @@ def figure_C(d, out, dpi):
         0.105,
         0.043,
         "Each line is a run; no across-run mean for host share (avoids survivor bias)."
-        " Females/eggs/larvae/recruits are distinct stages."
-        if larval
-        else "Each line is a run; no across-run mean for host share (avoids survivor bias)."
-        " Mated mothers are a subset, not an additional mortality stage.",
+        " Females/eggs/larvae/recruits are distinct stages.",
         fontsize=8,
         color=C["gray"],
     )
@@ -643,10 +606,411 @@ def figure_E(d, out, dpi):
     export(fig, out, "E_genetic_diversity", dpi)
 
 
+def lineage_plot_tables(tables):
+    """Pool saved runs within a case using shared weights and complete copy denominators."""
+    o = tables["matched_opportunities"]
+    o = o[(o.target_group == "__all_cross__") & (o.weight_type == "conditional_mu")].copy()
+    o["local_mass"] = o.p_local * o.matched_weight
+    o["global_mass"] = o.p_global * o.matched_weight
+    keys = ["case", "reproduction_round", "group_system"]
+    opportunity = o.groupby(keys, as_index=False)[
+        ["weight", "matched_weight", "no_mate_weight", "local_mass", "global_mass"]
+    ].sum(min_count=1)
+    denominator = opportunity.matched_weight.where(opportunity.matched_weight > 0)
+    opportunity["p_local"] = opportunity.local_mass / denominator
+    opportunity["p_global"] = opportunity.global_mass / denominator
+    opportunity["coverage"] = opportunity.matched_weight / opportunity.weight.where(
+        opportunity.weight > 0
+    )
+    opportunity["ri_relative"] = 1 - opportunity.p_local / opportunity.p_global.where(
+        opportunity.p_global > 0
+    )
+
+    a = tables["qtl_ancestry"]
+    a = a[a.stage.isin(["reference", "recruitment"]) & a.status.eq("available")].copy()
+    if a.replicate.nunique() > 1:
+        selected = a.source_system.eq("candidate_cluster") & ~a.source_group.isin(
+            ["unknown", "unassigned"]
+        )
+        a.loc[selected, "source_group"] = (
+            "r" + a.loc[selected, "replicate"].astype(str) + ":" + a.loc[selected, "source_group"]
+        )
+    keys = ["case", "reference_generation", "generation", "source_system"]
+    # Each target's denominator repeats for every source; count it exactly once.
+    totals = a.drop_duplicates(keys + ["replicate", "target_system", "target_group"])
+    totals = totals.groupby(keys, as_index=False).total_qtl_copies.sum()
+    a["source_group"] = a.source_group.replace({"unassigned": "unknown"})
+    ancestry = a.groupby(keys + ["source_group"], as_index=False).qtl_copies.sum()
+    ancestry = ancestry.merge(totals, on=keys, validate="many_to_one")
+    ancestry["fraction"] = ancestry.qtl_copies / ancestry.total_qtl_copies.where(
+        ancestry.total_qtl_copies > 0
+    )
+
+    n = tables["networks"]
+    n = n[n.edge_semantics.eq("maternal_source")].copy()
+    members = tables["memberships"]
+    for kind, column in (("insect", "insect_cluster"), ("plant", "plant_cluster")):
+        identity = members[members.kind.eq(kind)].drop_duplicates(
+            ["case", "replicate", "generation", "cluster_id"]
+        )
+        identity = identity[["case", "replicate", "generation", "cluster_id", "lineage_id"]]
+        identity = identity.rename(
+            columns={"generation": "reproduction_round", "cluster_id": column}
+        )
+        n = n.merge(
+            identity,
+            on=["case", "replicate", "reproduction_round", column],
+            how="left",
+            validate="many_to_one",
+        )
+        if n.lineage_id.isna().any():
+            raise ValueError("network identity missing from saved memberships")
+        n[kind + "_lineage"] = n.pop("lineage_id")
+        if n.replicate.nunique() > 1:
+            n[kind + "_lineage"] = "r" + n.replicate.astype(str) + ":" + n[kind + "_lineage"]
+    network = n.groupby(
+        ["case", "reproduction_round", "insect_lineage", "plant_lineage"], as_index=False
+    ).actual_consumption.sum()
+    demographic = (
+        tables["network_balances"]
+        .groupby(["case", "reproduction_round"], as_index=False)[
+            ["birth_count", "recruitment_count", "actual_consumption"]
+        ]
+        .sum()
+    )
+    expected = demographic.set_index(["case", "reproduction_round"]).actual_consumption
+    actual = network.groupby(["case", "reproduction_round"]).actual_consumption.sum()
+    if not np.allclose(actual.reindex(expected.index, fill_value=0), expected):
+        raise ValueError("plotted network does not conserve consumption")
+    return dict(
+        opportunity=opportunity, ancestry=ancestry, network=network, demographic=demographic
+    )
+
+
+def plot_lineages(batch, out, dpi):
+    """Render saved lineage observations, preserving unestimable probabilities as missing."""
+    import json
+
+    from evo_sim.core.io import atomic_csv
+
+    from .common import sha256, write_json
+
+    folder = batch.summary_dir / "lineages"
+    metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
+    for name, expected in metadata["input_sha256"].items():
+        if sha256(batch.path / name) != expected:
+            raise ValueError(f"lineage source changed: {name}")
+    names = ["matched_opportunities", "qtl_ancestry", "networks", "memberships", "network_balances"]
+    tables = {name: pd.read_csv(folder / f"{name}.csv") for name in names}
+    data = lineage_plot_tables(tables)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, frame in data.items():
+        atomic_csv(frame, folder / f"plot_{name}.csv")
+    theme()
+    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+    plt.rcParams["axes.unicode_minus"] = False
+    cases = sorted(batch.status.case.unique())
+    case_names = {"mutation_off": "关闭突变", "qtl_mutating": "开启 QTL 突变"}
+    colors = ["#326955", "#BA6747", "#607A8A", "#9A79AA", "#C69D45"]
+
+    def canvas(title, note):
+        fig, axes = plt.subplots(len(cases), 2, figsize=(12, 3.5 * len(cases) + 1), squeeze=False)
+        fig.subplots_adjust(left=0.10, right=0.97, top=0.88, bottom=0.21, hspace=0.70, wspace=0.38)
+        fig.suptitle(title, fontsize=18, weight="bold", y=0.98)
+        runs = batch.status.groupby("case").size()
+        fig.text(
+            0.10,
+            0.92,
+            "验证数据 · " + " / ".join(f"{case_names.get(c, c)}：{runs[c]} 次运行" for c in cases),
+            color=C["gray"],
+        )
+        fig.text(0.10, 0.04, note, fontsize=10, color=C["gray"])
+        return fig, axes
+
+    fig, axes = canvas(
+        "交配机会：局部与全局对照",
+        "权重＝潜在卵数期望；全局限同一兼容池。覆盖率＝完整分类且有配偶的母本权重 / 全部母本权重。\n"
+        "NA 不是零隔离：随机跨群概率为零或没有匹配母本时，RI 无定义。不同运行按权重合并。",
+    )
+    systems = [("birth_host", "出生寄主"), ("candidate_cluster", "候选遗传群")]
+    for row, case in enumerate(cases):
+        part = data["opportunity"].query("case == @case")
+        if part.empty:
+            for ax in axes[row]:
+                ax.text(0.5, 0.5, "没有可绘制的交配机会记录", ha="center", transform=ax.transAxes)
+            continue
+        for j, (system, name) in enumerate(systems):
+            s = part[part.group_system.eq(system)].sort_values("reproduction_round")
+            for col, field in enumerate(["p_local", "coverage"]):
+                ax = axes[row, col]
+                ax.plot(s.reproduction_round, s[field], "o-", color=colors[j], label=name)
+                if col == 0:
+                    ax.plot(
+                        s.reproduction_round,
+                        s.p_global,
+                        "x--",
+                        color=colors[j],
+                        label=name + "·全局",
+                    )
+                    missing = s[s.p_local.isna()]
+                    for t in missing.reproduction_round:
+                        ax.text(
+                            t,
+                            0.18 + j * 0.18,
+                            name + " NA",
+                            ha="center",
+                            color=colors[j],
+                            fontsize=8,
+                        )
+                ax.set_ylim(-0.05, 1.05)
+                ax.set_xticks(sorted(part.reproduction_round.unique()))
+                ax.set_xlim(
+                    part.reproduction_round.min() - 0.4, part.reproduction_round.max() + 0.4
+                )
+                ax.set_xlabel("繁殖轮次 t")
+                axstyle(ax)
+        for col, title in enumerate(["跨群父本概率（实线＝局部）", "可估计风险集覆盖率"]):
+            axes[row, col].set_title(case_names.get(case, case) + " · " + title)
+            axes[row, col].legend(
+                fontsize=8, loc="upper right" if col == 0 else "center right", frameon=False
+            )
+        if not part.ri_relative.notna().any():
+            axes[row, 0].text(0.02, 0.90, "本组 RI 均不可估计", transform=axes[row, 0].transAxes)
+    export(fig, out, "F_mating_opportunities", dpi)
+
+    fig, axes = canvas(
+        "跨代祖源：参考代来源如何留存在成年群体中",
+        "每列为该来源分组在全体成年个体的 QTL 拷贝份额，分母包含未知来源。两种分组分别归一化，不能相加。\n"
+        "仅追踪已观测 QTL；来源固定在参考代。未分类来源不等于新物种，来源份额不等于每代新增基因流。",
+    )
+    for row, case in enumerate(cases):
+        for col, (system, name) in enumerate(systems):
+            ax = axes[row, col]
+            a = data["ancestry"]
+            a = a[a.case.eq(case) & a.source_system.eq(system)]
+            if a.empty:
+                ax.text(0.5, 0.5, "未计算祖源或没有成年个体", ha="center", transform=ax.transAxes)
+                continue
+            p = a.pivot(index="generation", columns="source_group", values="fraction").fillna(0)
+            bottom = np.zeros(len(p))
+            for j, source in enumerate(p.columns):
+                if not p[source].any():
+                    continue
+                name_source = "未分类来源" if source == "unknown" else source.replace("insect:", "")
+                color = "#B8BEC3" if source == "unknown" else colors[j % len(colors)]
+                ax.bar(
+                    p.index, p[source], bottom=bottom, color=color, width=0.55, label=name_source
+                )
+                bottom += p[source].to_numpy()
+            ax.set_title(
+                f"{case_names.get(case, case)} · {name}（参考代 {int(a.reference_generation.iloc[0])}）"
+            )
+            ax.set_xticks(p.index)
+            ax.set_ylim(0, 1.06)
+            ax.set_xlabel("成年世代")
+            ax.set_ylabel("QTL 来源份额")
+            ax.legend(
+                frameon=False, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.19), ncol=2
+            )
+    export(fig, out, "G_qtl_ancestry", dpi)
+
+    fig, axes = canvas(
+        "取食网络与招募：资源流向和后代去向",
+        "左图按已保存的操作谱系身份合并母本来源 → 植物来源的取食量，包含随后死亡的幼虫及未分类来源。\n"
+        "右图为每轮出生和成年招募人数。不同运行计数相加；图中的谱系节点不是已确认物种。",
+    )
+    vmax = max(1, data["network"].actual_consumption.max())
+    for row, case in enumerate(cases):
+        n = data["network"].query("case == @case").copy()
+
+        def short(value):
+            return (
+                value.replace("insect:", "")
+                .replace("plant:", "")
+                .replace("unassigned", "未分类")
+                .replace("unknown", "未分类")
+            )
+
+        n["edge"] = n.insect_lineage.map(short) + " → " + n.plant_lineage.map(short)
+        p = n.pivot(index="edge", columns="reproduction_round", values="actual_consumption").fillna(
+            0
+        )
+        ax = axes[row, 0]
+        empty_network = p.empty
+        if empty_network:
+            p = pd.DataFrame([[np.nan]], index=["无取食记录"], columns=["NA"])
+        im = ax.imshow(p, cmap="YlGnBu", vmin=0, vmax=vmax, aspect="auto")
+        ax.set_xticks(range(len(p.columns)), p.columns)
+        ax.set_yticks(range(len(p)), p.index, fontsize=8)
+        for i in range(len(p)):
+            for j in range(len(p.columns)):
+                value = p.iloc[i, j]
+                ax.text(
+                    j,
+                    i,
+                    "无取食记录" if empty_network else f"{value:.1f}",
+                    ha="center",
+                    va="center",
+                    color="white" if value > vmax * 0.55 else "#16324A",
+                )
+        fig.colorbar(im, ax=ax, fraction=0.045, pad=0.03, label="实际资源量")
+        ax.set_xlabel("繁殖轮次 t")
+        ax.set_title(case_names.get(case, case) + " · 母本来源网络")
+        d = data["demographic"].query("case == @case")
+        ax = axes[row, 1]
+        for offset, field, name, color in [
+            (-0.18, "birth_count", "出生幼虫", colors[2]),
+            (0.18, "recruitment_count", "招募成虫", colors[0]),
+        ]:
+            bars = ax.bar(
+                d.reproduction_round + offset, d[field], width=0.34, label=name, color=color
+            )
+            if len(d) <= 20:
+                ax.bar_label(bars, padding=3, fontsize=9)
+        ax.set_ylim(0, max(1, d.birth_count.max()) * 1.22)
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
+        ax.set_xlabel("繁殖轮次 t（招募进入 t+1 代）")
+        ax.set_ylabel("个体数")
+        ax.set_title(case_names.get(case, case) + " · 出生与招募")
+        ax.legend(frameon=False)
+        axstyle(ax)
+    export(fig, out, "H_lineage_network_recruitment", dpi)
+    write_json(
+        folder / "plot_metadata.json",
+        dict(
+            plot_source_sha256=sha256(Path(__file__)),
+            input_sha256={f"{name}.csv": sha256(folder / f"{name}.csv") for name in names},
+            lineage_metadata_sha256=sha256(folder / "metadata.json"),
+            aggregation="Within-case weight/copy/count pooling; descriptive, not causal or species evidence",
+        ),
+    )
+
+
+def plot_sensitivity(path, out, dpi):
+    """Plot audited per-run trajectories and fixed-horizon uncertainty."""
+    from .common import sha256, write_json
+    from .summarize_lifecycle import summarize_sensitivity
+
+    tables, settings = summarize_sensitivity(path)
+    cases = [c["name"] for c in settings["spec"]["cases"]]
+    horizon = int(settings["spec"]["base"]["generations"])
+    out.mkdir(parents=True, exist_ok=True)
+    theme()
+    plt.rcParams["font.sans-serif"] = [
+        "Microsoft YaHei",
+        "SimHei",
+        "Noto Sans CJK SC",
+        "DejaVu Sans",
+    ]
+    plt.rcParams["axes.unicode_minus"] = False
+    chinese = {
+        "baseline": "基线",
+        "resource2": "资源 R=2",
+        "resource4": "资源 R=4",
+        "resource10": "资源 R=10",
+        "resource30": "资源 R=30",
+        "resource100": "资源 R=100",
+        "fecundity8": "潜在卵 λ=8",
+        "search3": "搜索半径 3",
+        "mate3": "交配半径 3",
+        "dispersal2": "昆虫扩散半径 2",
+        "resource2_search3": "资源 R=2＋搜索半径 3",
+    }
+    labels = {case: chinese.get(case, case) for case in cases}
+    fig, axes = plt.subplots(
+        (len(cases) + 1) // 2, 2, figsize=(13, 2.8 * ((len(cases) + 1) // 2)), squeeze=False
+    )
+    for ax, case in zip(axes.flat, cases):
+        frame = tables["trajectories"]
+        if not frame.empty:
+            for rep, rows in frame[frame.case.eq(case)].groupby("replicate"):
+                ax.plot(rows.generation, rows.insects, lw=1, label=f"重复 {rep}")
+        ax.set_title(labels[case], loc="left", fontsize=8)
+        ax.set_ylabel("昆虫数")
+        ax.set_xlabel("世代")
+        ax.set_xlim(0, horizon)
+        ax.set_ylim(bottom=0)
+        axstyle(ax)
+    for ax in list(axes.flat)[len(cases) :]:
+        ax.set_visible(False)
+    fig.suptitle("各情景全部重复：昆虫数量", y=1.0)
+    fig.tight_layout()
+    export(fig, out, "sensitivity_trajectories", dpi)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, max(4, len(cases) * 0.55)))
+    end = tables["survival"].query("generation == @horizon").set_index("case").loc[cases]
+    for y, (_, row) in enumerate(end.iterrows()):
+        axes[0].plot([row.lower, row.upper], [y, y], lw=6, color=C["off"])
+        if not np.isnan(row.wilson_low):
+            axes[0].plot([row.wilson_low, row.wilson_high], [y, y], color="black", lw=1.3)
+        axes[0].scatter([row.lower, row.upper], [y, y], color=C["off"], s=12)
+        axes[0].text(
+            1.02,
+            y,
+            f"存续 {int(row.alive)} / 灭绝 {int(row.extinct)} / 未知 {int(row.unknown)}",
+            va="center",
+            fontsize=8,
+            transform=axes[0].get_yaxis_transform(),
+        )
+    axes[0].set_yticks(range(len(cases)), [labels[case] for case in cases])
+    axes[0].set_xlim(0, 1)
+    axes[0].set_xlabel("存续比例：粗线为上下界；黑线为 Wilson 95%")
+    axes[0].invert_yaxis()
+    runs = tables["runs"]
+    for y, case in enumerate(cases):
+        sub = runs[(runs.case == case) & runs.complete & runs.final_insects.notna()]
+        axes[1].scatter(
+            sub.final_insects,
+            y + (sub.replicate - (settings["spec"]["replicates"] + 1) / 2) * 0.06,
+            alpha=0.65,
+        )
+    axes[1].set_yticks(range(len(cases)), [labels[case] for case in cases])
+    axes[1].invert_yaxis()
+    axes[1].set_xlabel("终点昆虫数（完成运行）")
+    fig.suptitle(f"第 {horizon} 代存续与终点分布")
+    fig.tight_layout()
+    export(fig, out, "sensitivity_endpoints", dpi)
+
+    fig, axes = plt.subplots(
+        len(cases), 3, figsize=(13, max(4, len(cases) * 1.8)), squeeze=False, sharex=True
+    )
+    diag = tables["diagnostics"]
+    metrics = ("mate_fraction", "acceptance", "resource_gain")
+    for row, case in enumerate(cases):
+        if not diag.empty:
+            for _, records in diag[diag.case.eq(case)].groupby("replicate"):
+                for ax, metric in zip(axes[row], metrics, strict=True):
+                    ax.plot(records.generation, records[metric], alpha=0.55, lw=0.8)
+        axes[row, 0].set_ylabel(labels[case])
+        for ax in axes[row]:
+            ax.set_ylim(0, 1.05)
+            axstyle(ax)
+    for ax, title in zip(
+        axes[0], ("有配偶雌虫 / 雌虫", "出生幼虫 / 潜在卵", "实际摄入 / 幼虫最大需求"), strict=True
+    ):
+        ax.set_title(title)
+    for ax in axes[-1]:
+        ax.set_xlabel("繁殖轮次")
+    fig.suptitle("阶段诊断：每条线为一个重复，分母为零时缺失")
+    fig.tight_layout()
+    export(fig, out, "sensitivity_stages", dpi)
+    write_json(
+        path / "data/summary/sensitivity_plot_metadata.json",
+        dict(
+            source_sha256=sha256(Path(__file__)),
+            settings_sha256=sha256(path / "settings.json"),
+            audit_sha256=sha256(path / "data/summary/sensitivity_audit.json"),
+            summary_sha256={
+                p.name: sha256(p) for p in (path / "data/summary").glob("sensitivity_*.csv")
+            },
+        ),
+    )
+
+
 def main():
     import json
 
-    from .common import Batch, audit_file, read_audit, read_settings, run_path, sha256, write_json
+    from .common import Batch, audit_file, read_settings, run_path, sha256, write_json
 
     global REPS, HORIZON, GRID, SPATIAL_REPS
     ap = argparse.ArgumentParser(
@@ -655,6 +1019,10 @@ def main():
     ap.add_argument("--input", type=Path, required=True)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--dpi", type=int, default=350)
+    ap.add_argument("--lineages", action="store_true", help="Plot saved lineage summaries as F–H")
+    ap.add_argument(
+        "--sensitivity", action="store_true", help="Plot multi-case sensitivity diagnostics"
+    )
     ap.add_argument(
         "--spatial-reps",
         type=int,
@@ -663,17 +1031,21 @@ def main():
         help="Explicit illustrative mutation-off runs; not a random sample",
     )
     a = ap.parse_args()
-    version = read_settings(a.input).get("version")
-    larval = version in {"0.1.6", "0.1.7"}
-    if larval:
-        path = a.input.resolve()
-        status = pd.read_csv(path / "data/run_status.csv")
-        checked = read_audit(path)
-        assert checked["runs"] == checked["genetically_audited_runs"] == len(status)
-        batch = Batch(path, path / "data/summary", checked, status)
-        batch.summary_dir.mkdir(exist_ok=True)
-    else:
+    if a.sensitivity:
+        if a.lineages:
+            ap.error("--sensitivity and --lineages are mutually exclusive")
+        plot_sensitivity(a.input.resolve(), a.out or a.input / "figures/sensitivity", a.dpi)
+        return
+    if a.lineages:
         batch = Batch.open(a.input)
+        plot_lineages(batch, a.out or batch.path / "figures/lineages", a.dpi)
+        return
+    version = read_settings(a.input).get("version")
+    if version != "0.1.7":
+        raise ValueError(
+            "Current diagnostics require model protocol 0.1.7; use frozen history for old results"
+        )
+    batch = Batch.open(a.input)
     out = a.out or batch.path / "figures"
     if not batch.status.status.eq("completed").all():
         raise ValueError("A–E comparison requires complete runs; do not average censored runs")
@@ -719,21 +1091,11 @@ def main():
                 assert digest == recorded["output_sha256"][name], source
                 raw_inputs[str(source.relative_to(batch.path))] = digest
             raw_inputs[str(metadata.relative_to(batch.path))] = sha256(metadata)
-    from .analyze_macro import analyze
-    from .summarize_qtl_run import summarize
-    from .summarize_spatial import summarize as spatial_summary
+    from .summarize_lifecycle import prepare_diagnostics
 
-    if larval:
-        from .summarize_lifecycle import prepare_diagnostics
-
-        prepare_diagnostics(batch)
-    else:
-        summarize(batch)
-        spatial_summary(batch)
-        analyze(batch)
+    prepare_diagnostics(batch)
     d = load_data(batch.summary_dir)
-    if larval:
-        d["lifecycle_schema"] = "adult-oviposition-larval-recruitment-1"
+    d["lifecycle_schema"] = "adult-oviposition-larval-recruitment-1"
     for key in ["population_timeseries", "trait_timeseries"]:
         frame = d[key]
         columns = ["case", "replicate", "generation", "species"]
@@ -770,10 +1132,8 @@ def main():
             functional_schema=meta.get("functional_schema"),
             genetics_schema=meta.get("genetics_version"),
             spatial_replicates=list(SPATIAL_REPS),
-            lifecycle_schema=d.get("lifecycle_schema", "historical_self_feeding"),
-            adapter_sha256=sha256(Path(__file__).with_name("summarize_lifecycle.py"))
-            if larval
-            else None,
+            lifecycle_schema=d["lifecycle_schema"],
+            adapter_sha256=sha256(Path(__file__).with_name("summarize_lifecycle.py")),
             interpretation="Exploratory diagnostics; selected spatial examples; no causal inference",
         ),
     )

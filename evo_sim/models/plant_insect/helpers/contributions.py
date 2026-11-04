@@ -6,10 +6,6 @@ ALLELE_COLUMNS = (
     "generation offspring_generation kind species locus_id allele_id N_parent N_offspring "
     "p_parent p_parent_weighted p_offspring delta_parent_contribution delta_transmission"
 )
-NETWORK_CONTRIBUTION_COLUMNS = (
-    "maternal_offspring paternal_offspring genetic_contribution maternal_share "
-    "paternal_share genetic_contribution_share contribution_committed"
-)
 
 
 def mark_uncommitted(parents):
@@ -70,38 +66,3 @@ def allele_contributions(current, offspring, parent_groups, genetic, generation,
                         )
                     )
     return rows
-
-
-def host_contributions(network_rows, community, host, insect_parents):
-    """Each parent contributes on its own feeding host, never the child's location."""
-    host_species = np.full(len(host), -1, dtype=int)
-    found = host >= 0
-    host_species[found] = community.plants.species[host[found]]
-    lookup = {row["individual_id"]: row for row in insect_parents}
-    maternal = np.array(
-        [lookup[int(i)]["offspring_count_as_mother"] for i in community.insects.ids], dtype=np.int64
-    )
-    paternal = np.array(
-        [lookup[int(i)]["offspring_count_sired"] for i in community.insects.ids], dtype=np.int64
-    )
-    if np.any((maternal + paternal)[~found]):
-        raise ValueError("unmatched insect cannot have committed offspring")
-    result = []
-    for original in network_rows:
-        row = dict(original)
-        h, p = int(row["insect_species"][1:]) - 1, int(row["plant_species"][1:]) - 1
-        species = community.insects.species == h
-        matched = species & (host_species == p)
-        bm, bf = int(maternal[matched].sum()), int(paternal[matched].sum())
-        tm, tf = int(maternal[species].sum()), int(paternal[species].sum())
-        row.update(
-            maternal_offspring=bm,
-            paternal_offspring=bf,
-            genetic_contribution=(bm + bf) / 2,
-            maternal_share=bm / tm if tm else np.nan,
-            paternal_share=bf / tf if tf else np.nan,
-            genetic_contribution_share=(bm + bf) / (tm + tf) if tm + tf else np.nan,
-            contribution_committed=True,
-        )
-        result.append(row)
-    return result

@@ -1,4 +1,4 @@
-"""Configuration for current execution and historical result audits."""
+"""Configuration for the current model protocol."""
 
 from dataclasses import asdict, dataclass
 
@@ -66,7 +66,7 @@ class _TraitConfig:
     tau: float
     outside_utility: float
     unmatched_insect_fitness: float
-    eta_shared: object = None  # Absent only in historical configurations.
+    eta_shared: object = None  # Validation requires an explicit normalized mapping factor.
 
     def validate(self):
         for name in ("insect_pop", "n", "generations", "record_every", "candidate_size"):
@@ -92,34 +92,18 @@ class _TraitConfig:
                 raise ValueError(f"{name} must be nonnegative")
         if self.sigma <= 0 or self.olfaction_mode not in ("template", "neutral"):
             raise ValueError("positive sigma and template/neutral mode required")
-        if self.mapping not in ("identity", "mixed", "shared_chemical_modules"):
-            raise ValueError("mapping must be identity or mixed; use B for a custom sparse map")
         if type(self.shuffle_voc) is not bool:
             raise ValueError("shuffle_voc must be boolean")
-        if self.mapping == "shared_chemical_modules":
-            if (
-                self.n != 2
-                or self.B is not None
-                or type(self.eta_shared) not in (int, float)
-                or not np.isfinite(self.eta_shared)
-                or not 0 <= self.eta_shared <= 1
-            ):
-                raise ValueError(
-                    "shared modules require n=2, retired B=null, explicit eta_shared in [0,1]"
-                )
-            B = np.empty((2, 0))  # Shape carrier only; no defense-to-odor matrix in this model.
-        else:
-            if self.eta_shared is not None:
-                raise ValueError("eta_shared cannot be silently used with legacy D/Z mapping")
-            B = np.asarray(self.B, float)
-            if (
-                B.ndim != 2
-                or B.shape[1] != self.n
-                or B.shape[0] < 1
-                or not np.isfinite(B).all()
-                or (B < 0).any()
-            ):
-                raise ValueError("B must be a finite nonnegative L by K matrix")
+        if (
+            self.mapping != "shared_chemical_modules"
+            or self.n != 2
+            or self.B is not None
+            or type(self.eta_shared) not in (int, float)
+            or not np.isfinite(self.eta_shared)
+            or not 0 <= self.eta_shared <= 1
+        ):
+            raise ValueError("current shared modules require n=2, B=null and eta_shared in [0,1]")
+        B = np.empty((2, 0))  # Shape carrier; the current mapping has no defense-to-odor matrix.
         w = np.asarray(self.weights, float)
         if (
             w.shape != (B.shape[0],)
@@ -140,15 +124,10 @@ class _VOCConfig(_TraitConfig):
 
     def validate(self):
         B, w = super().validate()
-        if self.mapping == "shared_chemical_modules":
-            if self.rho_voc is not None or self.voc_bounds is not None:
-                raise ValueError("shared modules retire rho_voc/voc_bounds; set them to null")
-        elif not 0 <= self.rho_voc <= 1:
-            raise ValueError("rho_voc must be in [0,1]")
+        if self.rho_voc is not None or self.voc_bounds is not None:
+            raise ValueError("shared modules retire rho_voc/voc_bounds; set them to null")
         if self.voc_cost < 0:
-            raise ValueError("sigma_Z and voc_cost must be nonnegative")
-        if self.mapping != "shared_chemical_modules":
-            normalized_bounds(self.voc_bounds, "voc_bounds")
+            raise ValueError("voc_cost must be nonnegative")
         if self.choice_mode not in ("outside", "forced"):
             raise ValueError("choice_mode must be outside or forced")
         return B, w
@@ -188,13 +167,10 @@ class _ResourceConfig(_CommunityConfig):
     demand_window: object
 
     def validate(self):
-        if self.insect_life_history not in {
-            "self_feeding_pre_reproductive",
-            "adult_oviposition_larval_feeding",
-        }:
-            raise ValueError("explicit self_feeding_pre_reproductive life history required")
+        if self.insect_life_history != "adult_oviposition_larval_feeding":
+            raise ValueError("current life history requires adult oviposition and larval feeding")
         if type(self.sI0) not in (int, float) or not np.isfinite(self.sI0) or self.sI0 != 0:
-            raise ValueError("self-feeding insects require sI0=0; survival equals feeding gain")
+            raise ValueError("larval survival requires sI0=0; survival equals feeding gain")
         units = ("normalized_edible_dry_biomass", "g_edible_dry_biomass", "mg_edible_dry_biomass")
         if self.resource_unit not in units or self.demand_unit != self.resource_unit:
             raise ValueError("resource/demand require the same recognized edible dry mass unit")
@@ -220,7 +196,7 @@ DEMOGRAPHY = dict(
     plant_survival="bernoulli",
     insect_survival="bernoulli",
     offspring_distribution_given_survival="poisson",
-    plant_density_stage="offspring_recruitment",
+    plant_density_stage="maternal_output_mean",
     insect_independent_density_factor=False,
     immigration=False,
     seed_bank=False,
@@ -281,7 +257,7 @@ class Config(_ResourceConfig):
     sexual_reproduction: object
     observation_reference_traits: object
 
-    def validate(self, *, historical_audit=False):
+    def validate(self):
         for sizes in (self.plant_sizes, self.insect_sizes):
             if not sizes or any(type(x) is not int or x < 0 for x in sizes):
                 raise ValueError(
@@ -296,15 +272,14 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version not in {"0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6", "0.1.7"}
+            self.model_version != "0.1.7"
             or self.life_history != "nonoverlapping_sexual_generations"
+            or not isinstance(self.genetics, dict)
+            or self.genetics.get("schema_version") != "slim-qtl-4"
         ):
-            raise ValueError("explicit supported model version and sexual generations required")
-        if (
-            self.model_version in {"0.1.6", "0.1.7"}
-            and self.insect_life_history != "adult_oviposition_larval_feeding"
-        ):
-            raise ValueError("v0.1.6 requires adult oviposition followed by larval feeding")
+            raise ValueError(
+                "current model_version=0.1.7 and slim-qtl-4 sexual generations required"
+            )
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
         ):
@@ -371,52 +346,32 @@ class Config(_ResourceConfig):
         B, w = _ResourceConfig(**args).validate()
         if type(self.record_observations) is not bool:
             raise ValueError("record_observations must be boolean")
-        modern = self.model_version == "0.1.7"
-        if modern:
-            from .modules import validate as validate_modules
+        from .modules import validate as validate_modules
 
-            validate_modules(
-                self.functional_modules,
-                historical_flowering=self.genetics.get("schema_version") == "slim-qtl-3",
-                historical_audit=historical_audit,
-            )
-        elif self.functional_modules is not None:
-            raise ValueError("functional_modules belongs only to v0.1.7")
+        validate_modules(self.functional_modules)
         if self.record_observations:
             panel = self.observation_reference_traits
-            if modern:
-                if not isinstance(panel, dict) or set(panel) != {
-                    "plant_chemical_traits",
-                    "reference_ids",
-                }:
-                    raise ValueError(
-                        "v0.1.7 reference panel requires chemical traits and reference_ids"
-                    )
-                ids = panel["reference_ids"]
-                if (
-                    not isinstance(ids, list)
-                    or not ids
-                    or any(not isinstance(x, str) or not x.strip() for x in ids)
-                    or len(set(ids)) != len(ids)
-                ):
-                    raise ValueError("unique nonempty reference IDs required")
-                panel = {"plant_chemical_traits": panel["plant_chemical_traits"]}
-            shapes = (
-                {"plant_chemical_traits": (len(ids) if modern else len(ps), 3)}
-                if self.mapping == "shared_chemical_modules"
-                else {"D": (len(ps), self.n), "plant_voc_independent_trait": (len(ps), len(B))}
-            )
-            if not isinstance(panel, dict) or set(panel) != set(shapes):
-                raise ValueError("observation_reference_traits requires a fixed D/Z panel")
-            for name, shape in shapes.items():
-                values = np.asarray(panel[name])
-                if (
-                    values.dtype.kind not in "iuf"
-                    or values.shape != shape
-                    or not np.isfinite(values).all()
-                    or ((values < 0) | (values > 1)).any()
-                ):
-                    raise ValueError("invalid observation reference panel")
+            if not isinstance(panel, dict) or set(panel) != {
+                "plant_chemical_traits",
+                "reference_ids",
+            }:
+                raise ValueError("reference panel requires chemical traits and reference_ids")
+            ids = panel["reference_ids"]
+            if (
+                not isinstance(ids, list)
+                or not ids
+                or any(not isinstance(x, str) or not x.strip() for x in ids)
+                or len(set(ids)) != len(ids)
+            ):
+                raise ValueError("unique nonempty reference IDs required")
+            values = np.asarray(panel["plant_chemical_traits"])
+            if (
+                values.dtype.kind not in "iuf"
+                or values.shape != (len(ids), 3)
+                or not np.isfinite(values).all()
+                or ((values < 0) | (values > 1)).any()
+            ):
+                raise ValueError("invalid observation reference panel")
         from .demography import validate_sexual
         from .spatial import validate_spatial
 
@@ -439,9 +394,4 @@ class Config(_ResourceConfig):
 
 def config_payload(c):
     """Serialize the sole current model contract."""
-    payload = asdict(c)
-    if payload["functional_modules"] is None:
-        payload.pop("functional_modules")
-    if payload["eta_shared"] is None:
-        payload.pop("eta_shared")  # Preserve historical config fingerprints exactly.
-    return payload
+    return asdict(c)

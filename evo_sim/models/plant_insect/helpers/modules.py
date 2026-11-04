@@ -7,7 +7,7 @@ def enabled(c):
     return c.genetics["schema_version"] == "slim-qtl-4"
 
 
-def validate(spec, *, historical_flowering=False, historical_audit=False):
+def validate(spec):
     keys = {
         "chemical_features",
         "processing_width",
@@ -17,10 +17,6 @@ def validate(spec, *, historical_flowering=False, historical_audit=False):
         "sensory_valence",
         "sensory_cost",
     }
-    if historical_flowering:
-        keys.add("flowering_kappa")
-    if historical_audit:
-        keys.add("adult_settlement_enabled")
     if not isinstance(spec, dict) or set(spec) != keys:
         raise ValueError(
             "functional_modules requires the current module contract; settlement removed"
@@ -48,12 +44,6 @@ def validate(spec, *, historical_flowering=False, historical_audit=False):
             and value == 0
         ):
             raise ValueError(f"{key} must be positive")
-    if historical_flowering:
-        kappa = spec["flowering_kappa"]
-        if type(kappa) not in (int, float) or not np.isfinite(kappa) or not 0 <= kappa <= 300:
-            raise ValueError("historical flowering_kappa must be finite and in [0,300]")
-    if historical_audit and type(spec["adult_settlement_enabled"]) is not bool:
-        raise ValueError("adult_settlement_enabled must be boolean")
 
 
 def profile(tuning, features, width):
