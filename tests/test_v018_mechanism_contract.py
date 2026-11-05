@@ -128,9 +128,7 @@ def test_mating_roles_distance_compatibility_and_per_egg_fathers():
             5: {1: [np.random.default_rng(3), np.random.default_rng(4)]},
         },
     )
-    counts, pools, rows, _ = sample_parents(
-        pop, "insect", np.ones(6), np.ones(6), np.ones(6), runtime, 0
-    )
+    counts, pools, rows, _ = sample_parents(pop, "insect", np.ones(6), np.ones(6), runtime, 0)
     assert [p.tolist() for p in pools] == [[1, 5], [], [], [], [1, 5], []]
     assert not counts[pop.sex == 1].any()
     assert rows[0]["candidate_mate_count"] == 2
@@ -140,9 +138,7 @@ def test_mating_roles_distance_compatibility_and_per_egg_fathers():
     np.testing.assert_array_equal(draw_fathers(pop, mothers, pools, runtime, 1), expected)
     assert runtime.rng[5][1][0].bit_generator.state == expected_rng.bit_generator.state
     pop.sex[:] = 0
-    counts, pools, rows, _ = sample_parents(
-        pop, "insect", np.ones(6), np.ones(6), np.ones(6), runtime, 0
-    )
+    counts, pools, rows, _ = sample_parents(pop, "insect", np.ones(6), np.ones(6), runtime, 0)
     assert not counts.any() and all(not len(p) for p in pools)
     assert all(r["reason"] == "no_compatible_mate" for r in rows)
 

@@ -28,6 +28,7 @@ def module_config(**changes):
     values.update(generations=1, plant_sizes=[8], insect_sizes=[16])
     values.update(changes)
     c = Config(**values)
+    c.plant_demography.update(reproduction_interval=1, microsites_per_cell=4 * sum(c.plant_sizes))
     c.spatial.update(
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes),
         initial_insect_cells=[[0, 0]] * sum(c.insect_sizes),
@@ -165,7 +166,7 @@ def test_v017_native_lifecycle_independent_audit_and_tamper_rejection():
     c = module_config(generations=2)
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
-    assert result["metadata"]["version"] == "0.1.7"
+    assert result["metadata"]["version"] == "0.1.9"
     assert result["metadata"]["functional_schema"] == "expression-tuning-2"
     first = result["snapshots"][0]
     assert first["insect_module_traits"].shape == (16, 8)

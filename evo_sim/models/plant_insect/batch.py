@@ -31,18 +31,21 @@ COLUMNS = {
     ),
     "plants": (
         "generation plant_id plant_row species species_id R T gamma X h herbivore_load D_sum "
-        "V_emit_mean defense_cost voc_cost W_plant density_phi cell_row cell_col"
+        "V_emit_mean defense_cost voc_cost W_plant cell_row cell_col "
+        "resource_capacity resource_after_feeding defoliation survival_probability survived "
+        "resource_recovery resource_next microsite reproduction_active"
     ),
     "parents": (
         "generation reproduction_round kind species species_id individual_id "
-        "sex_or_reproductive_role is_maternal_role S_i F_i W_i phi_i lambda_s conditional_mu "
+        "sex_or_reproductive_role is_maternal_role S_i F_i W_i lambda_s conditional_mu "
         "mate_probability expected_maternal_offspring maternal_offspring_variance "
         "survived_to_mating_stage eligible_as_mother eligible_as_donor candidate_mate_count "
         "has_mate potential_egg_count offspring_count_as_mother offspring_count_sired "
         "sampling_applied contribution_committed reason mating_row mating_col "
         "candidate_mate_ids candidate_mate_probabilities recruited_count_as_mother "
         "recruited_count_sired realized_recruitment_contribution realized_genetic_contribution "
-        "processing_expression_cost sensory_expression_cost"
+        "processing_expression_cost sensory_expression_cost reproduction_active propagule_count "
+        "expected_propagules propagule_variance"
     ),
     "offspring": (
         "generation kind species offspring_id maternal_id paternal_id maternal_species "
@@ -56,7 +59,7 @@ COLUMNS = {
         "generation kind species N_start N_survived_to_reproduce N_offspring N_next "
         "N_potential_eggs update_applied extinct_at_generation zero_fitness_count "
         "population_status N_female N_male N_mothers_with_mates N_seed_or_female_parents "
-        "N_pollen_or_male_parents total_resource_transfer density_phi"
+        "N_pollen_or_male_parents total_resource_transfer N_retained N_propagules"
     ),
     "networks": (
         "generation reproduction_round adult_cohort insect_species plant_species N_accept "
@@ -108,6 +111,10 @@ COLUMNS = {
     ),
 }
 COLUMNS["larvae"] = COLUMNS["events"]
+COLUMNS["plant_proposals"] = (
+    "event_id reproduction_round offspring_generation maternal_id propagule_index cell_row cell_col "
+    "established microsite offspring_id"
+)
 
 
 def safe_json(value):

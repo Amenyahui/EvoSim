@@ -19,6 +19,8 @@ class PlantPopulation:
     genotypes: np.ndarray | None = None
 
     chemical_traits: np.ndarray | None = None
+    resource: np.ndarray | None = None
+    microsite: np.ndarray | None = None
 
     def __len__(self):
         return len(self.ids)
@@ -58,6 +60,15 @@ class CommunityState:
             ):
                 raise ValueError("unaligned population state")
         if (
+            self.plants.resource.shape != (len(self.plants),)
+            or not np.isfinite(self.plants.resource).all()
+            or (self.plants.resource < 0).any()
+            or self.plants.microsite.shape != (len(self.plants),)
+            or self.plants.microsite.dtype.kind not in "iu"
+            or len(np.unique(self.plants.microsite)) != len(self.plants)
+        ):
+            raise ValueError("plant resources and unique microsites must be aligned")
+        if (
             self.insects.sex.shape != (len(self.insects),)
             or not np.isin(self.insects.sex, [0, 1]).all()
         ):
@@ -82,6 +93,8 @@ class CommunityState:
             plant_ids=self.plants.ids,
             insect_ids=self.insects.ids,
             insect_sex=self.insects.sex,
+            plant_resource=self.plants.resource,
+            plant_microsite=self.plants.microsite,
         )
         for name in ("birth_host_id", "birth_host_species", "adult_cohort"):
             value = getattr(self.insects, name)
@@ -119,6 +132,8 @@ class CommunityState:
                 values.get("plant_cells"),
                 values.get("plant_genotypes"),
                 values.get("plant_chemical_traits"),
+                values["plant_resource"],
+                values["plant_microsite"],
             ),
             InsectPopulation(
                 values["insect_ids"],

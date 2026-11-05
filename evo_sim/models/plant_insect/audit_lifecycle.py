@@ -104,6 +104,54 @@ def vector(value, labels, prefix):
     )
 
 
+def resource_shares(host, demand, stock):
+    """Reconstruct proportional allocation, including ordered floating-point budget repair."""
+    total = np.bincount(host, weights=demand, minlength=len(stock))
+    gamma = np.ones(len(stock))
+    limited = total > stock
+    gamma[limited] = stock[limited] / total[limited]
+    x = demand * gamma[host]
+    consumed = np.bincount(host, weights=x, minlength=len(stock))
+
+    def ordered_total(values):
+        amount = 0.0
+        for value in values:
+            amount += float(value)
+        return amount
+
+    # Sum each over-budget host in consumer order. A common factor preserves equal access;
+    # a residual near zero must match this repair, not receive a looser global tolerance.
+    for plant in np.flatnonzero(consumed > stock):
+        selected = np.flatnonzero(host == plant)
+        shares = x[selected].copy()
+        used = consumed[plant]
+        factor = 1.0
+        for _ in range(3):
+            if used <= stock[plant]:
+                break
+            correction = np.nextafter(stock[plant] / used, 0.0)
+            factor *= correction
+            shares *= correction
+            used = ordered_total(shares)
+        if used > stock[plant]:
+            low, high = 0.0, 1.0
+            for _ in range(64):
+                middle = (low + high) / 2
+                if ordered_total(shares * middle) <= stock[plant]:
+                    low = middle
+                else:
+                    high = middle
+            factor *= low
+            shares *= low
+            used = ordered_total(shares)
+        gamma[plant] *= factor
+        x[selected] = shares
+        consumed[plant] = used
+    assert (consumed <= stock).all(), "resource budget"
+    close(consumed, np.minimum(total, stock), "proportional resource conservation")
+    return total, gamma, x, consumed
+
+
 def module_profiles(values, c):
     """Independent saved-data reconstruction, deliberately separate from runtime kernels."""
     f = c.functional_modules
@@ -332,11 +380,12 @@ def audit_run_lifecycle(path, meta):
     assert __debug__, "scientific audits require assertions"
     c = Config(**meta["config"])
     c.validate()
-    assert c.model_version == meta["version"] == "0.1.7"
+    assert c.model_version == meta["version"] == "0.1.9"
     assert meta["genetics_version"] == c.genetics["schema_version"]
     assert meta["genetics_version"] == "slim-qtl-4"
     assert meta["ecology_rule_version"] == c.model_version
     assert meta["functional_schema"] == "expression-tuning-2"
+    assert meta["lifecycle_schema"] == "perennial-plants-larval-recruitment-1"
     payload = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(payload).hexdigest() == meta["config_sha256"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]
@@ -345,6 +394,7 @@ def audit_run_lifecycle(path, meta):
     names = (
         "events",
         "plants",
+        "plant_proposals",
         "parents",
         "offspring",
         "populations",
@@ -474,7 +524,7 @@ def audit_run_lifecycle(path, meta):
 
     rng = {
         (phase, k, s): np.random.default_rng(np.random.SeedSequence([c.seed, 130, phase, k, s]))
-        for phase in range(9)
+        for phase in range(10)
         for k, sizes in enumerate((c.plant_sizes, c.insect_sizes))
         for s in range(len(sizes))
     }
@@ -483,19 +533,40 @@ def audit_run_lifecycle(path, meta):
     ]
     shape = np.asarray(c.spatial["grid_shape"])
     first = states[0]
+    microsites = c.plant_demography["microsites_per_cell"]
+    total_sites = int(np.prod(shape)) * microsites
     for k, kind in enumerate(("plant", "insect")):
         sizes = c.plant_sizes if k == 0 else c.insect_sizes
         ids, labels, g = (first[kind + x] for x in ("_ids", "_species", "_genotypes"))
         np.testing.assert_array_equal(ids, np.arange(sum(sizes)))
         np.testing.assert_array_equal(labels, np.repeat(np.arange(len(sizes)), sizes))
         given = c.spatial[f"initial_{kind}_cells"]
-        expected_cells = (
-            np.random.default_rng(
-                np.random.SeedSequence([c.seed, 150, 0 if k == 0 else 2])
-            ).integers(0, shape, size=(len(ids), 2))
-            if (given is None)
-            else np.asarray(given).reshape(-1, 2)
+        initial_rng = np.random.default_rng(
+            np.random.SeedSequence([c.seed, 150, 0 if k == 0 else 2])
         )
+        if k == 0:
+            if given is None:
+                slots = initial_rng.choice(total_sites, len(ids), replace=False)
+                cells = slots // microsites
+                expected_cells = np.column_stack((cells // shape[1], cells % shape[1]))
+            else:
+                expected_cells = np.asarray(given, int).reshape(-1, 2)
+                occupied, slots = set(), []
+                for cell in expected_cells:
+                    start = int(cell[0] * shape[1] + cell[1]) * microsites
+                    slot = next(i for i in range(start, start + microsites) if i not in occupied)
+                    occupied.add(slot)
+                    slots.append(slot)
+            np.testing.assert_array_equal(first["plant_microsite"], slots)
+            close(
+                first["plant_resource"], vector(c.resource_capacity, labels, "P"), "founder stock"
+            )
+        else:
+            expected_cells = (
+                initial_rng.integers(0, shape, size=(len(ids), 2))
+                if given is None
+                else np.asarray(given).reshape(-1, 2)
+            )
         np.testing.assert_array_equal(first[kind + "_cells"], expected_cells)
         for s, size in enumerate(sizes):
             founder_rng = np.random.default_rng(np.random.SeedSequence([c.seed, 140, 0, k, s]))
@@ -522,6 +593,18 @@ def audit_run_lifecycle(path, meta):
         )
         np.testing.assert_array_equal(first["insect_sex"][mask], expected.astype(np.int8))
     for state in states:
+        sites = state["plant_microsite"]
+        stocks = state["plant_resource"]
+        capacities = vector(c.resource_capacity, state["plant_species"], "P")
+        assert sites.dtype.kind in "iu" and len(sites) == len(np.unique(sites))
+        assert ((sites >= 0) & (sites < total_sites)).all()
+        np.testing.assert_array_equal(
+            sites // microsites,
+            state["plant_cells"][:, 0] * shape[1] + state["plant_cells"][:, 1],
+        )
+        assert stocks.shape == capacities.shape and np.isfinite(stocks).all()
+        assert ((stocks >= 0) & (stocks <= capacities)).all()
+        close(state["R"], stocks, "snapshot stock")
         for kind in ("plant", "insect"):
             ids, labels, cells = (state[kind + x] for x in ("_ids", "_species", "_cells"))
             assert len(ids) == len(np.unique(ids)) == len(labels) == len(cells)
@@ -581,6 +664,7 @@ def audit_run_lifecycle(path, meta):
         events=("generation", "insect_id"),
         larvae=("generation", "insect_id"),
         plants=("generation", "plant_id"),
+        plant_proposals=("reproduction_round", "maternal_id", "propagule_index"),
         parents=("generation", "kind", "individual_id"),
         offspring=("generation", "kind", "offspring_id"),
         populations=("generation", "kind", "species"),
@@ -640,11 +724,14 @@ def audit_run_lifecycle(path, meta):
             maternal = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0
             donor = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1
             radius = c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
+            active = bool(k or (t + 1) % c.plant_demography["reproduction_interval"] == 0)
             potential = []
             for i in range(len(ids)):
                 mask = donor & (labels == labels[i]) & (distance(cells[i], cells, shape) <= radius)
                 mask[i] = False
-                potential.append(np.flatnonzero(mask) if maternal[i] else np.empty(0, int))
+                potential.append(
+                    np.flatnonzero(mask) if active and maternal[i] else np.empty(0, int)
+                )
             survived = np.ones(len(ids), bool)
             if k == 0:
                 for s in range(len(c.plant_sizes)):
@@ -656,7 +743,7 @@ def audit_run_lifecycle(path, meta):
                 labels,
                 "P" if k == 0 else "H",
             )
-            mu = lam * F * phi
+            mu = lam * F * int(active)
             counts = np.zeros(len(ids), int)
             eligible = maternal & survived & np.array([len(pool) > 0 for pool in pools], bool)
             for s in range(len(c.plant_sizes if k == 0 else c.insect_sizes)):
@@ -674,19 +761,24 @@ def audit_run_lifecycle(path, meta):
                     S_i=S[i],
                     F_i=F[i],
                     W_i=S[i] * F[i],
-                    phi_i=phi[i],
                     lambda_s=lam[i],
                     conditional_mu=mu[i],
                     mate_probability=q,
-                    expected_maternal_offspring=prob * mu[i] if maternal[i] else None,
+                    expected_maternal_offspring=prob * mu[i] if k and maternal[i] else None,
                     maternal_offspring_variance=prob * mu[i] + prob * (1 - prob) * mu[i] ** 2
-                    if maternal[i]
+                    if k and maternal[i]
                     else None,
                     survived_to_mating_stage=bool(survived[i]),
-                    eligible_as_mother=bool(maternal[i] and survived[i]),
-                    eligible_as_donor=bool(donor[i] and survived[i]),
+                    eligible_as_mother=bool(active and maternal[i] and survived[i]),
+                    eligible_as_donor=bool(active and donor[i] and survived[i]),
                     candidate_mate_count=len(pools[i]),
                     has_mate=bool(len(pools[i])),
+                    reproduction_active=active,
+                    propagule_count=int(counts[i]) if k == 0 else None,
+                    expected_propagules=prob * mu[i] if k == 0 else None,
+                    propagule_variance=prob * mu[i] + prob * (1 - prob) * mu[i] ** 2
+                    if k == 0
+                    else None,
                     sampling_applied=True,
                     contribution_committed=True,
                 )
@@ -866,17 +958,13 @@ def audit_run_lifecycle(path, meta):
         hg, hchildren = children("insect", mothers, fathers)
         child_hl = hl[mothers]
         child_I = module_profiles(phenotype(hg, "insect"), c)[0]
-        R = vector(c.resource_capacity, pl, "P")
+        R = state["plant_resource"]
+        K = vector(c.resource_capacity, pl, "P")
         dmax = vector(c.max_feeding_demand, child_hl, "H")
         ratios = np.divide(child_I, D[hosts], out=np.full_like(child_I, np.inf), where=D[hosts] > 0)
         q = np.minimum(1, ratios.min(axis=1))
         demand = q * dmax
-        total = np.bincount(hosts, weights=demand, minlength=len(pids))
-        gamma = np.ones(len(pids))
-        limited = total > R
-        gamma[limited] = R[limited] / total[limited]
-        x = demand * gamma[hosts]
-        X = np.bincount(hosts, weights=x, minlength=len(pids))
+        total, gamma, x, X = resource_shares(hosts, demand, R)
         h = np.divide(X, R, out=np.zeros_like(X, dtype=float), where=R > 0)
         g = x / dmax
         live = np.zeros(len(hchildren), bool)
@@ -984,42 +1072,61 @@ def audit_run_lifecycle(path, meta):
             add("larvae", (t, row.offspring_id), **event)
         live_masks["insect"] = live
         fp = np.maximum(0, 1 - c.plant_cost * D.sum(axis=1) - c.voc_cost * chemical[:, 2])
-        Sp = c.sP0 + (1 - c.sP0) * (1 - h)
-        alpha = np.array(
-            [
-                [
-                    c.plant_competition_alpha[f"P{s + 1}"][f"P{r + 1}"]
-                    for r in range(len(c.plant_sizes))
-                ]
-                for s in range(len(c.plant_sizes))
-            ]
+        post = np.maximum(0, R - X)
+        defoliation = 1 - post / K
+        spec_plant = c.plant_demography
+        Sp = np.exp(
+            -spec_plant["background_mortality_rate"]
+            - spec_plant["defoliation_mortality_rate"] * defoliation
         )
-        phi = np.array(
-            [
-                1
-                / (
-                    1
-                    + alpha[pl[i]]
-                    @ np.bincount(
-                        pl[distance(cell, pcells, shape) <= c.spatial["competition_radius"]],
-                        minlength=len(c.plant_sizes),
-                    )
-                )
-                for i, cell in enumerate(pcells)
-            ]
+        pulse = (t + 1) % spec_plant["reproduction_interval"] == 0
+        pcounts, ppools, psurvived = parents("plant", Sp, fp, np.ones(len(pids)))
+        proposal_mothers = np.repeat(np.arange(len(pids)), pcounts)
+        proposal_indices = (
+            np.concatenate([np.arange(n) for n in pcounts])
+            if len(proposal_mothers)
+            else np.empty(0, int)
         )
-        pcounts, ppools, psurvived = parents("plant", Sp, fp, phi)
-        pm = np.repeat(np.arange(len(pids)), pcounts)
-        pf = np.array([rng[5, 0, int(pl[m])].choice(ppools[m]) for m in pm], int)
-        _, pchildren = children("plant", pm, pf)
-        child_pcells = (
-            pcells[pm]
+        proposal_cells = (
+            pcells[proposal_mothers]
             + spatial_rng[0].integers(
                 -c.spatial["plant_dispersal_radius"],
                 c.spatial["plant_dispersal_radius"] + 1,
-                size=(len(pm), 2),
+                size=(len(proposal_mothers), 2),
             )
         ) % shape
+        occupied = set(map(int, state["plant_microsite"][psurvived]))
+        proposal_sites = np.full(len(proposal_mothers), -1, int)
+        for i in rng[9, 0, 0].permutation(len(proposal_mothers)):
+            cell = proposal_cells[i]
+            start = int(cell[0] * shape[1] + cell[1]) * microsites
+            vacancy = next(
+                (slot for slot in range(start, start + microsites) if slot not in occupied), None
+            )
+            if vacancy is not None:
+                proposal_sites[i] = vacancy
+                occupied.add(vacancy)
+        established = np.flatnonzero(proposal_sites >= 0)
+        pm = proposal_mothers[established]
+        pf = np.array([rng[5, 0, int(pl[m])].choice(ppools[m]) for m in pm], int)
+        _, pchildren = children("plant", pm, pf)
+        child_pcells = proposal_cells[established]
+        child_sites = proposal_sites[established]
+        child_ids = dict(zip(established, pchildren.offspring_id))
+        for i, mother in enumerate(proposal_mothers):
+            add(
+                "plant_proposals",
+                (t, int(pids[mother]), int(proposal_indices[i])),
+                event_id=f"{t}:{int(pids[mother])}:{int(proposal_indices[i])}",
+                offspring_generation=t + 1,
+                cell_row=int(proposal_cells[i, 0]),
+                cell_col=int(proposal_cells[i, 1]),
+                established=bool(proposal_sites[i] >= 0),
+                microsite=int(proposal_sites[i]) if proposal_sites[i] >= 0 else None,
+                offspring_id=int(child_ids[i]) if i in child_ids else None,
+            )
+        replenished = K - (K - post) * np.exp(-spec_plant["resource_recovery_rate"])
+        recovery = replenished - post
         live_masks["plant"] = np.ones(len(pchildren), bool)
         for i, ident in enumerate(pids):
             add(
@@ -1037,7 +1144,15 @@ def audit_run_lifecycle(path, meta):
                 defense_cost=c.plant_cost * D[i].sum(),
                 voc_cost=c.voc_cost * chemical[i, 2],
                 W_plant=Sp[i] * fp[i],
-                density_phi=phi[i],
+                resource_capacity=K[i],
+                resource_after_feeding=post[i],
+                defoliation=defoliation[i],
+                survival_probability=Sp[i],
+                survived=bool(psurvived[i]),
+                resource_recovery=recovery[i] if psurvived[i] else None,
+                resource_next=replenished[i] if psurvived[i] else None,
+                microsite=int(state["plant_microsite"][i]),
+                reproduction_active=pulse,
                 cell_row=int(pcells[i, 0]),
                 cell_col=int(pcells[i, 1]),
             )
@@ -1065,12 +1180,40 @@ def audit_run_lifecycle(path, meta):
                 )
             nxt = states[t + 1]
             rows = child_rows[kind]
-            np.testing.assert_array_equal(
-                nxt[kind + "_ids"], rows.offspring_id.to_numpy()[survivor]
-            )
-            np.testing.assert_array_equal(nxt[kind + "_species"], labels[mm][survivor])
-            np.testing.assert_array_equal(nxt[kind + "_genotypes"], birth_genotypes[kind][survivor])
-            np.testing.assert_array_equal(nxt[kind + "_cells"], adult_cells if k else child_pcells)
+            retained = np.flatnonzero(psurvived) if k == 0 else np.empty(0, int)
+            for suffix, newborn_values in (
+                ("_ids", rows.offspring_id.to_numpy()[survivor]),
+                ("_species", labels[mm][survivor]),
+                ("_genotypes", birth_genotypes[kind][survivor]),
+                ("_cells", adult_cells if k else child_pcells),
+            ):
+                wanted = (
+                    newborn_values
+                    if k
+                    else np.concatenate((state[kind + suffix][retained], newborn_values))
+                )
+                np.testing.assert_array_equal(nxt[kind + suffix], wanted)
+            if k == 0:
+                np.testing.assert_array_equal(
+                    nxt["plant_microsite"],
+                    np.concatenate((state["plant_microsite"][retained], child_sites)),
+                )
+                close(
+                    nxt["plant_resource"],
+                    np.concatenate(
+                        (
+                            replenished[retained],
+                            vector(c.resource_capacity, labels[mm], "P")
+                            * spec_plant["newborn_resource_fraction"],
+                        )
+                    ),
+                    "next plant stock",
+                )
+                close(
+                    nxt["plant_chemical_traits"][: len(retained)],
+                    chemical[retained],
+                    "retained chemical traits",
+                )
             if k:
                 for name, values in (
                     ("insect_sex", sex),
@@ -1097,14 +1240,16 @@ def audit_run_lifecycle(path, meta):
                 name = f"{'H' if k else 'P'}{s + 1}"
                 selected = labels == s
                 child_selected = labels[mm] == s
-                n, born, n_next = (
+                n, born, recruited_next = (
                     int(selected.sum()),
                     int(child_selected.sum()),
                     int(np.count_nonzero(child_selected & survivor)),
                 )
                 assert np.isclose(weights[selected].sum(), born) and np.isclose(
-                    recruited[selected].sum(), n_next
+                    recruited[selected].sum(), recruited_next
                 )
+                n_retained = int(live_parents[selected].sum()) if k == 0 else 0
+                n_next = recruited_next + n_retained
                 if n == 0:
                     first_extinct.setdefault(name, t)
                 elif n_next == 0:
@@ -1122,7 +1267,8 @@ def audit_run_lifecycle(path, meta):
                     total_resource_transfer=float(x[child_hl == s].sum())
                     if k
                     else float(X[pl == s].sum()),
-                    density_phi=1.0 if k else float(phi[selected].mean()) if n else np.nan,
+                    N_retained=n_retained,
+                    N_propagules=int(pcounts[selected].sum()) if k == 0 else None,
                 )
                 if k:
                     expected["populations"][t, kind, name]["N_potential_eggs"] = int(

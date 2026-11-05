@@ -27,7 +27,7 @@ def _fixture(root):
     folder = root / "data/case/rep01"
     (folder / "snapshots").mkdir(parents=True)
     (root / "audits").mkdir()
-    (root / "settings.json").write_text('{"version": "0.1.7"}', encoding="utf-8")
+    (root / "settings.json").write_text('{"version": "0.1.9"}', encoding="utf-8")
     (root / "audits/integrity_audit.json").write_text('{"runs": 1}', encoding="utf-8")
     pd.DataFrame([dict(case="case", replicate=1, generation=4, status="completed")]).to_csv(
         root / "data/run_status.csv", index=False
@@ -127,7 +127,7 @@ def _rehash(folder):
     (folder / "metadata.json").write_text(
         json.dumps(
             dict(
-                version="0.1.7",
+                version="0.1.9",
                 genetics_version="slim-qtl-4",
                 output_sha256=hashes,
             )
@@ -302,8 +302,44 @@ def test_v017_label_permutation_missing_detection_and_input_guards():
             raise AssertionError("invalid observation design accepted")
 
 
+def test_retained_nonreproductive_plant_lineage_continues_without_birth_flow():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        folder = _fixture(root)
+        for file in (folder / "snapshots").glob("*.npz"):
+            with np.load(file) as saved:
+                state = dict(saved)
+            state["plant_ids"] = np.array([0, 1])
+            np.savez_compressed(file, **state)
+        children = pd.read_csv(folder / "offspring.csv")
+        children = children[children.kind == "insect"].copy()
+        children["birth_host_id"] = children.birth_host_id % 2
+        children.to_csv(folder / "offspring.csv", index=False)
+        events = pd.read_csv(folder / "events.csv")
+        events["host_id"] = events.host_id % 2
+        events.to_csv(folder / "events.csv", index=False)
+        parents = pd.read_csv(folder / "parents.csv")
+        mask = parents.kind == "plant"
+        parents.loc[mask, "individual_id"] = parents.loc[mask, "individual_id"] % 2
+        parents.loc[mask, "eligible_as_mother"] = False
+        parents.loc[mask, "candidate_mate_ids"] = "[]"
+        parents.loc[mask, "candidate_mate_probabilities"] = "[]"
+        parents.to_csv(folder / "parents.csv", index=False)
+        _rehash(folder)
+        frames = summarize(root, DESIGN)
+        plants = frames["transitions"].query("kind == 'plant'")
+        assert plants.retained_individuals.sum() == 8
+        assert plants.recruited_genetic_contribution.sum() == 0
+        events = frames["lineage_events"].query("kind == 'plant'")
+        assert not events.event.eq("termination").any()
+        assert events.query("generation > 0").event.eq("continue").all()
+        assert frames["mating"].query("kind == 'plant'").offspring_weighted_pairs.eq(0).all()
+        final = frames["memberships"].query("kind == 'plant' and generation == 4")
+        assert final.continuity_generations.eq(5).all()
+
+
 if __name__ == "__main__":
     test_v017_unphased_matching_and_single_link_bridge()
     test_v017_saved_split_merge_extinction_and_network_balance()
     test_v017_label_permutation_missing_detection_and_input_guards()
-    print("PASS v0.1.7 operational lineages")
+    print("PASS v0.1.9 operational lineages")

@@ -399,7 +399,7 @@ def figure_C(d, out, dpi):
 
     # Final generation's numbers; categories differ biologically (survivors vs mated mothers).
     ax = axes[1, 1]
-    if d.get("lifecycle_schema") != "adult-oviposition-larval-recruitment-1":
+    if d.get("lifecycle_schema") != "perennial-plants-larval-recruitment-1":
         raise ValueError("Current recruitment diagnostics require stage-explicit larval ledgers")
     stages = ["N_start", "N_mothers_with_mates", "N_potential_eggs", "N_offspring", "N_next"]
     x = np.arange(len(stages))
@@ -994,6 +994,37 @@ def plot_sensitivity(path, out, dpi):
     fig.suptitle("阶段诊断：每条线为一个重复，分母为零时缺失")
     fig.tight_layout()
     export(fig, out, "sensitivity_stages", dpi)
+    fig, axes = plt.subplots(
+        len(cases), 3, figsize=(13, max(4, len(cases) * 1.8)), squeeze=False, sharex=True
+    )
+    for row, case in enumerate(cases):
+        if not diag.empty:
+            for _, records in diag[diag.case.eq(case)].groupby("replicate"):
+                for ax, metric in zip(
+                    axes[row],
+                    (
+                        "plant_retention_fraction",
+                        "plant_establishment_fraction",
+                        "plant_resource_fraction",
+                    ),
+                    strict=True,
+                ):
+                    ax.plot(records.generation, records[metric], alpha=0.55, lw=0.8)
+        axes[row, 0].set_ylabel(labels[case])
+        for ax in axes[row]:
+            ax.set_ylim(0, 1.05)
+            axstyle(ax)
+    for ax, title in zip(
+        axes[0],
+        ("老株保留 / 轮初植物", "新建立株 / 繁殖提案", "轮初资源存量 / 最大容量"),
+        strict=True,
+    ):
+        ax.set_title(title)
+    for ax in axes[-1]:
+        ax.set_xlabel("昆虫轮次")
+    fig.suptitle("多年生植物：保留、建立与资源存量；无提案时建立比例缺失")
+    fig.tight_layout()
+    export(fig, out, "sensitivity_perennial_plants", dpi)
     write_json(
         path / "data/summary/sensitivity_plot_metadata.json",
         dict(
@@ -1041,9 +1072,9 @@ def main():
         plot_lineages(batch, a.out or batch.path / "figures/lineages", a.dpi)
         return
     version = read_settings(a.input).get("version")
-    if version != "0.1.7":
+    if version != "0.1.9":
         raise ValueError(
-            "Current diagnostics require model protocol 0.1.7; use frozen history for old results"
+            "Current diagnostics require model protocol 0.1.9; use frozen history for old results"
         )
     batch = Batch.open(a.input)
     out = a.out or batch.path / "figures"
@@ -1065,7 +1096,7 @@ def main():
     )
     GRID = tuple(meta["config"]["spatial"]["grid_shape"])
     raw_inputs = {}
-    if version == "0.1.7":
+    if version == "0.1.9":
         for run in batch.status.itertuples(index=False):
             folder = run_path(batch.path, run.case, run.replicate)
             metadata = folder / "metadata.json"
@@ -1095,7 +1126,7 @@ def main():
 
     prepare_diagnostics(batch)
     d = load_data(batch.summary_dir)
-    d["lifecycle_schema"] = "adult-oviposition-larval-recruitment-1"
+    d["lifecycle_schema"] = "perennial-plants-larval-recruitment-1"
     for key in ["population_timeseries", "trait_timeseries"]:
         frame = d[key]
         columns = ["case", "replicate", "generation", "species"]

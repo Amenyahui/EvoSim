@@ -92,22 +92,15 @@ def test_csv_relative_paths_overrides_and_self_contained_results():
 def test_replacing_csv_tables_removes_old_species_instead_of_merging():
     with TemporaryDirectory() as tmp:
         folder = Path(tmp)
-        path = experiment(
-            folder, ("species", "competition", "founder_frequencies", "reference_traits")
-        )
+        path = experiment(folder, ("species", "founder_frequencies", "reference_traits"))
         for name in ("species", "founder_frequencies", "reference_traits"):
             file = folder / "data" / f"{name}.csv"
             write_records(file, [row for row in records(file) if row["species_id"] != "P2"])
-        file = folder / "data/competition.csv"
-        write_records(
-            file, [row for row in records(file) if row["recipient"] == row["competitor"] == "P1"]
-        )
         loaded = read_config(path)
         p = loaded["parameters"]
-        assert p["plant_sizes"] == [200]
+        assert p["plant_sizes"] == [40]
         assert set(p["plant_offspring_lambda"]) == {"P1"}
         assert set(p["resource_capacity"]) == {"P1"}
-        assert set(p["plant_competition_alpha"]) == {"P1"}
         assert set(p["genetics"]["founder_frequencies"]) == {"P1", "H1"}
         assert set(p["parameter_provenance"]["plant_offspring_lambda"]) == {"P1"}
         validate_file(path)
@@ -171,7 +164,7 @@ def test_csv_vector_columns_follow_current_trait_width():
 
 def test_builtin_csv_inputs_are_complete_and_resolved():
     loaded = get_runner().config
-    assert len(loaded["input_sources"]) == 6 and "input_files" not in loaded
+    assert len(loaded["input_sources"]) == 5 and "input_files" not in loaded
     for source in loaded["input_sources"].values():
         assert hashlib.sha256(Path(source["path"]).read_bytes()).hexdigest() == source["sha256"]
     p = loaded["parameters"]

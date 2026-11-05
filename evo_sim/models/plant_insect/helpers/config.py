@@ -30,15 +30,11 @@ def resource_values(value, sizes, prefix):
             raise ValueError(f"{prefix} resource mapping must contain exactly {names}")
         value = [value[name] for name in names]
     values = np.asarray(value)
-    if (
-        values.dtype.kind not in "iuf"
-        or not np.isfinite(values).all()
-        or (values < 0 if prefix == "P" else values <= 0).any()
-    ):
+    if values.dtype.kind not in "iuf" or not np.isfinite(values).all() or (values <= 0).any():
         raise ValueError(
             "resource must be nonnegative and demand positive finite numeric values, not strings/bools"
         )
-    species_units(value, sizes, prefix, allow_zero=prefix == "P")
+    species_units(value, sizes, prefix)
     return value
 
 
@@ -53,7 +49,6 @@ class _TraitConfig:
     seed: int
     plant_cost: float
     insect_cost: float
-    sP0: float
     sI0: float
     candidate_size: int
     olfaction_mode: str
@@ -81,7 +76,6 @@ class _TraitConfig:
             if isinstance(value, float) and not np.isfinite(value):
                 raise ValueError(f"{name} must be finite")
         for name in (
-            "sP0",
             "sI0",
             "unmatched_insect_fitness",
         ):
@@ -149,9 +143,7 @@ class _CommunityConfig(_VOCConfig):
             raise ValueError("insect_pop must equal sum(insect_sizes); omit it to derive the total")
         self.insect_pop = total
         B, w = super().validate()
-        species_units(
-            self.resource_capacity, self.plant_sizes, "resource_capacity", allow_zero=True
-        )
+        species_units(self.resource_capacity, self.plant_sizes, "resource_capacity")
         species_units(self.max_feeding_demand, self.insect_sizes, "max_feeding_demand")
         if self.unmatched_insect_fitness != 0:
             raise ValueError("unmatched insects must have zero ecological performance")
@@ -196,11 +188,12 @@ DEMOGRAPHY = dict(
     plant_survival="bernoulli",
     insect_survival="bernoulli",
     offspring_distribution_given_survival="poisson",
-    plant_density_stage="maternal_output_mean",
+    plant_density_stage="vacant_microsite_lottery",
     insect_independent_density_factor=False,
     immigration=False,
     seed_bank=False,
-    overlapping_generations=False,
+    plant_overlapping_generations=True,
+    insect_overlapping_generations=False,
 )
 
 
@@ -245,7 +238,7 @@ class Config(_ResourceConfig):
     life_history: object
     plant_offspring_lambda: object
     insect_offspring_lambda: object
-    plant_competition_alpha: object
+    plant_demography: object
     demography: object
     illustrative_only: object
     parameter_provenance: object
@@ -272,13 +265,13 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version != "0.1.7"
-            or self.life_history != "nonoverlapping_sexual_generations"
+            self.model_version != "0.1.9"
+            or self.life_history != "perennial_plants_nonoverlapping_insects"
             or not isinstance(self.genetics, dict)
             or self.genetics.get("schema_version") != "slim-qtl-4"
         ):
             raise ValueError(
-                "current model_version=0.1.7 and slim-qtl-4 sexual generations required"
+                "current model_version=0.1.9 and slim-qtl-4 perennial plant life history required"
             )
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
@@ -299,15 +292,16 @@ class Config(_ResourceConfig):
             raise ValueError("explicit illustrative_only and study_site required")
         ps, hs = names("P", self.plant_sizes), names("H", self.insect_sizes)
         self.resolved_demography()
+        self.validate_plant_demography()
         provenance = self.parameter_provenance
         required = {
             "plant_offspring_lambda": ps,
             "insect_offspring_lambda": hs,
-            "plant_competition_alpha": ps,
         }
         if not isinstance(provenance, dict) or not set(required) | {
             "inherited_ecology",
             "resources",
+            "plant_demography",
         } <= set(provenance):
             raise ValueError(
                 "parameter_provenance must describe every lambda/alpha and inherited ecology/resources"
@@ -318,13 +312,10 @@ class Config(_ResourceConfig):
             if not isinstance(group, dict) or set(group) != set(keys):
                 raise ValueError(f"provenance {field} species keys mismatch")
             for key in keys:
-                if field == "plant_competition_alpha":
-                    if not isinstance(group[key], dict) or set(group[key]) != set(ps):
-                        raise ValueError("alpha provenance needs every recipient/competitor pair")
-                    entries.extend(group[key].values())
-                else:
-                    entries.append(group[key])
-        entries += [provenance["inherited_ecology"], provenance["resources"]]
+                entries.append(group[key])
+        entries += [
+            provenance[key] for key in ("inherited_ecology", "resources", "plant_demography")
+        ]
         for entry in entries:
             if (
                 not isinstance(entry, dict)
@@ -386,10 +377,30 @@ class Config(_ResourceConfig):
         ps, hs = names("P", self.plant_sizes), names("H", self.insect_sizes)
         lp = species_map(self.plant_offspring_lambda, ps, "plant_offspring_lambda", True)
         li = species_map(self.insect_offspring_lambda, hs, "insect_offspring_lambda", True)
-        alpha = self.plant_competition_alpha
-        if not isinstance(alpha, dict) or set(alpha) != set(ps):
-            raise ValueError("plant_competition_alpha needs a complete species matrix")
-        return lp, li, np.stack([species_map(alpha[s], ps, "alpha row") for s in ps])
+        return lp, li
+
+    def validate_plant_demography(self):
+        spec = self.plant_demography
+        rates = (
+            "background_mortality_rate",
+            "defoliation_mortality_rate",
+            "resource_recovery_rate",
+        )
+        required = set(rates) | {
+            "reproduction_interval",
+            "newborn_resource_fraction",
+            "microsites_per_cell",
+        }
+        if not isinstance(spec, dict) or set(spec) != required:
+            raise ValueError(f"plant_demography requires exactly {sorted(required)}")
+        for key in rates:
+            numeric(spec[key], key)
+        for key in ("reproduction_interval", "microsites_per_cell"):
+            if type(spec[key]) is not int or not 1 <= spec[key] < 2**63:
+                raise ValueError(f"{key} must be a positive int64 integer")
+        numeric(spec["newborn_resource_fraction"], "newborn_resource_fraction")
+        if spec["newborn_resource_fraction"] > 1:
+            raise ValueError("newborn_resource_fraction must be in [0,1]")
 
 
 def config_payload(c):

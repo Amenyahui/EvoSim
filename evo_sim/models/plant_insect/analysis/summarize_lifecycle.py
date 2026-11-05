@@ -11,7 +11,7 @@ def prepare_diagnostics(batch):
     """Reuse stage-neutral trait/genetic summaries; add adult endpoints and larval resource shares."""
     from .summarize_qtl_run import summarize as summarize_genetics
 
-    assert read_settings(batch.path)["version"] == "0.1.7"
+    assert read_settings(batch.path)["version"] == "0.1.9"
     assert batch.audit["genetically_audited_runs"] == len(batch.status)
     if batch.status.generation.lt(1).any():
         raise ValueError(
@@ -91,12 +91,14 @@ def prepare_diagnostics(batch):
 
 def summarize(batch):
     settings = read_settings(batch)
-    if settings.get("version") != "0.1.7":
+    if settings.get("version") != "0.1.9":
         raise ValueError("summarize_lifecycle requires the current adult/larval ledgers")
     status = pd.read_csv(batch / "data/run_status.csv")
     assert read_audit(batch)["runs"] == len(status)
     sources = dict(
         lifecycle_counts="populations",
+        plant_resource_cycles="plants",
+        plant_establishment_proposals="plant_proposals",
         host_background_flows="host_flows",
         host_background_groups="host_groups",
         lifecycle_networks="networks",
@@ -207,6 +209,7 @@ def summarize_sensitivity(path):
                 last_generation=np.nan,
                 extinction_generation=np.nan,
                 final_insects=np.nan,
+                final_plants=np.nan,
                 audit_error="",
             )
             if match.empty:
@@ -242,10 +245,15 @@ def summarize_sensitivity(path):
                     raise ValueError("completed run did not reach horizon")
                 with np.load(folder / "snapshots" / f"g{terminal:06d}.npz") as state:
                     final = len(state["insect_ids"])
+                    final_plants = len(state["plant_ids"])
                 pop = pd.read_csv(folder / "populations.csv")
                 ins = pop[pop.kind == "insect"]
                 counts = ins.groupby("generation").N_start.sum().to_dict()
                 counts[terminal] = final
+                plant_counts = (
+                    pop[pop.kind == "plant"].groupby("generation").N_start.sum().to_dict()
+                )
+                plant_counts[terminal] = final_plants
                 # All insect pools must be absent; a per-species extinction alone is insufficient.
                 zero = [g for g, n in counts.items() if n == 0]
                 extinction = min(zero) if zero else np.nan
@@ -258,12 +266,24 @@ def summarize_sensitivity(path):
                     last_generation=terminal,
                     extinction_generation=extinction,
                     final_insects=final,
+                    final_plants=final_plants,
                 )
                 trajectories.extend(
-                    dict(case=name, replicate=rep, generation=g, insects=n)
+                    dict(
+                        case=name,
+                        replicate=rep,
+                        generation=g,
+                        insects=n,
+                        plants=plant_counts.get(
+                            g, 0 if entry.status == "all_species_extinct" else np.nan
+                        ),
+                    )
                     for g, n in sorted(counts.items())
                 )
                 larvae = pd.read_csv(folder / "larvae.csv")
+                plant_ledger = pd.read_csv(folder / "plants.csv")
+                parent_ledger = pd.read_csv(folder / "parents.csv")
+                plant_populations = pop[pop.kind == "plant"]
                 for g, frame in ins.groupby("generation"):
                     female = frame.N_female.sum()
                     mates = frame.N_mothers_with_mates.sum()
@@ -287,6 +307,38 @@ def summarize_sensitivity(path):
                         demand=demand,
                         consumed=consumed,
                         resource_gain=consumed / demand if demand else np.nan,
+                    )
+                    plants = plant_ledger[plant_ledger.generation == g]
+                    plant_population = plant_populations[plant_populations.generation == g]
+                    plant_parents = parent_ledger[
+                        (parent_ledger.generation == g) & (parent_ledger.kind == "plant")
+                    ]
+                    k_total = plants.resource_capacity.sum()
+                    b_total = plants.R.sum()
+                    propagules = plant_population.N_propagules.sum()
+                    newborns = plant_population.N_offspring.sum()
+                    n_plants = plant_population.N_start.sum()
+                    retained = plant_population.N_retained.sum()
+                    diag.update(
+                        plant_start=n_plants,
+                        plant_retained=retained,
+                        plant_propagules=propagules,
+                        plant_newborns=newborns,
+                        plant_expected_propagules=plant_parents.expected_propagules.sum(),
+                        plant_reproduction_active=bool(
+                            (int(g) + 1) % expected["plant_demography"]["reproduction_interval"]
+                            == 0
+                        ),
+                        plant_retention_fraction=retained / n_plants if n_plants else np.nan,
+                        plant_establishment_fraction=newborns / propagules
+                        if propagules
+                        else np.nan,
+                        plant_resource_before=b_total,
+                        plant_resource_capacity=k_total,
+                        plant_resource_after_feeding=plants.resource_after_feeding.sum(),
+                        plant_resource_recovery=plants.resource_recovery.sum(),
+                        plant_resource_next_retained=plants.resource_next.sum(),
+                        plant_resource_fraction=b_total / k_total if k_total else np.nan,
                     )
                     diagnostics.append(diag)
                 evidence[f"{name}/rep{rep:02d}"] = dict(

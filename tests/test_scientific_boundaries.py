@@ -9,6 +9,7 @@ import numpy as np
 
 from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.helpers import ecology, modules, spatial, traits, voc
+from evo_sim.models.plant_insect.helpers.demography import plant_resource_update
 
 CONFIG = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs/current.yaml"
 
@@ -112,19 +113,29 @@ def test_heterogeneous_shares_change_under_defense_and_expected_recruitment_is_n
     assert np.isclose(heterogeneous["g"].sum(), 3 / 4)
 
 
-def test_zero_resource_has_zero_herbivory_and_certain_plant_survival():
+def test_zero_stock_has_zero_herbivory_and_perennial_mortality_still_applies():
     allocation = ecology.allocate_resources(np.array([0, 0]), [1, 0.5], [0], [1, 1])
     np.testing.assert_array_equal(allocation["h"], [0])
     np.testing.assert_array_equal(allocation["g"], [0, 0])
-    for baseline in (0.0, 0.5, 1.0):
-        survival = baseline + (1 - baseline) * (1 - allocation["h"])
-        np.testing.assert_array_equal(survival, [1])
+    c = reference_config()
+    _, deficit, survival, _ = plant_resource_update([0], allocation["X"], [1], c.plant_demography)
+    np.testing.assert_array_equal(deficit, [1])
+    np.testing.assert_allclose(
+        survival,
+        np.exp(
+            -sum(
+                c.plant_demography[key]
+                for key in ("background_mortality_rate", "defoliation_mortality_rate")
+            )
+        ),
+    )
 
 
 def test_completed_feeding_window_does_not_repeat_host_death_on_larvae():
     c = reference_config()
     c.generations, c.plant_sizes, c.insect_sizes = 1, [2], [20]
-    c.resource_capacity, c.sP0, c.choice_mode = {"P1": 1.0}, 0.0, "forced"
+    c.resource_capacity, c.choice_mode = {"P1": 1.0}, "forced"
+    c.plant_demography.update(background_mortality_rate=1000.0, microsites_per_cell=2)
     c.spatial.update(initial_plant_cells=[[0, 0]] * 2, initial_insect_cells=[[0, 0]] * 20)
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"

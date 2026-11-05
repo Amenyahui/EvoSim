@@ -66,7 +66,7 @@ def validate(c, K):
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
-        c.model_version != "0.1.7"
+        c.model_version != "0.1.9"
         or c.mapping != "shared_chemical_modules"
         or g["mode"] != "sexual_qtl"
         or g["schema_version"] != "slim-qtl-4"

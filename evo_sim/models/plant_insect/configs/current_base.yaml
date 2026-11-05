@@ -1,5 +1,3 @@
-# Current model contract: 0.1.7 / slim-qtl-4 / expression-tuning-2.
-# CSV inputs provide species, QTLs, founder frequencies and the fixed reference panel.
 simulation_metadata:
   device: cpu
   calibration: false
@@ -12,7 +10,6 @@ parameters:
   seed: 20261021
   plant_cost: 0.125
   insect_cost: 0.125
-  sP0: 0.5
   sI0: 0.0
   candidate_size: 8
   olfaction_mode: template
@@ -37,29 +34,32 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_larval_feeding
   demand_window: one_generation_larval_feeding
-  model_version: 0.1.7
-  life_history: nonoverlapping_sexual_generations
+  model_version: 0.1.9
+  life_history: perennial_plants_nonoverlapping_insects
   demography:
     plant_survival: bernoulli
     insect_survival: bernoulli
     offspring_distribution_given_survival: poisson
-    plant_density_stage: maternal_output_mean
+    plant_density_stage: vacant_microsite_lottery
     insect_independent_density_factor: false
     immigration: false
     seed_bank: false
-    overlapping_generations: false
+    plant_overlapping_generations: true
+    insect_overlapping_generations: false
   illustrative_only: true
   study_site: theoretical periodic 10x10 habitat patches; no empirical cell length
   max_individuals_safety: 5000
   parameter_provenance:
     resources:
       kind: theoretical_placeholder
-      source: docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global
-        estimate
+      source: docs/model.md; theoretical resource and chemistry reference, not empirically calibrated
     inherited_ecology:
       kind: theoretical_placeholder
-      source: docs/model.md; alpha is per individual in the specified local neighborhood, not an empirical/global
-        estimate
+      source: docs/model.md; theoretical resource and chemistry reference, not empirically calibrated
+    plant_demography:
+      kind: theoretical_placeholder
+      source: docs/model.md; researcher-selected perennial mortality, recovery, pulse and microsite reference;
+        no empirical calibration
   record_observations: true
   spatial:
     grid_shape:
@@ -67,7 +67,6 @@ parameters:
     - 10
     boundary: periodic
     search_radius: 2
-    competition_radius: 1
     plant_dispersal_radius: 1
     insect_dispersal_radius: 1
     initial_plant_cells: null
@@ -117,9 +116,9 @@ parameters:
       founders:
         source_kind: theoretical_placeholder
         description: Independent polymorphic founder copies; processing-expression centers solve P^T E=(0.35,0.55)
-          at fixed original tuning centers, width and idle, with original allele deviation +/-0.025;
-          theoretical mechanism reference, not ancestral adaptation or empirical calibration. Costs
-          remain the original coefficients, so lower processing expression also raises maternal output.
+          at fixed original tuning centers, width and idle, with original allele deviation +/-0.025; theoretical
+          mechanism reference, not ancestral adaptation or empirical calibration. Costs remain the original
+          coefficients, so lower processing expression also raises maternal output.
       limits:
         source_kind: implementation_choice
         description: Conservative allele reservation and retained genotype scalar count; computational
@@ -153,6 +152,13 @@ parameters:
     - 1.0
     - -1.0
     sensory_cost: 0.05
+  plant_demography:
+    background_mortality_rate: 0.01005033585350145
+    defoliation_mortality_rate: 0.13862943611198905
+    resource_recovery_rate: 0.6931471805599453
+    reproduction_interval: 5
+    newborn_resource_fraction: 0.25
+    microsites_per_cell: 1
 batch:
   purpose: Current expression/tuning mechanism reference; illustrative parameters only.
   replicates: 1
@@ -168,7 +174,6 @@ batch:
 extends: ../config.yaml
 input_files:
   species: ../inputs/current/species.csv
-  competition: ../inputs/current/competition.csv
   loci: ../inputs/current/loci.csv
   alleles: ../inputs/current/alleles.csv
   founder_frequencies: ../inputs/current/founder_frequencies.csv

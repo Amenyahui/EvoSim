@@ -16,6 +16,8 @@ state:
       - chemical_traits
       - cells
       - genotypes
+      - resource
+      - microsite
     insects:
       properties:
       - ids
@@ -30,7 +32,7 @@ state:
       - adult_cohort
 substeps:
   '0':
-    name: adult_oviposition_larval_recruitment
+    name: perennial_plants_larval_recruitment
     active_agents: []
     transition:
       advance:

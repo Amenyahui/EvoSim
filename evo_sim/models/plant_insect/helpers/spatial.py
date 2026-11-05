@@ -1,4 +1,4 @@
-"""Patch grid, local encounters, local competition and bounded dispersal."""
+"""Patch grid, local encounters, finite plant microsites and bounded dispersal."""
 
 import numpy as np
 
@@ -9,7 +9,6 @@ def validate_spatial(c):
         "grid_shape",
         "boundary",
         "search_radius",
-        "competition_radius",
         "plant_dispersal_radius",
         "insect_dispersal_radius",
         "initial_plant_cells",
@@ -28,7 +27,6 @@ def validate_spatial(c):
         raise ValueError("Only explicit periodic boundaries are implemented")
     for name in (
         "search_radius",
-        "competition_radius",
         "plant_dispersal_radius",
         "insect_dispersal_radius",
     ):
@@ -48,6 +46,14 @@ def validate_spatial(c):
                 or ((cells < 0) | (cells >= shape)).any()
             ):
                 raise ValueError(f"{name} must provide a valid integer cell per individual")
+    capacity = int(shape[0]) * int(shape[1]) * c.plant_demography["microsites_per_cell"]
+    if capacity >= 2**63 or sum(c.plant_sizes) > capacity:
+        raise ValueError("initial plants exceed finite int64 microsite capacity")
+    cells = s["initial_plant_cells"]
+    if cells is not None and len(cells):
+        _, counts = np.unique(np.asarray(cells), axis=0, return_counts=True)
+        if (counts > c.plant_demography["microsites_per_cell"]).any():
+            raise ValueError("initial plant cells exceed microsites_per_cell; no plants truncated")
 
 
 def distance(origin, targets, shape):
@@ -59,11 +65,19 @@ def initial_positions(c, plant_species, insect_species):
     shape = np.asarray(c.spatial["grid_shape"])
     rng = np.random.default_rng(np.random.SeedSequence([c.seed, 150, 0]))
     cells = c.spatial["initial_plant_cells"]
-    plants = (
-        rng.integers(0, shape, size=(len(plant_species), 2))
-        if cells is None
-        else np.asarray(cells, int).reshape(-1, 2).copy()
-    )
+    m = c.plant_demography["microsites_per_cell"]
+    if cells is None:
+        sites = rng.choice(int(np.prod(shape)) * m, len(plant_species), replace=False)
+        plants = np.column_stack((sites // m // shape[1], sites // m % shape[1]))
+    else:
+        plants = np.asarray(cells, int).reshape(-1, 2).copy()
+        assigned = {}
+        sites = np.empty(len(plants), dtype=np.int64)
+        for i, (row, col) in enumerate(plants):
+            cell = int(row * shape[1] + col)
+            slot = assigned.get(cell, 0)
+            sites[i] = cell * m + slot
+            assigned[cell] = slot + 1
     insect_cells = c.spatial["initial_insect_cells"]
     insects = (
         np.random.default_rng(np.random.SeedSequence([c.seed, 150, 2])).integers(
@@ -72,7 +86,7 @@ def initial_positions(c, plant_species, insect_species):
         if insect_cells is None
         else np.asarray(insect_cells, int).reshape(-1, 2).copy()
     )
-    return plants, insects
+    return plants, insects, np.asarray(sites, dtype=np.int64)
 
 
 def candidate_pools(plant_cells, insect_cells, c):
@@ -83,22 +97,6 @@ def candidate_pools(plant_cells, insect_cells, c):
         )
         for cell in insect_cells
     ]
-
-
-def local_competition(plant_cells, labels, alpha, c):
-    """Count each patch once under periodic boundaries; include the focal plant."""
-    shape = tuple(c.spatial["grid_shape"])
-    occupancy = np.zeros((*shape, len(c.plant_sizes)), dtype=np.int64)
-    np.add.at(occupancy, (plant_cells[:, 0], plant_cells[:, 1], labels), 1)
-    radius = c.spatial["competition_radius"]
-    offsets = [np.unique(np.arange(-radius, radius + 1) % length) for length in shape]
-    neighbors = np.zeros_like(occupancy)
-    for row in offsets[0]:
-        for col in offsets[1]:
-            neighbors += np.roll(occupancy, (int(row), int(col)), axis=(0, 1))
-    counts = neighbors[plant_cells[:, 0], plant_cells[:, 1]]
-    with np.errstate(over="raise", invalid="raise", divide="raise"):
-        return 1 / (1 + np.sum(alpha[labels] * counts, axis=1))
 
 
 def disperse(origins, radius, shape, rng):
@@ -116,3 +114,18 @@ def offspring_cells(state, host, births, kind, c, rng):
             raise ValueError("Obligate-host offspring cannot originate from an unmatched parent")
         origins = state.plants.cells[selected]
     return disperse(origins, c.spatial[f"{kind}_dispersal_radius"], c.spatial["grid_shape"], rng)
+
+
+def establish_propagules(cells, occupied, c, rng):
+    """Shared random proposal order claims each target cell's first vacant microsite."""
+    m = c.plant_demography["microsites_per_cell"]
+    occupied = set(map(int, occupied))
+    sites = np.full(len(cells), -1, dtype=np.int64)
+    for i in rng.permutation(len(cells)):
+        base = (int(cells[i, 0]) * c.spatial["grid_shape"][1] + int(cells[i, 1])) * m
+        for site in range(base, base + m):
+            if site not in occupied:
+                occupied.add(site)
+                sites[i] = site
+                break
+    return np.flatnonzero(sites >= 0), sites

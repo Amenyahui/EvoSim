@@ -117,7 +117,9 @@ def test_linked_run_audit_and_tampering():
             file = path / (table + ".csv")
             original = file.read_bytes()
             frame = pd.read_csv(file)
-            frame.loc[0, column] += 100000
+            row = frame.index[frame.kind == "insect"][0] if table == "parents" else 0
+            assert not pd.isna(frame.loc[row, column])
+            frame.loc[row, column] += 100000
             frame.to_csv(file, index=False)
             meta = json.loads((path / "metadata.json").read_text())
             meta["output_sha256"][file.name] = hashlib.sha256(file.read_bytes()).hexdigest()
@@ -134,7 +136,6 @@ def test_insect_biparental_births_and_audit():
         generations=2,
         insect_sizes=[40],
         choice_mode="forced",
-        sP0=1.0,
         resource_capacity={"P1": 100.0, "P2": 100.0},
     )
     c.spatial["initial_plant_cells"] = [[0, 0]] * 40

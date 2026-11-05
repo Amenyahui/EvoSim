@@ -9,6 +9,28 @@ class ComputationalLimit(RuntimeError):
     pass
 
 
+def plant_resource_update(stock, consumed, capacity, spec):
+    """One insect-generation of defoliation mortality and potential survivor regrowth."""
+    stock, consumed, capacity = (np.asarray(a, float) for a in (stock, consumed, capacity))
+    if (
+        stock.shape != consumed.shape
+        or stock.shape != capacity.shape
+        or not all(np.isfinite(a).all() for a in (stock, consumed, capacity))
+        or (capacity <= 0).any()
+        or (consumed < 0).any()
+        or (consumed > stock).any()
+        or (stock > capacity).any()
+    ):
+        raise ValueError("plant stock must be within positive capacity and cover consumption")
+    post = stock - consumed
+    defoliation = 1 - post / capacity
+    survival = np.exp(
+        -spec["background_mortality_rate"] - spec["defoliation_mortality_rate"] * defoliation
+    )
+    recovered = capacity - (capacity - post) * np.exp(-spec["resource_recovery_rate"])
+    return post, defoliation, survival, recovered
+
+
 def validate_sexual(c):
     spec = c.sexual_reproduction
     fixed = dict(

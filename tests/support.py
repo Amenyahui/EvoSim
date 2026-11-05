@@ -15,7 +15,13 @@ def config(**changes):
     values = copy.deepcopy(base_runner().config["parameters"])
     values.update(generations=2, plant_sizes=[20, 20], insect_sizes=[6])
     values.update(changes)
-    return Config(**values)
+    c = Config(**values)
+    # Inheritance fixtures use a pulse each round and ample local microsites;
+    # perennial cadence and finite establishment have separate explicit checks.
+    c.plant_demography.update(
+        reproduction_interval=1, microsites_per_cell=max(1, sum(c.plant_sizes)) * 4
+    )
+    return c
 
 
 def raises(function, error=ValueError):
@@ -23,4 +29,5 @@ def raises(function, error=ValueError):
         function()
     except error:
         return
-    raise AssertionError(f"expected {error.__name__}")
+    errors = error if isinstance(error, tuple) else (error,)
+    raise AssertionError("expected " + " or ".join(item.__name__ for item in errors))

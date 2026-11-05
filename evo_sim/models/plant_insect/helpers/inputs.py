@@ -59,7 +59,6 @@ def read_table(path, columns, keys):
 def load_inputs(files, directory, parameters):
     allowed = {
         "species",
-        "competition",
         "loci",
         "alleles",
         "founder_frequencies",
@@ -134,28 +133,6 @@ def load_inputs(files, directory, parameters):
                 row["species_id"]: dict(kind=row["source_kind"], source=row["source"])
                 for row in group
             }
-
-    if "competition" in files:
-        rows = table(
-            "competition",
-            dict(
-                recipient=nonempty,
-                competitor=nonempty,
-                alpha=finite,
-                source_kind=nonempty,
-                source=nonempty,
-            ),
-            ("recipient", "competitor"),
-        )
-        matrix, provenance = {}, {}
-        for row in rows:
-            recipient, competitor = row["recipient"], row["competitor"]
-            matrix.setdefault(recipient, {})[competitor] = row["alpha"]
-            provenance.setdefault(recipient, {})[competitor] = dict(
-                kind=row["source_kind"], source=row["source"]
-            )
-        p["plant_competition_alpha"] = matrix
-        p.setdefault("parameter_provenance", {})["plant_competition_alpha"] = provenance
 
     genetics = p.setdefault("genetics", {})
     if "loci" in files:

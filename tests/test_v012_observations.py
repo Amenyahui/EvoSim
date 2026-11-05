@@ -80,7 +80,6 @@ def test_contribution_audit_boundaries_and_tampering():
         generations=1,
         insect_sizes=[12],
         choice_mode="forced",
-        sP0=1.0,
         resource_capacity={"P1": 100.0, "P2": 100.0},
     )
     c.spatial["initial_plant_cells"] = [[0, 0]] * 40

@@ -3,22 +3,17 @@ import numpy as np
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.helpers.demography import maternal_moments, mating_candidates
 from evo_sim.models.plant_insect.helpers.runtime import community_state
-from evo_sim.models.plant_insect.helpers.spatial import disperse, distance, local_competition
+from evo_sim.models.plant_insect.helpers.spatial import disperse, distance
 from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
 from tests.support import base_runner, config
 
 
-def test_periodic_mates_and_competition():
+def test_periodic_mates_and_dispersal():
     cells = np.array([[0, 0], [9, 9], [0, 0], [5, 5]])
     labels = np.array([0, 0, 1, 0])
     candidates = mating_candidates(labels, cells, np.ones(4, bool), np.ones(4, bool), 1, [10, 10])
     assert [x.tolist() for x in candidates] == [[1], [0], [], []]
     assert distance([0, 0], [[9, 9], [5, 5]], [10, 10]).tolist() == [1, 5]
-    c = config()
-    c.spatial.update(grid_shape=[1, 1], competition_radius=1)
-    alpha = np.array([[0.2, 0.1], [0.3, 0.4]])
-    phi = local_competition(np.zeros((4, 2), int), np.array([0, 1, 0, 1]), alpha, c)
-    np.testing.assert_allclose(phi, [1 / 1.6, 1 / 2.4, 1 / 1.6, 1 / 2.4])
     origin = np.array([[0, 0], [9, 9]])
     a = disperse(origin, 1, [10, 10], np.random.default_rng(8))
     b = disperse(origin, 1, [10, 10], np.random.default_rng(8))
@@ -32,7 +27,6 @@ def test_maternal_sampling_moments_and_survival():
     runtime = runner.state["environment"]["runtime"]
     runner.state["agents"]["plants"]["cells"][:] = 0
     runtime.update = True
-    runtime.plant_phi = np.ones(3)
     runtime.e = dict(S_plant=np.array([0.6, 0.4, 0.5]), fp=np.ones(3))
     population = community_state(runner.state["agents"]).plants
 
@@ -42,7 +36,6 @@ def test_maternal_sampling_moments_and_survival():
             "plant",
             runtime.e["S_plant"],
             runtime.e["fp"],
-            runtime.plant_phi,
             runtime,
             0,
         )
@@ -92,7 +85,7 @@ def test_single_sex_singleton_and_extinction():
         )
         assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 16)
     r = simulate(config(plant_sizes=[1, 0], insect_sizes=[0]))
-    assert not r["offspring"] and r["metadata"]["status"]["status"] == "all_species_extinct"
+    assert not r["offspring"]  # A living singleton cannot outcross; it is not automatically dead.
     r = simulate(config(plant_sizes=[0, 0], insect_sizes=[0]))
     assert r["metadata"]["status"]["generation"] == 0
     r = simulate(config(plant_sizes=[0, 0]))

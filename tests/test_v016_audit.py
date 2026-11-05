@@ -1,4 +1,4 @@
-"""Saved-data adversarial checks for the independent v0.1.6 auditor."""
+"""Saved-data adversarial checks for the independent current life-history auditor."""
 
 import hashlib
 import json
@@ -47,6 +47,7 @@ def fixture(**changes):
     )
     values.update(changes)
     c = config(**values)
+    c.plant_demography["microsites_per_cell"] = max(1, sum(c.plant_sizes))
     c.spatial.update(
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes) if sum(c.plant_sizes) else None,
         initial_insect_cells=[[0, 0]] * sum(c.insect_sizes) if sum(c.insect_sizes) else None,
@@ -117,10 +118,14 @@ def test_v016_audit_dead_larvae_and_rehashed_tampering():
 
 
 def test_v016_audit_empty_stages_terminal_and_failure():
+    depleted = fixture(plant_sizes=[1, 0])
+    depleted.plant_demography.update(
+        background_mortality_rate=0.0, defoliation_mortality_rate=0.0, resource_recovery_rate=0.0
+    )
     cases = (
         fixture(generations=0),
         fixture(choice_mode="outside", outside_utility=1e6),
-        fixture(resource_capacity={"P1": 0.0, "P2": 0.0}),
+        depleted,
         fixture(insect_sizes=[0]),
         fixture(plant_sizes=[0, 0]),
         fixture(plant_sizes=[0, 0], insect_sizes=[0]),
@@ -134,9 +139,11 @@ def test_v016_audit_empty_stages_terminal_and_failure():
                 assert all(r["kind"] == "plant" for r in result["offspring"])
                 assert not any(r["accepted"] for r in result["oviposition"])
             if i == 2:
-                assert result["larvae"] and not any(
-                    r["survived_to_adult"] for r in result["larvae"]
-                )
+                assert result["larvae"]
+                later = [r for r in result["larvae"] if r["generation"] == 1]
+                assert not any(r["survived_to_adult"] for r in later)
+                assert all(row["R"] == 0 for row in result["plants"] if row["generation"] == 1)
+                assert result["snapshots"][-1]["plant_resource"].tolist() == [0.0]
             path = Path(tmp) / str(i)
             save_result(result, path)
             checked = audit_run(path)

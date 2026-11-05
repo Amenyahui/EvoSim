@@ -30,7 +30,7 @@ def streams(c):
             [rng(phase, 0, s) for s in range(len(c.plant_sizes))],
             [rng(phase, 1, s) for s in range(len(c.insect_sizes))],
         )
-        for phase in range(9)
+        for phase in range(10)
     }
 
 
@@ -80,7 +80,7 @@ def initialize_community(config, initial=None):
         raise ValueError("initialization comes only from the founder allele catalog")
     runtime.observe = runtime.c.record_observations
     runtime.reproduction_checkpoint = None
-    runtime.lp, runtime.li, runtime.alpha = runtime.c.resolved_demography()
+    runtime.lp, runtime.li = runtime.c.resolved_demography()
     runtime.rng = streams(runtime.c)
     runtime.result = dict(
         events=[],
@@ -96,6 +96,7 @@ def initialize_community(config, initial=None):
         host_flows=[],
         host_groups=[],
         lagged_networks=[],
+        plant_proposals=[],
     )
     if runtime.observe:
         runtime.result["diagnostics"] = []
@@ -151,7 +152,10 @@ def initialize_community(config, initial=None):
                 D,
                 plant_voc_independent_trait,
                 genotypes=gp,
-                chemical_traits=pvalues.get("plant_chemical_traits"),
+                chemical_traits=pvalues["plant_chemical_traits"],
+                resource=resource_vector(
+                    runtime.c.resource_capacity, runtime.c.plant_sizes, pl, "P"
+                ).copy(),
             ),
             InsectPopulation(
                 np.arange(len(hl)),
@@ -167,8 +171,8 @@ def initialize_community(config, initial=None):
             ),
         )
         if runtime.c.spatial is not None:
-            community.plants.cells, community.insects.cells = spatial.initial_positions(
-                runtime.c, pl, hl
+            community.plants.cells, community.insects.cells, community.plants.microsite = (
+                spatial.initial_positions(runtime.c, pl, hl)
             )
             runtime.spatial_rng = [
                 np.random.default_rng(np.random.SeedSequence([runtime.c.seed, 150, 1, k]))
@@ -220,17 +224,16 @@ def finalize(state):
         status=runtime.status,
         resolved_B=None,
         resolved_weights=runtime.w.tolist(),
-        resolved_alpha=runtime.alpha.tolist(),
         resolved_plant_lambda=runtime.lp.tolist(),
         resolved_insect_lambda=runtime.li.tolist(),
         source_hash=source_hashes(),
         python=platform.python_version(),
         numpy=np.__version__,
         pandas=pd.__version__,
-        snapshot_semantics="t=0 founder adults/plants; round t births larvae and recruits adult cohort t+1; terminal t contains only adult/plant snapshot and fixed reference observations",
-        lifecycle_schema="adult-oviposition-larval-recruitment-1",
-        count_semantics="N_offspring counts all births; N_next counts surviving recruited adults (plants: all offspring); no actual event rows on terminal or failed transitions",
-        resource_semantics="edible dry mass per newly recruited plant per feeding window, not regrowth or offspring biomass conservation",
+        snapshot_semantics="t=0 founder insects/plants; plants retain IDs and microsites across insect generations; round t larvae recruit insect cohort t+1; established plant newborns only on scheduled pulse; terminal t is snapshot only",
+        lifecycle_schema="perennial-plants-larval-recruitment-1",
+        count_semantics="plant N_next=N_retained+N_offspring; N_propagules counts pre-establishment proposals; plant offspring means established newborn only; insect N_next counts recruited adults; no terminal/failed event rows",
+        resource_semantics="positive plant capacity K and carried stock B; consumption from B, survivor regrowth toward K; founders B=K and established newborns fraction*K; regrowth and newborn biomass are external production, not closed biomass conservation",
     )
     if modules.enabled(runtime.c):
         runtime.result["metadata"].update(
@@ -255,8 +258,8 @@ def finalize(state):
     runtime.result["metadata"].update(
         software_version=__version__,
         contribution_semantics="offspring_* and realized_genetic_contribution count all births; recruited_* and realized_recruitment_contribution count recruited adults; parents at round t; children adult_cohort t+1",
-        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers, not paternal fertility; parental W_i=stage S*F_m is a proxy; larval W_insect=g is survival only, never multiplied by larval F_m; W_plant=S_plant*F_m; realized_genetic_contribution=(maternal+paternal births)/2",
-        maternal_expectation_semantics="plants: conditional seed Poisson after survival/mate; insects: potential egg Poisson for females with adult mates, before oviposition rejection; no-mate females zero, males missing; no larval-survival or historical feeding factor in maternal egg expectation",
+        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers; plant W_i=S*F is a proposal proxy, not survival-plus-reproduction lifetime fitness; larval W_insect=g is survival only; realized plant genetic contribution counts established newborn, never surviving adults or rejected propagules",
+        maternal_expectation_semantics="plants: expected_propagules and propagule_variance before shared microsite lottery; expected_maternal_offspring and maternal_offspring_variance missing because lottery couples establishment; insects: potential egg Poisson for females with adult mates, before oviposition rejection; no-mate females zero, males missing; no larval-survival or historical feeding factor in maternal egg expectation",
         allele_contribution_semantics="stage=birth or recruitment; each uses its own parental role-count weights and observed child genotypes; recruitment transmission residual also includes larval viability selection",
         insect_lambda_semantics="Poisson lambda_egg * maternal F_m(I_m); no past maternal feeding gain; retained numeric examples are not old-model demographic equivalents",
         host_background_semantics="birth host species; founders unknown; directed parental source to child destination at half each nuclear role; not independent populations or effective migration",
@@ -274,7 +277,7 @@ def finalize(state):
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),
         config_sha256=hashlib.sha256(payload.encode()).hexdigest(),
         genetic_rng="NumPy founders: SeedSequence([seed,140,0,taxon,species]); SLiM seeds: SeedSequence([seed,140,4,taxon,generation]).generate_state(2)+1; first meiosis, second Eidos QTL mutation",
-        rng="SeedSequence([seed,130,phase,taxon,species]); 0 init, 1 ecology, 2 survival, 3 maternal births, 5 mate choice, 6 founder sex, 7 offspring sex, 8 cue shuffle",
+        rng="SeedSequence([seed,130,phase,taxon,species]); 0 init, 1 ecology, 2 survival, 3 maternal births, 5 mate choice, 6 founder sex, 7 offspring sex, 8 cue shuffle, 9 shared plant establishment lottery",
         spatial_rng="SeedSequence([seed,150,0]) plants; [seed,150,2] insects; [seed,150,1,taxon] maternal dispersal",
         inheritance="SLiM 5.2 native addCrossed; copy 0 maternal, copy 1 paternal; separate chromosomes; compressed marker boundary r=(1-exp(-2*distance_Morgan))/2",
         mutation_semantics="per transmitted abstract QTL copy; not per nucleotide",

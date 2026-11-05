@@ -28,9 +28,12 @@ CONFIG = ROOT / "evo_sim/models/plant_insect/configs/current_single_ancestor.yam
 
 def small_config(**changes):
     values = copy.deepcopy(get_runner(CONFIG).config["parameters"])
-    values.update(generations=1, plant_sizes=[8], insect_sizes=[16], sP0=1, choice_mode="forced")
+    values.update(generations=1, plant_sizes=[8], insect_sizes=[16], choice_mode="forced")
     values.update(changes)
     c = Config(**values)
+    c.plant_demography.update(
+        reproduction_interval=1, microsites_per_cell=max(1, 4 * sum(c.plant_sizes))
+    )
     c.spatial.update(
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes),
         initial_insect_cells=[[0, 0]] * sum(c.insect_sizes),
@@ -122,13 +125,19 @@ def test_storage_budget_includes_initial_terminal_and_zero_birth_snapshots():
         assert result["metadata"]["stored_genotype_values"] <= budget
     # Neither a lone plant nor a lone insect has a compatible nonself mate.
     zero = small_config(plant_sizes=[1], insect_sizes=[1])
+    zero.plant_demography.update(background_mortality_rate=0, defoliation_mortality_rate=0)
     initial = 2 * len(zero.genetics["loci"])
-    zero.genetics["max_genotype_values_safety"] = initial
+    retained_plant_values = 2 * sum(l["organism"] == "plant" for l in zero.genetics["loci"])
+    zero.genetics["max_genotype_values_safety"] = initial + retained_plant_values
     result = simulate(zero)
     assert result["metadata"]["status"]["status"] == "completed"
     assert not result["offspring"] and not result["metadata"]["slim_calls"]
     assert len(result["snapshots"]) == 2
-    assert stored_values(result) == result["metadata"]["stored_genotype_values"] == initial
+    assert (
+        stored_values(result)
+        == result["metadata"]["stored_genotype_values"]
+        == initial + retained_plant_values
+    )
 
 
 def test_missing_backend_cli_and_strict_execution_acceptance():

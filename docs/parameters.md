@@ -1,6 +1,6 @@
-# 参数、输入与文献依据
+﻿# 参数、输入与文献依据
 
-本文集中维护配置入口、参数含义、单位、取值和证据。公式见[模型](model.md)，当前任务见[项目入口](../README.md#current-work)，全部字段见[237条参数清单](parameter_inventory.csv)。不同自然系统分开列；机制证据不等于当前数字已获经验标定。
+本文集中维护配置入口、参数含义、单位、取值和证据。公式见[模型](model.md)，当前任务见[项目入口](../README.md#current-work)，全部字段见[227条参数清单](parameter_inventory.csv)。不同自然系统分开列；机制证据不等于当前数字已获经验标定。
 
 ## 配置入口与输入
 
@@ -8,13 +8,14 @@
 
 | 入口 | 作用和默认初始条件 |
 | --- | --- |
-| [configs/current.yaml](../evo_sim/models/plant_insect/configs/current.yaml) | 当前多虫理论工作入口：继承单祖先设置，P1/H1各40，R=10、dmax=1；R=10/30/100为共享理论来源的短程诊断点，不是实测容量。关闭新突变。 |
-| [configs/current_base.yaml](../evo_sim/models/plant_insect/configs/current_base.yaml) | 当前唯一模型合同的公共基础。P1、P2各200株，H1为40只；R=1，植物`lambda=2`、昆虫潜在卵`lambda=4`；同池`alpha=.02`、跨池`.005`。两植物池创始频率相同，新处理表达参考见G1。含开启/关闭新突变对照，不自动构成正式实验设计。 |
-| [configs/current_single_ancestor.yaml](../evo_sim/models/plant_insect/configs/current_single_ancestor.yaml) | 继承公共基础并替换物种、竞争和创始频率表：P1/H1各40，R=1、植物`alpha=.05`，3轮。单池与两池初始数量及竞争设计不同。 |
+| [configs/current.yaml](../evo_sim/models/plant_insect/configs/current.yaml) | 多年生工作入口：继承单祖先设置，P1/H1各40，K=10、dmax=1；K=10/30/100为共享理论来源的短程容量对照，不是实测值。关闭新突变。 |
+| [configs/current_base.yaml](../evo_sim/models/plant_insect/configs/current_base.yaml) | 模型0.1.9公共基础：P1、P2各40株、H1为40只，10×10格、每格1个共享建立位点；植物跨代留存。K=1，植物`lambda=2`/繁殖脉冲、昆虫潜在卵`lambda=4`/昆虫代。两植物池创始频率相同，处理表达参考见G1。 |
+| [configs/current_single_ancestor.yaml](../evo_sim/models/plant_insect/configs/current_single_ancestor.yaml) | 继承公共基础并替换物种与创始频率表：P1/H1各40，K=1、3轮。它不改变建立位点规则；短于5轮的运行不能验收植物繁殖脉冲。 |
 | [configs/current_200gen.yaml](../evo_sim/models/plant_insect/configs/current_200gen.yaml) | 继承当前多虫工作入口并延长为200轮、4重复；新参考下的诊断设计，不是先前两池400昆虫历史实验的等价重跑。 |
-| [configs/demographic_sensitivity.yaml](../evo_sim/models/plant_insect/configs/demographic_sensitivity.yaml) | 单祖先R=1基线与资源2/4、卵均值8、搜索/交配3及扩散2的理论敏感性对照；同样使用当前创始参考。 |
+| [configs/demographic_sensitivity.yaml](../evo_sim/models/plant_insect/configs/demographic_sensitivity.yaml) | 单祖先K=1基线与最大叶量2/4、卵均值8、搜索/交配3及扩散2的理论敏感性对照；不改变多年生人口学规则。 |
+| [configs/initial_conditions.yaml](../evo_sim/models/plant_insect/configs/initial_conditions.yaml) | 零转移的有限位点初态诊断：总P20/P60/P100（两池各10/30/50），与H60/H6/H0组合形成7种预定情景。旧P180/P600超出100位点，已退役；该更正不调长期工作入口。 |
 
-公共配置从 [inputs/current/species.csv](../evo_sim/models/plant_insect/inputs/current/species.csv) 读取兼容池、初始数量、资源、需求与繁殖率，从 [inputs/current/competition.csv](../evo_sim/models/plant_insect/inputs/current/competition.csv) 读取完整植物竞争矩阵。`species_id` 的 P/H 编号约束双亲兼容性，既不是只读谱系标签，也不自动对应不同参考化学型。
+公共配置从[inputs/current/species.csv](../evo_sim/models/plant_insect/inputs/current/species.csv)读取兼容池、初始数量、最大资源K、需求与繁殖率。旧competition表、alpha和母源密度φ退役；空位由所有兼容池共享，不同时叠加旧竞争矩阵。`species_id`的P/H编号约束双亲兼容性，不是观察谱系或参考化学型。
 
 `inputs/current/` 包含当前位点、等位、创始频率及参考表；[reference_traits.csv](../evo_sim/models/plant_insect/inputs/current/reference_traits.csv) 的 `species_id` 是参考面板ID，可与兼容池数量不同，只供反事实诊断，不参与真实交配或取食。旧协议配置、饱和输入及源码保存原文、哈希和路径映射后归档到 `codex/history/`，不由当前入口混用，也不回写历史结果身份。
 
@@ -24,24 +25,25 @@
 - `ploidy=2`、`inheritance=biparental_meiosis`、`recombination_model=slim_haldane_marker_map`；默认引擎命令 `slim`，`EVOSIM_SLIM` 可覆盖。`mutation_enabled.plant/insect` 分别控制新突变，工作配置关闭两者；公共配置保留开启及关闭对照，站立变异与重组仍在。
 - `olfaction_mode=template` 在当前协议表示模块效用，`neutral` 令候选效用相同；`choice_mode=outside` 允许拒绝，`forced` 在候选非空时必选，无候选均不产卵。`tau≥0`，候选效用乘tau，拒绝项不乘；`shuffle_voc` 仅置换逐卵线索。
 - `shuffle_voc` 使用独立阶段8随机流，避免置换次数本身推进选择顺序流；处理产生行为差异后仍不承诺整条轨迹完全配对。默认false，旧批次沿用其保存的旧随机协议。
-- 核宽、闲置项、半饱和常数及 dmax 须为正；资源、成本非负，eta在[0,1]。`sigma` 仍要求正值，`weights` 非负且和为1，但二者不进入当前模块效用。`B/rho_voc/voc_bounds` 退役为空，不与eta混用。模型不接受花期或交配前定居开关。
+- 核宽、闲置项、半饱和常数、dmax及最大资源K须为正，当前叶量存量B允许零；危害率、恢复率和成本非负，eta在[0,1]，新株资源比例在[0,1]。繁殖间隔和每格位点数为正整数。`sigma/weights`仍为不参与模块效用的接口字段，配置中的退役空键`B`不是植物叶量存量。模型不接受花期或交配前定居开关。
 - `species.csv` 的数量、资源和lambda可由子配置覆盖，`insect_pop=null` 表示初始昆虫数求和。`initial_plant_cells`、`initial_insect_cells` 默认为null、即随机位置；半径为非负整数格数。资源与需求须同单位、同窗口，可同为归一化干生物量或受支持的克/毫克可食干生物量，不能混用。
 - 公共入口为5代、`record_every=1`、种子20261021、1重复；工作入口的时长、种子及重复由各自YAML覆盖。`genetics.slim.timeout_seconds=120`、`max_individuals_safety=5000`、`max_alleles_safety=100000`、`max_genotype_values_safety=4000000` 是计算保护，不是生态承载量；停止状态单独报告。
 - [analysis/lineages.yaml](../evo_sim/models/plant_insect/analysis/lineages.yaml) 控制只读观察；旧 v014 分析设计不能用于新生活史。观察阈值的含义和限制见下文O1，不反馈模拟行为。
 
 ## 分组参数与证据
 
-本文件对应 [逐字段清单](parameter_inventory.csv) 的 evidence ID，记录公开、单祖先、人口敏感性及新多虫工作配置的参数含义及决定。清单覆盖237条配置叶字段、输入表列和观察设置；列表保留全部元素，不能把237条解释为237个独立生物学参数。`current_working` 记录新入口及三个情景的实际覆盖值；`inputs.*` 记录原始CSV，YAML覆盖后的有效量以 `parameters.*` 为准。每条均有证据组、处置决定和当前数值是否获直接标定的状态。检索日期2026-11-02，主审整理2026-11-03，系定向研究而非系统综述。项目是通用理论模型，文献中的不同物种、地点、处理和生活史阶段独立陈列，不拼成同一个经验系统。**机制有实证支持不等于默认数字已实测校准。** 公式与阶段见[模型](model.md)。
+本文件对应[逐字段清单](parameter_inventory.csv)的evidence ID。清单覆盖六个当前展开配置的227条叶字段、输入表列和观察设置，列表保留全部元素；不是227个独立生物学参数。`current_working`含容量情景覆盖，`inputs.*`为原CSV，YAML覆盖后的有效量以`parameters.*`为准。各条保留证据组及当前值支持层级。早期定向核查为2026-11-02，新增多年生机制核查为2026-11-04；不是系统综述。不同物种、地点、处理和阶段独立解释，不拼成一个经验系统。**机制有实证支持不等于默认数字已校准。**
 
-清单的 `current_public/current_single/current_sensitivity/current_working` 分别对应上表公共基础、单祖先、人口敏感性、多虫入口；`source_file`逐列标明当前来源，CSV列保留原始表值，已加载的参数列记录有效值。2026-11-04的处理表达修订适用这些当前入口，旧批次使用保存的旧输入，不能据当前清单反推旧实验初态。
+清单的`current_public/current_single/current_sensitivity/current_working/current_200gen/current_initial`逐列对应公共基础、单祖先、人口敏感性、工作入口、200代延长与零代初态诊断；`source_file`标明各展开配置和实际输入表。CSV列保留原表值，有效参数列记录YAML覆盖后的值。观察设置来自`analysis/lineages.yaml`，不反馈模拟。2026-11-04的处理表达修订延续到多年生协议；旧批次保留原输入，不能据当前清单反推旧实验初态。
 
 <a id="r1"></a>
 
-### R1 资源与需求
+### R1 叶量存量、容量与需求
 
 | 参数 | 值、单位与实施决定 |
 |---|---|
-| `resource_capacity` R | 旧公共配置每株1个归一化可食干生物量；新多虫情景R=10，30/100为检查点，不是实测。每株每幼虫取食窗口重赋；R与dmax必须同单位。 |
+| `resource_capacity` K | 每株最大归一化可食叶量，严格大于零；多虫参考K=10、30/100为容量对照，公共基础K=1。是上界，不再每轮重赋资源。 |
+| 叶量存量B | 单位与K相同，范围[0,K]；创始株B=K，旧株食后扣减并恢复，新株初始B=.25K。分配核的R读取当轮B。 |
 | `max_feeding_demand` dmax | 每幼虫完整取食窗口1个相同单位；保持归一化。实际分配受利用和同株竞争影响，不能把需求当成必然摄入。 |
 | `resource_unit`、`demand_unit`、窗口 | 相同的 `normalized_edible_dry_biomass` 与 `one_generation_larval_feeding`；可另以同单位真实干重输入，但默认不是克。见N1。 |
 
@@ -51,17 +53,34 @@ Sarfraz等[1]全文方法与图3：温室4周龄油菜每株接10只初龄小菜
 
 取食需求为 dmax×q，同株按资源约束分配，实际摄入 x；幼虫存活概率 `g=x/dmax`，`sI0=0` 和 `unmatched_insect_fitness=0`，零摄入无招募，满摄入本环节存活1。Wang与Lu[2]的第四龄限食影响化蛹与羽化，有限范围近线性不能验证全龄S=g及两端点。保留该闭合作对照；现有数值不是测得的背景死亡率，未来同实验分阶段拟合充分供食背景生存及摄入响应，避免重复扣死亡。
 
-同dmax时每株招募**期望**为 `min(Σq,R/dmax)`，不是实际招募数的硬上限；异质dmax时由需求组成决定。昆虫不另设干扰密度因子，资源共享本身已造成竞争；不能把该资源闭合下的密度响应直接解释为寄主局部适应。植物本轮死亡不附加幼虫死亡；`R=0`定义`h=0,S_P=1,g=0`，这些时间窗口与端点简化详见[模型§4](model.md#4-防御资源与存活)。
+同dmax时每株招募**期望**为`min(Σq,B_start/dmax)`，不是实际数的硬上限；异质dmax时依需求组成变化。昆虫不另设干扰密度因子，不能把资源闭合下的密度响应直接解释为寄主局部适应。植物本轮死亡不附加幼虫死亡。B_start=0时g和当轮消费比例h均为零，但叶量亏损为1，植物仍承担背景和亏损危害；旧零容量下S_P=1的约定不属于本协议。
 
-### P1 植物繁殖、损伤与更新
+### P1 多年生存活、恢复和独立繁殖时间
 
-公共植物潜在有效后代基准 `plant_offspring_lambda=2`，`sP0=.5` 是完全食害时单轮生存，生存函数为 `1−(1−sP0)h`；h为已耗资源比例（R=0按0）。植物存活且有局部合格父本后，母源有效后代按Poisson抽样并受成本与密度影响；该λ已压缩种子到建成，**不是种子数**。Akiyama与Ågren[3]全文图2及表2：瑞典自然拟南芥50%人工剪叶在莲座、抽薹期种子数分别下降约60%、22%，开花期未见降低；剪叶面积、结籽和成株生存不同，不能推出sP0。Brosset等[4]全文方法与讨论：21日龄白菜每株8只小菜蛾5天，平均叶面积损失约18%，花数未显著改变；花数不是有效后代。保留旧规则，待相同损伤尺度及阶段数据联合拟合，不能以这些数替换λ或sP0。
+以下均为`researcher_selected_theoretical`参考，不是自然系统数值拟合。时间单位固定为一个昆虫世代Δ=1，没有换算成天或年。
 
-### P2 植物密度竞争
+| 参数 | 当前值、量纲及明确含义 |
+| --- | --- |
+| `background_mortality_rate` μ₀ | `−ln(.99)=.01005033585350145`/昆虫代；满叶无虫时单轮存活.99，连续5轮背景存活`.99⁵≈.95099`。 |
+| `defoliation_mortality_rate` μ_D | `ln(2)/5=.13862943611198905`/昆虫代；若完整5轮始终全缺叶，则相对背景存活再乘.5，不是单次剪叶死亡率。 |
+| `resource_recovery_rate` r | `ln(2)=.6931471805599453`/昆虫代；幸存株叶量亏损每轮减半，不保证受食株能恢复满叶。 |
+| `reproduction_interval` k_P | 5昆虫轮/植物繁殖脉冲；仅`(t+1)%5=0`发生提案，新株下一脉冲才可繁殖；同步钟不是实测花期。 |
+| `newborn_resource_fraction` f_new | .25，无量纲；新建立株B=.25K，未显式模拟真实种子萌发或株高。 |
+| `plant_offspring_lambda` λ_P | 2有效建立提案/合格母株/植物繁殖脉冲；均值λ_P F_m，不乘旧φ。数值虽沿用2，时间分母和终点已变。 |
 
-公共竞争矩阵同池α=.02、异池=.005，单祖先同池=.05，单位为每局部植株倒数；`competition_radius=1`格，计入焦点株，产量乘 `1/(1+ΣαN)`。Stouffer[5]全文§2.1式(4)提供年度植物倒数型密度繁殖的理论联系，指出焦点计数及λ与竞争强度关系，未验证本模型局部系数。Hauser等[6]全文表6：油菜与野生芸薹20–90株/m²，两个方向相对替代系数8.71（95%可信区间5.65–18.53）及0.71（0.33–1.15）；每处理仅一个地块，且可能含花粉效应，不能换为模型α。Muñoz-Parra等[7]的拟南芥1–32株/培养皿实验显示密度影响产量，但种子数非建成数。保留矩阵为假设，未来在明确格长的同系统密度×组成实验联合估计λ与α。
+死亡使用`defoliation=1−Bpost/K`，而`h=X/Bstart`只描述当轮现有资源的消费比例；即使当轮没有新消费，先前未恢复的亏损仍影响死亡。恢复为`Bnext=K−(K−Bpost)exp(−rΔ)`，允许零可食叶量的幸存株由未显式追踪的根茎/储备恢复；没有储碳状态，不能宣称已模拟碳饥饿阈值。繁殖不另扣叶量，也不按叶量再乘母源损伤因子；这是非闭合能量近似。
 
-当前标签 `plant_density_stage=maternal_output_mean` 明确密度折减的是母源产量均值，不是子代落点存活；旧标签 `offspring_recruitment` 只按旧合同追溯，不作为当前别名。
+`defoliation`在此表示潜在冠层叶量亏损，不全是虫致损伤。新株以.25K建立，即使无虫也先有δ=.75，承担额外建立压力；无恢复对照持续承担亏损。模型没有成熟体型、株高或幼株储备状态，这项风险是明确的简化，不是实测幼株死亡率。
+
+**机制证据分系统解释。** Stam等[27]在野生多年生甘蓝上跨两生长季跟踪节肢动物、植物表现与第二年结籽，支持同株跨季和繁殖时间区别；早季引虫处理未显著改变后续群落，不能概括成所有前期取食都有长期效应。Gols等[28]比较两季甘蓝化学动态，并以菜粉蝶进行16天取食实验；它支持时间和诱导反应的重要性，不标定固定D/V、恢复r或5轮繁殖钟。
+
+Heichel与Turner[29]对红栎/红枫人工去叶后观察再展叶，支持存活个体可重建叶量，不验证指数恢复或每轮恢复一半。Barker Plotkin等[30]在舞毒蛾—栎树系统发现去叶、非结构性碳储备和后续死亡相关；叶量和储碳不是同一状态，树木碳阈值不得移为甘蓝参数或本模型μ_D。各系统未被拼成一套实测多年生寄主参数。早期拟南芥剪叶及白菜花数文献[3,4]也不支持退役sP0的数值。
+
+### P2 共享建立位点与空位抽签
+
+`microsites_per_cell=m=1`个建立位点/格，10×10格最多100株；这是生态空间假设，不是计算保护。所有池共享，幸存旧株占原位，死亡释放空位。每格从到达提案中均匀无放回抽最多空位数的新株；零提案仍为空，不强填、不移民、不补种，不给各池保留席位。α、competition输入和φ全部退役，避免在母源均值和建立阶段重复限制密度。
+
+Metcalf等[31]对两个**单次结实后死亡**的多年生蓟类群体研究，将密度依赖放在微位点建立；这支持建立阶段可以重要，不证明本项目重复繁殖生活史或m=1。Peng等[32]是空间群落**理论模拟**，按到达空位的种子及竞争能力抽签；本项目用均匀提案竞争且允许保留空位，不据其推自然寄主的位点密度。旧年度繁殖和竞争文献[5–7]保留原系统背景，不能再标为现行α的数值依据。
 
 ### D1 昆虫繁殖、性别与交配
 
@@ -69,7 +88,7 @@ Sarfraz等[1]全文方法与图3：温室4周龄油菜每株接10只初龄小菜
 
 ### D2 生活史与繁殖结构
 
-当前植物为严格异交、同兼容池且非自身；昆虫雌雄异体，非重叠代，无显式成虫跨代、移民或种子库。子代按既有双亲遗传，既有兼容池不是新物种。Postma与Ågren[10]野外研究在不同年份跟踪拟南芥种子休眠、萌发和成活，说明种子库可重要；拟南芥多自交，不能验证本模型严格异交。Yamamori[11]田间标记油菜后代的异交比例在0.25、1、5、10、30、60 m分别4.1%、1.4%、0.4%、0.15%、0.09%、0.01%；这些是后代比例而非花粉核，油菜可自交，不支持本模型硬半径和强制异交。保留为有条件的机制简化，研究越冬、迁入或混合交配须另行定义过程与数据。
+植物严格异交、同池且非自身，旧株跨昆虫代存活并可重复繁殖；昆虫雌雄异体、非重叠代。没有移民或种子库，未建立提案当轮消失。既有兼容池不是新物种。Postma与Ågren[10]的拟南芥种子库和Yamamori[11]的油菜异交研究是不同系统，只说明被省略的过程可能重要；它们不验证本模型无种子库、硬花粉半径或严格异交。当前先验证多年生人口学，不新增寄主配对限制、杂交死亡或双寄主实验。
 
 <a id="g1"></a>
 
@@ -125,7 +144,7 @@ Frey等[25]玉米研究连接诱导吲哚释放与防御相关代谢的酶学分
 
 ### S1 空间、位置与初始数量
 
-10×10周期网格、Chebyshev距离，无实测米制；搜索2、昆虫交配2、昆虫扩散1、植物花粉1、植物扩散1、竞争1格。扩散为每轴整数均匀抽样；初始位置默认随机。公共P1/P2各200株、H1 40只，单祖先P1/H1各40；初始密度随格与数量共同变化，是研究设计而非实测。Mo等[20]摘要：小菜蛾作物田标记重捕的平均位移估计14–35 m；Bolton等[21]摘要：2.83 ha田地雄虫重捕率7.93%、距离中位14 m，田界95 m；Ishii等[22]摘要：下风向信息素有效空间估计0.6–0.9 m。各测不同过程且有陷阱与边界限制，不是逐代格位移或硬交配半径。保留格值为模型尺度；如拟合自然系统，先定义格长、时间和边界并采同阶段轨迹。
+10×10周期网格、Chebyshev距离，无实测米制；搜索2、昆虫交配2、昆虫扩散1、植物花粉1、植物提案扩散1格。成年植物原位留存，创始位置在有限建立位点中无放回抽取。公共P1/P2各40株、H1 40只，单祖先P1/H1各40；新公共80株适配100个共享位点，不兼容保留旧400株再自动裁剪。初始密度是研究设计，不是实测。Mo等[20]摘要：小菜蛾作物田标记重捕的平均位移估计14–35 m；Bolton等[21]摘要：2.83 ha田地雄虫重捕率7.93%、距离中位14 m，田界95 m；Ishii等[22]摘要：下风向信息素有效空间估计0.6–0.9 m。各测不同过程且有陷阱与边界限制，不是逐代格位移或硬交配半径。保留格值为模型尺度；如拟合自然系统，先定义格长、时间和边界并采同阶段轨迹。
 
 大半径下周期取模可使目的格的位移重数不同，每轴最多相差1；这符合整数位移均匀的定义，不是三角分布错误。不以此无依据缩小合法半径，也不将目的格重采样为均匀。
 
@@ -141,9 +160,9 @@ Frey等[25]玉米研究连接诱导吲哚释放与防御相关代谢的酶学分
 
 版本/输入路径、来源元数据、种子、重复、运行代数、记录间隔、最大个体/等位基因/基因型值保护、SLiM路径与超时、状态、子步骤与输出ID为计算和实验设计，不是生物实测参数。计算上限触发中止而不是灭绝；不改历史源码哈希。清单对应项按实际配置记录，只有明确完成的实验才能解释结果；验证输出使用 `codex/validation/`，正式实验须明确指定 `results/`。
 
-### L1 退役字段
+### L1 退役字段和旧时间尺度
 
-`sigma=.2`、`weights=[.5,.5]` 为旧接口输入校验，在当前模块效用不生效；`B`、`rho_voc`、`voc_bounds` 为退役空键。不得当成活跃参数标定，也不得把历史协议输出冒充当前模型。
+`sigma=.2`、`weights=[.5,.5]` 为旧接口输入校验，在当前模块效用不生效；`B`、`rho_voc`、`voc_bounds` 为退役空键。不得当成活跃参数标定，也不得把历史协议输出冒充当前模型。旧sP0、alpha、competition输入、competition_radius和母源φ不进入0.1.9；植物λ仍记为2但已改为每脉冲的建立提案，不能按旧每轮新生语义解释。
 
 ## 原始研究及核验层级
 
@@ -174,6 +193,14 @@ Frey等[25]玉米研究连接诱导吲哚释放与防御相关代谢的酶学分
 24. Haldane (1919), *The combination of linkage values, and the calculation of distances between the loci of linked factors*. 本次仅核原始书目，未核全文：[FlyBase记录](https://flybase.org/reports/FBrf0000954)。
 25. Frey等 (2000), *An herbivore elicitor activates the gene for indole emission in maize*. 摘要及原文酶学分支说明：[DOI](https://doi.org/10.1073/pnas.260499897)。
 26. McFadden (1973，作者机构所列年份), *Conditional Logit Analysis of Qualitative Choice Behavior*, in *Frontiers in Econometrics*, 105–142；常见书目亦列1974。核对作者机构标题与扫描件，未逐页复核推导：[作者机构扫描本](https://eml.berkeley.edu/reprints/mcfadden/zarembka.pdf)。
+
+
+27. Stam, Kos, Dicke & Poelman (2019), *Cross-seasonal legacy effects of arthropod community on plant fitness in perennial plants*. 原始研究全文方法、结果及限制：[全文](https://pmc.ncbi.nlm.nih.gov/articles/PMC6774310/)，[DOI](https://doi.org/10.1111/1365-2745.13231)。
+28. Gols 等 (2018), *Seasonal and herbivore-induced dynamics of foliar glucosinolates in wild cabbage (Brassica oleracea)*. 原始研究全文，两季田间与16天温室实验：[DOI](https://doi.org/10.1007/s00049-018-0258-4)。
+29. Heichel & Turner (1983), *CO₂ assimilation of primary and regrowth foliage of red maple (Acer rubrum L.) and red oak (Quercus rubra L.): response to defoliation*. 原始论文摘要核验，未核全文：[PubMed](https://pubmed.ncbi.nlm.nih.gov/28310150/)，[DOI](https://doi.org/10.1007/BF00379555)。
+30. Barker Plotkin 等 (2021), *Defoliated trees die below a critical threshold of stored carbon*. 原始研究全文方法与死亡/储备结果；不将木本碳阈值标定到本模型：[DOI](https://doi.org/10.1111/1365-2435.13891)。
+31. Metcalf 等 (2008), *Evolution of flowering decisions in a stochastic, density-dependent environment*. 原始研究全文Population Biology及Structured Dynamics节；物种为单次结实多年生蓟，不是重复结实甘蓝：[全文](https://pmc.ncbi.nlm.nih.gov/articles/PMC2492471/)，[DOI](https://doi.org/10.1073/pnas.0800777105)。
+32. Peng, Zhou & Zhang (2012), *Dispersal and recruitment limitation contribute differently to community assembly*. 原始理论研究空位竞争段；是模拟机制而非田间位点数测量：[DOI](https://doi.org/10.1093/jpe/rtr041)。
 
 
 ## 补充系统与来源可靠性

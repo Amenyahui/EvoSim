@@ -23,7 +23,7 @@ KINDS = ("plant", "insect")
 TABLE_COLUMNS = {
     "memberships": "generation kind individual_id compatibility_pool cluster_id lineage_id component_size continuity_generations persistent_candidate",
     "clusters": "generation kind cluster_id compatibility_pool size lineage_id continuity_generations persistent_candidate",
-    "transitions": "kind source_generation target_generation source_cluster target_cluster recruited_genetic_contribution",
+    "transitions": "kind source_generation target_generation source_cluster target_cluster recruited_genetic_contribution retained_individuals",
     "lineage_events": "generation kind event source_clusters target_cluster reason event_scope",
     "populations": "generation kind compatibility_pool individual_count detected_clusters pool_state extinction_observed",
     "mating": "reproduction_round offspring_cohort parent_generation kind stage offspring_weighted_pairs classified_parent_pairs cross_cluster_parent_pairs unknown_parent_pairs unclassified_parent_pairs cross_fraction_of_classified opportunity_status",
@@ -124,8 +124,8 @@ def _source(mapping, ident):
 def _summarize_run(folder, design, ancestry_reference_generation=None):
     """Return tables from one saved run without calling simulation functions."""
     metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-    if metadata["version"] != "0.1.7" or metadata.get("genetics_version") != "slim-qtl-4":
-        raise ValueError("lineages require current 0.1.7 / slim-qtl-4 saved ledgers")
+    if metadata["version"] != "0.1.9" or metadata.get("genetics_version") != "slim-qtl-4":
+        raise ValueError("lineages require current 0.1.9 / slim-qtl-4 saved ledgers")
     hashes = {}
 
     def checked(name):
@@ -170,13 +170,14 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
     ):
         raise ValueError("invalid offspring time or kind")
     offspring = offspring.copy()
-    offspring["recruited"] = offspring.survived_to_adult.map(_flag)
+    offspring["recruited"] = offspring.survived_to_adult.map(_flag).astype(bool)
     if not {"generation", "insect_id", "host_id", "x"} <= set(events):
         raise ValueError("events require generation, insect_id, host_id and x")
     if events.duplicated(["generation", "insect_id"]).any():
         raise ValueError("duplicate larval event")
     if not events.generation.isin(range(max(states))).all():
         raise ValueError("event outside committed rounds")
+    events["x"] = pd.to_numeric(events.x, errors="raise")
     if not np.isfinite(events.x).all() or (events.x < 0).any():
         raise ValueError("invalid resource transfer")
 
@@ -199,21 +200,42 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
             )
             mappings[t, kind], groups[t, kind] = mapping, current
             incoming, outgoing, weights = defaultdict(set), defaultdict(set), Counter()
+            retained_weights = Counter()
             if t:
                 births = offspring[(offspring.kind == kind) & (offspring.adult_cohort == t)]
                 recruits = births[births.recruited]
-                if set(recruits.offspring_id) != set(mapping):
-                    raise ValueError(f"{kind} recruits do not match snapshot {t}")
                 previous = mappings[t - 1, kind]
+                retained_ids = set(mapping) & set(previous) if kind == "plant" else set()
+                if set(recruits.offspring_id) & retained_ids or (
+                    set(recruits.offspring_id) | retained_ids != set(mapping)
+                ):
+                    raise ValueError(
+                        f"{kind} retained adults and recruits do not match snapshot {t}"
+                    )
+                prior = states[t - 1]
+                previous_index = {int(ident): i for i, ident in enumerate(prior[kind + "_ids"])}
+                current_index = {int(ident): i for i, ident in enumerate(state[kind + "_ids"])}
+                for ident in sorted(retained_ids):
+                    left, right = previous_index[ident], current_index[ident]
+                    for suffix in ("_species", "_genotypes", "_cells", "_microsite"):
+                        key = kind + suffix
+                        if (
+                            key in prior
+                            and key in state
+                            and not np.array_equal(prior[key][left], state[key][right])
+                        ):
+                            raise ValueError(f"retained {kind} {ident} changed {key}")
+                    source, target = previous[ident], mapping[ident]
+                    retained_weights[source, target] += 1
                 for child in recruits.itertuples(index=False):
                     target = mapping[int(child.offspring_id)]
                     for ident in (child.maternal_id, child.paternal_id):
                         source = _source(previous, ident)
                         weights[source, target] += 0.5
-                        if source in groups[t - 1, kind] and target in current:
-                            incoming[target].add(source)
-                            outgoing[source].add(target)
-                for (source, target), weight in sorted(weights.items()):
+                for source, target in sorted(set(weights) | set(retained_weights)):
+                    if source in groups[t - 1, kind] and target in current:
+                        incoming[target].add(source)
+                        outgoing[source].add(target)
                     tables["transitions"].append(
                         dict(
                             kind=kind,
@@ -221,7 +243,8 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                             target_generation=t,
                             source_cluster=source,
                             target_cluster=target,
-                            recruited_genetic_contribution=weight,
+                            recruited_genetic_contribution=weights[source, target],
+                            retained_individuals=retained_weights[source, target],
                         )
                     )
                 for old, details in groups[t - 1, kind].items():
@@ -229,7 +252,9 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                         pool_alive = np.any(
                             state[kind + "_species"] == details["compatibility_pool"]
                         )
-                        represented = any(source == old for source, _ in weights)
+                        represented = any(
+                            source == old for source, _ in set(weights) | set(retained_weights)
+                        )
                         tables["lineage_events"].append(
                             dict(
                                 generation=t,
@@ -242,6 +267,8 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                                 else (
                                     "observation_not_detected"
                                     if represented
+                                    else "no_retained_or_recruited_descendants"
+                                    if kind == "plant"
                                     else "no_recruited_descendants"
                                 ),
                                 event_scope="operational_component",
@@ -489,10 +516,10 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
 
 
 def summarize(batch, design, ancestry_reference_generation=None):
-    """Summarize an audited v0.1.7 batch; return output tables for further inspection."""
+    """Summarize an audited v0.1.9 batch; return output tables for further inspection."""
     batch = batch if isinstance(batch, Batch) else Batch.open(Path(batch))
-    if read_settings(batch.path).get("version") != "0.1.7":
-        raise ValueError("lineages require a v0.1.7 batch")
+    if read_settings(batch.path).get("version") != "0.1.9":
+        raise ValueError("lineages require a v0.1.9 batch")
     settings = read_design(design)
     collected, inputs, processing = defaultdict(list), {}, []
     for run in batch.status.itertuples(index=False):
@@ -551,7 +578,8 @@ def summarize(batch, design, ancestry_reference_generation=None):
             limitations=[
                 "single-link components can merge through one bridging genotype",
                 "QTL identity is a selected limited panel, not whole-genome reproductive isolation",
-                "persistence is consecutive unbranched ancestry; split/merge reset the counter",
+                "persistence is consecutive unbranched reproductive descent or retained-plant identity; split/merge reset the counter",
+                "retained_individuals counts plant persistence separately from recruited_genetic_contribution; persistence is not new mating or gene flow",
                 "thresholds and persistence are observation choices, not biological species criteria",
                 "actual mating weights offspring; saved opportunity pools weight eligible mothers equally",
                 "maternal_source networks describe maternal ancestry, not larval cluster membership",

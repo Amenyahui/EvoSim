@@ -8,6 +8,7 @@ import numpy as np
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.helpers import ecology
+from evo_sim.models.plant_insect.helpers.config import config_payload
 from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
 from tests.support import base_runner, config, raises
@@ -48,7 +49,7 @@ def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
         plant_sizes=[1, 0],
         insect_sizes=[2],
         choice_mode="forced",
-        resource_capacity={"P1": 3.0, "P2": 0.0},
+        resource_capacity={"P1": 3.0, "P2": 1.0},
         insect_cost=1.0,
     )
     runner.config["parameters"]["spatial"].update(
@@ -104,7 +105,6 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
         generations=2,
         insect_sizes=[20],
         choice_mode="forced",
-        sP0=1,
         resource_capacity={"P1": 1000.0, "P2": 1000.0},
     )
     c.spatial.update(initial_plant_cells=[[0, 0]] * 40, initial_insect_cells=[[0, 0]] * 20)
@@ -176,10 +176,18 @@ def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
         generations=1,
         insect_sizes=[10],
         choice_mode="forced",
-        resource_capacity={"P1": 0.0, "P2": 0.0},
+        resource_capacity={"P1": 1.0, "P2": 1.0},
     )
     c.spatial.update(initial_plant_cells=[[0, 0]] * 40, initial_insect_cells=[[0, 0]] * 10)
-    result = simulate(c)
+    # Depleted carried stock is valid; configured maximum capacity stays positive.
+    runner = base_runner()
+    runner.config["parameters"] = config_payload(c)
+    runner.config["parameters"].pop("generations")
+    runner.config["simulation_metadata"]["num_steps_per_episode"] = c.generations
+    runner.init()
+    runner.state["agents"]["plants"]["resource"][:] = 0
+    runner.step()
+    result = runner.result
     assert result["larvae"] and not any(r["survived_to_adult"] for r in result["larvae"])
     assert all(r["x"] == 0 for r in result["larvae"])
     assert not len(result["snapshots"][-1]["insect_ids"])

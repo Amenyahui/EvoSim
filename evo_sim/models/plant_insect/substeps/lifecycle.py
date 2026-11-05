@@ -15,7 +15,12 @@ from ..helpers import chemistry, modules, spatial
 from ..helpers import ecology as feeding
 from ..helpers.agents import CommunityState
 from ..helpers.contributions import allele_contributions, commit_parent_contributions
-from ..helpers.demography import ComputationalLimit, maternal_moments, mating_candidates
+from ..helpers.demography import (
+    ComputationalLimit,
+    maternal_moments,
+    mating_candidates,
+    plant_resource_update,
+)
 from ..helpers.observations import standardized
 from ..helpers.runtime import agent_state, community_state, resource_vector
 
@@ -54,7 +59,7 @@ def source_flows(parents, mothers, fathers, destinations, labels, survived, gene
     return rows
 
 
-def sample_parents(pop, kind, S, F, phi, runtime, generation):
+def sample_parents(pop, kind, S, F, runtime, generation, *, active=True):
     """Plants survive this window; current adult insects have already survived it."""
     k = int(kind == "insect")
     c = runtime.c
@@ -64,7 +69,9 @@ def sample_parents(pop, kind, S, F, phi, runtime, generation):
     potential = mating_candidates(
         pop.species, pop.cells, donor, maternal, radius, c.spatial["grid_shape"]
     )
-    mu = (runtime.lp if k == 0 else runtime.li)[pop.species] * F * phi
+    if not active:
+        potential = [np.empty(0, int) for _ in pop.ids]
+    mu = (runtime.lp if k == 0 else runtime.li)[pop.species] * F if active else np.zeros(len(pop))
     if not np.isfinite(mu).all():
         raise ComputationalLimit("nonfinite maternal offspring mean")
     q, expected, variance = maternal_moments(S, mu, potential, maternal)
@@ -99,15 +106,18 @@ def sample_parents(pop, kind, S, F, phi, runtime, generation):
                 S_i=float(S[i]),
                 F_i=float(F[i]),
                 W_i=float(S[i] * F[i]),
-                phi_i=float(phi[i]),
                 lambda_s=float((runtime.lp if k == 0 else runtime.li)[pop.species[i]]),
                 conditional_mu=float(mu[i]),
                 mate_probability=float(q[i]),
-                expected_maternal_offspring=float(expected[i]),
-                maternal_offspring_variance=float(variance[i]),
+                expected_maternal_offspring=float(expected[i]) if k else None,
+                maternal_offspring_variance=float(variance[i]) if k else None,
+                expected_propagules=float(expected[i]) if not k else None,
+                propagule_variance=float(variance[i]) if not k else None,
+                propagule_count=int(counts[i]) if not k else None,
+                reproduction_active=bool(active),
                 survived_to_mating_stage=bool(survived[i]),
-                eligible_as_mother=bool(maternal[i] and survived[i]),
-                eligible_as_donor=bool(donor[i] and survived[i]),
+                eligible_as_mother=bool(active and maternal[i] and survived[i]),
+                eligible_as_donor=bool(active and donor[i] and survived[i]),
                 candidate_mate_count=len(candidates[i]),
                 has_mate=bool(len(candidates[i])),
                 potential_egg_count=int(counts[i]) if k else None,
@@ -115,7 +125,9 @@ def sample_parents(pop, kind, S, F, phi, runtime, generation):
                 offspring_count_sired=0,
                 sampling_applied=True,
                 contribution_committed=False,
-                reason="not_maternal_role"
+                reason="not_reproduction_pulse"
+                if not active
+                else "not_maternal_role"
                 if not maternal[i]
                 else "did_not_survive"
                 if not survived[i]
@@ -169,9 +181,7 @@ def observe(runtime, current, generation):
         runtime.B,
         current.plants.chemical_traits,
     )
-    snapshot["R"] = resource_vector(
-        runtime.c.resource_capacity, runtime.c.plant_sizes, current.plants.species, "P"
-    )
+    snapshot["R"] = current.plants.resource.copy()
     runtime.result["snapshots"].append(snapshot)
     runtime.stored_genotype_values += values
     sizes = (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes))
@@ -216,7 +226,7 @@ def transition(runtime, current, t):
     runtime.stage = "adult_mating_and_potential_eggs"
     fi, processing_cost, sensory_cost = modules.maternal_fecundity(insects.module_traits, c)
     counts, candidates, hrows, _ = sample_parents(
-        insects, "insect", np.ones(len(insects)), fi, np.ones(len(insects)), runtime, t
+        insects, "insect", np.ones(len(insects)), fi, runtime, t
     )
     for i, row in enumerate(hrows):
         row.update(
@@ -256,7 +266,8 @@ def transition(runtime, current, t):
     hvalues, child_hl, hids, hrecords, next_h = genetic.fertilize(
         insects.genotypes, hl, insects.ids, mothers, fathers, "insect", runtime.next_ids[1], t + 1
     )
-    capacity = resource_vector(c.resource_capacity, c.plant_sizes, pl, "P")
+    maximum = resource_vector(c.resource_capacity, c.plant_sizes, pl, "P")
+    capacity = plants.resource
     dmax = resource_vector(c.max_feeding_demand, c.insect_sizes, child_hl, "H")
     runtime.stage = "larval_feeding_and_survival"
     e = feeding.settle_feeding(
@@ -301,41 +312,66 @@ def transition(runtime, current, t):
     )
     contributions(hrows, mothers, fathers, survived)
     runtime.stage = "plant_survival_and_reproduction"
-    phi = spatial.local_competition(plants.cells, pl, runtime.alpha, c)
-    S = c.sP0 + (1 - c.sP0) * (1 - e["h"])
-    pcounts, pcandidates, prows, psurvived = sample_parents(
-        plants, "plant", S, e["fp"], phi, runtime, t
+    post, defoliation, S, recovered = plant_resource_update(
+        capacity, e["X"], maximum, c.plant_demography
     )
-    nplants = sum(map(int, pcounts))
-    if nplants + len(hids) > c.max_individuals_safety:
-        raise ComputationalLimit("birth allocation exceeds safety; no transition committed")
-    # Birth genotypes include dead larvae; recruited genotypes are also retained in
-    # the next snapshot. Reserve that snapshot before publishing either taxon's births.
+    pulse = (t + 1) % c.plant_demography["reproduction_interval"] == 0
+    pcounts, pcandidates, prows, psurvived = sample_parents(
+        plants, "plant", S, e["fp"], runtime, t, active=pulse
+    )
+    npropagules = sum(map(int, pcounts))
+    if npropagules + len(hids) > c.max_individuals_safety:
+        raise ComputationalLimit(
+            "propagule and larval allocation exceeds safety; no transition committed"
+        )
+    propagule_mothers = np.repeat(np.arange(len(plants)), pcounts)
+    proposal_cells = spatial.disperse(
+        plants.cells[propagule_mothers],
+        c.spatial["plant_dispersal_radius"],
+        c.spatial["grid_shape"],
+        runtime.spatial_rng[0],
+    )
+    winners, proposal_sites = spatial.establish_propagules(
+        proposal_cells, plants.microsite[psurvived], c, runtime.rng[9][0][0]
+    )
+    nplants = len(winners)
+    retained = int(psurvived.sum())
+    if retained + nplants + int(survived.sum()) > c.max_individuals_safety:
+        raise ComputationalLimit(
+            "retained and recruited population exceeds safety; no transition committed"
+        )
     snapshot_values = 2 * (
-        len(genetic.loci["plant"]) * nplants + len(genetic.loci["insect"]) * int(survived.sum())
+        len(genetic.loci["plant"]) * (retained + nplants)
+        + len(genetic.loci["insect"]) * int(survived.sum())
     )
     genetic.preflight(
         [nplants, 0],
         runtime.stored_genotype_values + hvalues["insect_genotypes"].size + snapshot_values,
     )
-    pmothers = np.repeat(np.arange(len(plants)), pcounts)
+    pmothers = propagule_mothers[winners]
     pfathers = draw_fathers(plants, pmothers, pcandidates, runtime, 0)
     runtime.stage = "plant_meiosis_mutation"
     pvalues, child_pl, pids, precords, next_p = genetic.fertilize(
         plants.genotypes, pl, plants.ids, pmothers, pfathers, "plant", runtime.next_ids[0], t + 1
     )
-    pcells = spatial.disperse(
-        plants.cells[pmothers],
-        c.spatial["plant_dispersal_radius"],
-        c.spatial["grid_shape"],
-        runtime.spatial_rng[0],
+    pcells = proposal_cells[winners]
+    pvalues.update(
+        plant_species=child_pl,
+        plant_ids=pids,
+        plant_cells=pcells,
+        plant_resource=c.plant_demography["newborn_resource_fraction"] * maximum[pmothers],
+        plant_microsite=proposal_sites[winners],
     )
-    pvalues.update(plant_species=child_pl, plant_ids=pids, plant_cells=pcells)
     contributions(prows, pmothers, pfathers, np.ones(len(pids), bool))
-    birth_values = dict(pvalues, **hvalues)
-    birth_state = CommunityState.from_arrays(birth_values)
-    next_values = dict(pvalues, **{key: value[survived] for key, value in hvalues.items()})
-    next_values["insect_cells"] = adult_cells
+    birth_state = CommunityState.from_arrays(dict(pvalues, **hvalues))
+    recruited_hvalues = {key: value[survived] for key, value in hvalues.items()}
+    recruited_hvalues["insect_cells"] = adult_cells
+    recruitment_state = CommunityState.from_arrays(dict(pvalues, **recruited_hvalues))
+    old_values = current.arrays()
+    next_values = dict(recruited_hvalues)
+    for key, value in pvalues.items():
+        preserved = recovered[psurvived] if key == "plant_resource" else old_values[key][psurvived]
+        next_values[key] = np.concatenate((preserved, value))
     next_state = CommunityState.from_arrays(next_values)
     next_state.validate()
     new = {
@@ -352,8 +388,28 @@ def transition(runtime, current, t):
             "host_flows",
             "lagged_networks",
             "allele_contributions",
+            "plant_proposals",
         )
     }
+    propagule_indices = (
+        np.concatenate([np.arange(n) for n in pcounts]) if npropagules else np.empty(0, int)
+    )
+    established_ids = dict(zip(winners.tolist(), pids.tolist()))
+    for j, mother in enumerate(propagule_mothers):
+        new["plant_proposals"].append(
+            dict(
+                event_id=f"{t}:{int(plants.ids[mother])}:{int(propagule_indices[j])}",
+                reproduction_round=t,
+                offspring_generation=t + 1,
+                maternal_id=int(plants.ids[mother]),
+                propagule_index=int(propagule_indices[j]),
+                cell_row=int(proposal_cells[j, 0]),
+                cell_col=int(proposal_cells[j, 1]),
+                established=bool(proposal_sites[j] >= 0),
+                microsite=int(proposal_sites[j]) if proposal_sites[j] >= 0 else None,
+                offspring_id=int(established_ids[j]) if j in established_ids else None,
+            )
+        )
     egg_indices = (
         np.concatenate([np.arange(n) for n in counts]) if potential_count else np.empty(0, int)
     )
@@ -475,8 +531,16 @@ def transition(runtime, current, t):
                 V_emit_mean=float(V[i].mean()),
                 defense_cost=float(e["defense_cost"][i]),
                 voc_cost=float(e["voc_cost"][i]),
-                W_plant=float(e["wp"][i]),
-                density_phi=float(phi[i]),
+                W_plant=float(S[i] * e["fp"][i]),
+                resource_capacity=float(maximum[i]),
+                resource_after_feeding=float(post[i]),
+                defoliation=float(defoliation[i]),
+                survival_probability=float(S[i]),
+                survived=bool(psurvived[i]),
+                resource_recovery=float(recovered[i] - post[i]) if psurvived[i] else None,
+                resource_next=float(recovered[i]) if psurvived[i] else None,
+                microsite=int(plants.microsite[i]),
+                reproduction_active=bool(pulse),
                 cell_row=int(plants.cells[i, 0]),
                 cell_col=int(plants.cells[i, 1]),
             )
@@ -507,6 +571,8 @@ def transition(runtime, current, t):
                     N_survived_to_reproduce=int(live[before.species == s].sum()),
                     N_offspring=sum(r["offspring_count_as_mother"] for r in par),
                     N_next=nxt,
+                    N_retained=int(live[before.species == s].sum()) if not k else 0,
+                    N_propagules=sum(int(r["propagule_count"]) for r in par) if not k else None,
                     N_potential_eggs=sum(int(r["potential_egg_count"]) for r in par) if k else None,
                     update_applied=True,
                     extinct_at_generation=extinct.get(name),
@@ -526,11 +592,6 @@ def transition(runtime, current, t):
                     total_resource_transfer=float(e["X"][pl == s].sum())
                     if not k
                     else float(e["x"][child_hl == s].sum()),
-                    density_phi=float(phi[pl == s].mean())
-                    if not k and start
-                    else 1.0
-                    if k
-                    else np.nan,
                 )
             )
     for h in range(len(c.insect_sizes)):
@@ -587,7 +648,7 @@ def transition(runtime, current, t):
         ("birth", birth_state, [prows, hrows]),
         (
             "recruitment",
-            next_state,
+            recruitment_state,
             [
                 [
                     dict(r, realized_genetic_contribution=r["realized_recruitment_contribution"])

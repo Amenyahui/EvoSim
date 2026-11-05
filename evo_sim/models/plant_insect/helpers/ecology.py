@@ -223,7 +223,6 @@ def settle_feeding(
     if module_traits is None:
         raise ValueError("module feeding diagnostics require original expression/tuning traits")
     fi = maternal_fecundity(module_traits, c)[0]
-    wp = (c.sP0 + (1 - c.sP0) * (1 - allocation["h"])) * fp
     loads = np.zeros((len(c.insect_sizes), len(D)), int)
     demands = np.zeros_like(loads, dtype=float)
     np.add.at(loads, (h_labels[found], host[found]), 1)
@@ -246,7 +245,6 @@ def settle_feeding(
         allocation,
         survival_probability=larval_survival_probability(allocation["g"]),
         q=q,
-        wp=wp,
         fp=fp,
         fi=fi,
         defense_cost=defense_cost,

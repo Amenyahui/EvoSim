@@ -42,7 +42,7 @@ def audit_run(path):
                 max_balance_error=0.0,
             )
         raise AssertionError("invalid_parameter record has valid configuration")
-    if meta["version"] != "0.1.7":
+    if meta["version"] != "0.1.9":
         raise ValueError("Use the frozen historical source to audit a superseded model protocol")
     from .audit_lifecycle import audit_run_lifecycle
 

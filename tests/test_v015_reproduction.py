@@ -24,7 +24,6 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
     runner.init()
     runtime = runner.state["environment"]["runtime"]
     runtime.update = True
-    runtime.plant_phi = np.ones(4)
     runtime.c.sexual_reproduction.update(pollen_radius=0, insect_mate_radius=0)
     runner.state["agents"]["plants"]["cells"][:] = [[0, 0], [0, 0], [5, 5], [0, 0]]
     runner.state["agents"]["insects"]["sex"][:] = [0, 1, 0, 1]
@@ -53,7 +52,6 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
                 "plant" if kind == 0 else "insect",
                 survival,
                 fecundity,
-                np.ones(4),
                 runtime,
                 0,
             )
@@ -64,7 +62,9 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
         assert rows[1]["eligible_as_donor"] and rows[1]["F_i"] == 0
         assert counts[0] == (2 if kind == 0 else 4)
         assert not counts[1:].any()
-        assert rows[0]["expected_maternal_offspring"] == (2 if kind == 0 else 4)
+        assert rows[0]["expected_propagules" if kind == 0 else "expected_maternal_offspring"] == (
+            2 if kind == 0 else 4
+        )
         if kind == 0:
             assert rows[0]["eligible_as_donor"]
             assert rows[1]["eligible_as_mother"] and rows[1]["conditional_mu"] == 0
@@ -86,7 +86,7 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
             population.cells[1] = [5, 5]
         counts, candidates, rows = sample()
         assert not candidates[0].size and not counts.any()
-        assert rows[0]["expected_maternal_offspring"] == 0
+        assert rows[0]["expected_propagules" if kind == 0 else "expected_maternal_offspring"] == 0
 
 
 def test_v015_cost_functions_and_maternal_mean():
@@ -118,7 +118,6 @@ def test_v015_native_zero_multiplier_fathers_and_contribution_audit():
             generations=1,
             plant_sizes=[20, 0] if kind == "plant" else [1, 0],
             insect_sizes=[0] if kind == "plant" else [40],
-            sP0=1.0,
             choice_mode="forced",
             plant_cost=1.2 if kind == "plant" else 0.0,
             voc_cost=0.0,
