@@ -8,7 +8,7 @@
 
 | 入口 | 作用和默认初始条件 |
 | --- | --- |
-| [configs/current.yaml](../evo_sim/models/plant_insect/configs/current.yaml) | 多年生工作入口：继承单祖先设置，P1/H1各40，K=10、dmax=1；K=10/30/100为共享理论来源的短程容量对照，不是实测值。关闭新突变。 |
+| [configs/current.yaml](../evo_sim/models/plant_insect/configs/current.yaml) | 多年生工作入口：继承单祖先设置，P1/H1各40，K=10、dmax=1；默认仅检查K=10基线、4个重复，K并非实测值。关闭新突变。 |
 | [configs/current_base.yaml](../evo_sim/models/plant_insect/configs/current_base.yaml) | 模型0.1.9公共基础：P1、P2各40株、H1为40只，10×10格、每格1个共享建立位点；植物跨代留存。K=1，植物`lambda=2`/繁殖脉冲、昆虫潜在卵`lambda=4`/昆虫代。两植物池创始频率相同，处理表达参考见G1。 |
 | [configs/current_single_ancestor.yaml](../evo_sim/models/plant_insect/configs/current_single_ancestor.yaml) | 继承公共基础并替换物种与创始频率表：P1/H1各40，K=1、3轮。它不改变建立位点规则；短于5轮的运行不能验收植物繁殖脉冲。 |
 | [configs/current_200gen.yaml](../evo_sim/models/plant_insect/configs/current_200gen.yaml) | 继承当前多虫工作入口并延长为200轮、4重复；新参考下的诊断设计，不是先前两池400昆虫历史实验的等价重跑。 |
@@ -42,7 +42,7 @@
 
 | 参数 | 值、单位与实施决定 |
 |---|---|
-| `resource_capacity` K | 每株最大归一化可食叶量，严格大于零；多虫参考K=10、30/100为容量对照，公共基础K=1。是上界，不再每轮重赋资源。 |
+| `resource_capacity` K | 每株最大归一化可食叶量，严格大于零；工作基线仅K=10，公共基础K=1。K=30/100已退出默认验证；K是上界，不再每轮重赋资源。 |
 | 叶量存量B | 单位与K相同，范围[0,K]；创始株B=K，旧株食后扣减并恢复，新株初始B=.25K。分配核的R读取当轮B。 |
 | `max_feeding_demand` dmax | 每幼虫完整取食窗口1个相同单位；保持归一化。实际分配受利用和同株竞争影响，不能把需求当成必然摄入。 |
 | `resource_unit`、`demand_unit`、窗口 | 相同的 `normalized_edible_dry_biomass` 与 `one_generation_larval_feeding`；可另以同单位真实干重输入，但默认不是克。见N1。 |

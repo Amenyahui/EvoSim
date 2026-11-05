@@ -24,7 +24,7 @@ python -m evo_sim.models.plant_insect.audit --input codex/validation/perennial_e
 python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/validation/perennial_example --sensitivity
 ```
 
-该入口比较最大叶量K=10/30/100，各4个种子、5个昆虫世代；当前资源存量不再逐代重置。200代延长配置为 `configs/current_200gen.yaml`。指定目录须不存在；省略 `--out` 默认放入 `codex/validation/v<version>/run<N>`。正式科研实验须由用户明确安排并显式指定 `--out results/...`。
+该入口仅检查最大叶量K=10的基线，4个种子、5个昆虫世代；当前资源存量不再逐代重置。200代延长配置为 `configs/current_200gen.yaml`，同样仅运行K=10、4个重复。K=30/100退出默认验证，既有记录保留。指定目录须不存在；省略 `--out` 默认放入 `codex/validation/v<version>/run<N>`。正式科研实验须由用户明确安排并显式指定 `--out results/...`。
 
 | 文档 | 内容 |
 | --- | --- |
@@ -43,7 +43,7 @@ python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/va
 
 **软件实现验收通过，长期共存人口学基线未合格。** 101组测试及71个Python文件的Ruff检查通过；最终安装包60项文件、43个模块和6个配置通过隔离校验。6次10代短程运行通过严格审计，共60次转移。无虫植物对照2次均完成200代，期末96/97株，通过每次至少200转移的严格审计；这支持无虫植物基线可执行，不代表双方长期共存。
 
-当前200代耦合验证请求共12次，结果如下；各格中的顺序对应4个重复：
+此前200代耦合验证共12次，结果如下；各格中的顺序对应4个重复。该批次保留原配置与结果身份，后续默认仅验证K=10：
 
 | 最大叶量 | 实际结局 |
 | --- | --- |

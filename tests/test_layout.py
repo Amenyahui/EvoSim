@@ -101,4 +101,6 @@ def test_long_run_inherits_cases():
 
     c = read_config(ROOT / "evo_sim/models/plant_insect/configs/current_200gen.yaml")
     assert c["batch"]["replicates"] == 4
-    assert [x["name"] for x in c["batch"]["cases"]] == ["resource10", "resource30", "resource100"]
+    assert [x["name"] for x in c["batch"]["cases"]] == ["resource10"]
+    assert c["parameters"]["resource_capacity"] == {"P1": 10.0}
+    assert c["simulation_metadata"]["num_steps_per_episode"] == 200

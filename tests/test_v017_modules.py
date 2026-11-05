@@ -151,11 +151,7 @@ def test_v017_current_contract_rejects_removed_settlement_and_preserves_formal_d
     assert base["genetics"]["schema_version"] == "slim-qtl-4"
     assert "adult_settlement_enabled" not in base["functional_modules"]
     assert "flowering_kappa" not in base["functional_modules"]
-    assert [case["name"] for case in loaded["batch"]["cases"]] == [
-        "resource10",
-        "resource30",
-        "resource100",
-    ]
+    assert [case["name"] for case in loaded["batch"]["cases"]] == ["resource10"]
     assert base["seed"] == 20261102
     for case in loaded["batch"]["cases"]:
         values = merge_config(base, case["overrides"])

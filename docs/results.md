@@ -165,7 +165,7 @@ python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/va
 
 ## 人口参数敏感性分析
 
-20代人口敏感性配置为`configs/demographic_sensitivity.yaml`：8种情景各8重复，种子20261102–20261109；比较K=1基线、K=2/4、潜在卵基准8、搜索3、交配3、扩散2和K=2×搜索3。默认`configs/current.yaml`另比较K=10/30/100、每种4重复和5个昆虫世代；K是最大叶量，实际每轮容量为B_start。配置存在不等于实验完成。零代初态另比较有限位点内的P20/P60/P100与H60/H6/H0，不能用其替代繁殖/恢复动态验收。按[当前计划](../README.md#current-work)，运行并审计后可绘图：
+20代人口敏感性配置为`configs/demographic_sensitivity.yaml`：8种情景各8重复，种子20261102–20261109；比较K=1基线、K=2/4、潜在卵基准8、搜索3、交配3、扩散2和K=2×搜索3。默认`configs/current.yaml`仅验证K=10基线、4个重复和5个昆虫世代；`current_200gen.yaml`继承相同单情景并延长至200代。K=30/100仅保留此前已运行记录，不再默认运行。K是最大叶量，实际每轮容量为B_start。配置存在不等于实验完成。零代初态另比较有限位点内的P20/P60/P100与H60/H6/H0，不能用其替代繁殖/恢复动态验收。按[当前计划](../README.md#current-work)，运行并审计后可绘图：
 
 ```powershell
 python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/validation/v0.1.9/run2 --sensitivity
