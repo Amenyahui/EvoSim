@@ -14,7 +14,7 @@ import yaml
 from evo_sim.core.config import merge_config
 from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.analysis.diagnose_initial_conditions import main as diagnose
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.config.loader import read_config

@@ -14,11 +14,11 @@ import yaml
 
 from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.analysis.common import Batch
-from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
+from evo_sim.models.plant_insect.analysis.summaries.lifecycle import (
     prepare_diagnostics,
     summarize_sensitivity,
 )
-from evo_sim.models.plant_insect.audit import audit, audit_run
+from evo_sim.models.plant_insect.audit.run import audit, audit_run
 from evo_sim.models.plant_insect.batch import COLUMNS, run, save_result
 from evo_sim.models.plant_insect.config.schema import config_payload
 

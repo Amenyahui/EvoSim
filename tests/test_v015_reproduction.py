@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from evo_sim.models.plant_insect import simulate
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import run, save_result, write_json
 from evo_sim.models.plant_insect.biology.insects.feeding import settle_feeding
 from evo_sim.models.plant_insect.config.schema import config_payload

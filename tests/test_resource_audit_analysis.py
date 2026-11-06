@@ -8,12 +8,12 @@ import pandas as pd
 
 from evo_sim.models.plant_insect import get_runner
 from evo_sim.models.plant_insect.analysis.common import Batch
-from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
+from evo_sim.models.plant_insect.analysis.summaries.lifecycle import (
     summarize,
     summarize_sensitivity,
 )
-from evo_sim.models.plant_insect.analysis.summarize_lineages import summarize as summarize_lineages
-from evo_sim.models.plant_insect.audit import audit, audit_run
+from evo_sim.models.plant_insect.analysis.summaries.lineages import summarize as summarize_lineages
+from evo_sim.models.plant_insect.audit.run import audit, audit_run
 from evo_sim.models.plant_insect.batch import run
 from evo_sim.models.plant_insect.config.schema import config_payload
 from tests.support import config, raises
@@ -89,7 +89,7 @@ def test_audit_replays_cross_label_plant_parents():
 
 
 def test_r30_resource_residual_replays_shared_budget_roundoff_without_relaxing_checks():
-    from evo_sim.models.plant_insect.audit_lifecycle import check_rows, resource_shares
+    from evo_sim.models.plant_insect.audit.lifecycle import check_rows, resource_shares
 
     # Actual R=30/rep01, round 7, plant 52: 25 larvae previously exposed an omitted
     # common-factor roundoff repair in the independent audit, not a biological error.

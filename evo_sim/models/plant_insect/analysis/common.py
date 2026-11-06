@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from evo_sim.models.plant_insect.audit import report_directory
+from evo_sim.models.plant_insect.audit.run import report_directory
 
 
 def audit_file(batch):

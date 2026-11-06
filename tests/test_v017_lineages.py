@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from evo_sim.models.plant_insect.analysis.common import sha256
-from evo_sim.models.plant_insect.analysis.summarize_lineages import (
+from evo_sim.models.plant_insect.analysis.summaries.lineages import (
     UNASSIGNED,
     cluster_genotypes,
     read_design,

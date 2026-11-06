@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from evo_sim.models.plant_insect.analysis.plot_diagnostics import cell_abundance, centered_xy
+from evo_sim.models.plant_insect.analysis.plots.diagnostics import cell_abundance, centered_xy
 
 
 def test_lineage_plot_weighting_missingness_and_copy_denominators():
-    from evo_sim.models.plant_insect.analysis.plot_diagnostics import lineage_plot_tables
+    from evo_sim.models.plant_insect.analysis.plots.diagnostics import lineage_plot_tables
 
     base = dict(case="x", replicate=1)
     tables = {
@@ -140,9 +140,9 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
     from unittest.mock import patch
 
     from evo_sim.models.plant_insect.analysis.common import Batch
-    from evo_sim.models.plant_insect.analysis.plot_diagnostics import figure_C
-    from evo_sim.models.plant_insect.analysis.summarize_lifecycle import prepare_diagnostics
-    from evo_sim.models.plant_insect.audit import audit
+    from evo_sim.models.plant_insect.analysis.plots.diagnostics import figure_C
+    from evo_sim.models.plant_insect.analysis.summaries.lifecycle import prepare_diagnostics
+    from evo_sim.models.plant_insect.audit.run import audit
     from evo_sim.models.plant_insect.batch import run
     from evo_sim.models.plant_insect.config.schema import config_payload
     from tests.support import config
@@ -190,7 +190,7 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
         assert data["host_resource_by_generation"].generation.max() == 3
         captured = []
         with patch(
-            "evo_sim.models.plant_insect.analysis.plot_diagnostics.export",
+            "evo_sim.models.plant_insect.analysis.plots.diagnostics.export",
             side_effect=lambda fig, *args: captured.append(fig),
         ):
             figure_C(data, Path(tmp), 80)
@@ -220,7 +220,7 @@ def test_v017_module_panels_and_surviving_recruitment():
 
     import matplotlib.pyplot as plt
 
-    from evo_sim.models.plant_insect.analysis import plot_diagnostics as plot
+    from evo_sim.models.plant_insect.analysis.plots import diagnostics as plot
 
     traits = (
         [f"plant_chemical_traits_{i}" for i in range(1, 4)]
@@ -335,7 +335,7 @@ def test_current_batch_rejects_historical_protocols_and_report_fallback():
 
 
 def test_sensitivity_extinction_and_incomplete_bounds():
-    from evo_sim.models.plant_insect.analysis.summarize_lifecycle import sensitivity_survival
+    from evo_sim.models.plant_insect.analysis.summaries.lifecycle import sensitivity_survival
 
     runs = pd.DataFrame(
         [

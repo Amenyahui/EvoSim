@@ -9,9 +9,8 @@ import pandas as pd
 
 from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
+from evo_sim.models.plant_insect.batch import SUCCESS_STATUSES, write_json
 from evo_sim.models.plant_insect.config.schema import Config, config_payload
-
-from .batch import SUCCESS_STATUSES, write_json
 
 if not __debug__:
     raise RuntimeError("Run scientific audits without python -O; assertions are required")
@@ -44,7 +43,7 @@ def audit_run(path):
                 max_balance_error=0.0,
             )
         raise AssertionError("invalid_parameter record has valid configuration")
-    from .audit_lifecycle import audit_run_lifecycle
+    from evo_sim.models.plant_insect.audit.lifecycle import audit_run_lifecycle
 
     return dict(audit_run_lifecycle(path, meta), execution_success=status in SUCCESS_STATUSES)
 
@@ -63,6 +62,8 @@ def audit(out, report_dir=None, allow_plot_source_drift=False, *, min_transition
         {
             "models/plant_insect/analysis/plot_diagnostics.py",
             "models/plant_insect/analysis/summarize_qtl_run.py",
+            "models/plant_insect/analysis/plots/diagnostics.py",
+            "models/plant_insect/analysis/summaries/qtl.py",
         }
         if allow_plot_source_drift
         else set()

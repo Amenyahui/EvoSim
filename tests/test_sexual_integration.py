@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from evo_sim.models.plant_insect import get_runner, simulate
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError

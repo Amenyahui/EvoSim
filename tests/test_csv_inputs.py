@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 import yaml
 
 from evo_sim.models.plant_insect import Config, get_runner, simulate
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.config.input_loader import load_inputs
 from evo_sim.models.plant_insect.config.loader import read_config

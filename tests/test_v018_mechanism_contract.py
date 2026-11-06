@@ -10,7 +10,7 @@ from unittest.mock import patch
 import numpy as np
 
 from evo_sim.models.plant_insect import get_runner, simulate
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.insects import feeding as _feeding

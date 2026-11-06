@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from evo_sim.models.plant_insect import simulate
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.biology.insects.feeding import consumption

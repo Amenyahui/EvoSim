@@ -9,11 +9,11 @@ import numpy as np
 import pandas as pd
 
 from evo_sim.core.config import merge_config
-from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
+from evo_sim.models.plant_insect.analysis.summaries.lifecycle import (
     coexistence_outcome,
     summarize_sensitivity,
 )
-from evo_sim.models.plant_insect.audit import audit_run
+from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.config.loader import read_config
 from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
@@ -165,7 +165,7 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
         ).to_csv(folder / "parents.csv", index=False)
         # Synthetic ledgers exercise summary semantics; integrity itself is tested elsewhere.
         with patch(
-            "evo_sim.models.plant_insect.analysis.summarize_lifecycle.audit_run",
+            "evo_sim.models.plant_insect.analysis.summaries.lifecycle.audit_run",
             return_value=dict(status="completed"),
         ):
             tables, _ = summarize_sensitivity(root)

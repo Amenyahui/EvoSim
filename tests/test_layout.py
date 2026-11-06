@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from evo_sim.models.plant_insect.audit import audit
+from evo_sim.models.plant_insect.audit.run import audit
 from evo_sim.models.plant_insect.batch import create_output_directory, run
 
 ROOT = Path(__file__).resolve().parents[1]
