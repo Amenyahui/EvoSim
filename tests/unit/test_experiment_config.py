@@ -8,7 +8,7 @@ from evo_sim.models.plant_insect.config.schema import Config
 
 
 def test_ten_plant_type_design():
-    path = Path(__file__).parents[1] / "evo_sim/models/plant_insect/configs/ten_plant_types.yaml"
+    path = Path(__file__).parents[2] / "evo_sim/models/plant_insect/configs/ten_plant_types.yaml"
     design = read_config(path)
     params = dict(design["parameters"], generations=30)
     cases = design["batch"]["cases"]

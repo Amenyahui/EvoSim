@@ -13,7 +13,7 @@ from tests.support import config, raises
 
 def test_segregation_and_recombination():
     n = 10000
-    loci = json.loads((Path(__file__).parent / "fixtures/linked_map.json").read_text())
+    loci = json.loads((Path(__file__).parents[1] / "fixtures/linked_map.json").read_text())
     for locus in loci:
         locus.update(mutation_rate=0.0, mutation_mean=[0.0], mutation_sd=[0.0])
     parents = np.array([[[0, 2, 4], [1, 3, 5]]] * 2)

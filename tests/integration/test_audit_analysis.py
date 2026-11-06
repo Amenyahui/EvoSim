@@ -16,8 +16,8 @@ from evo_sim.models.plant_insect.analysis.summaries.lineages import summarize as
 from evo_sim.models.plant_insect.audit.run import audit, audit_run
 from evo_sim.models.plant_insect.batch import run
 from evo_sim.models.plant_insect.config.schema import config_payload
+from tests.scientific.test_independent_audit import reject_rehashed_tampering
 from tests.support import config, raises
-from tests.test_v016_audit import reject_rehashed_tampering
 
 
 def test_sexual_plants_are_audited_and_summarized():

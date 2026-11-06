@@ -9,7 +9,7 @@ from unittest.mock import patch
 from evo_sim.models.plant_insect.audit.run import audit
 from evo_sim.models.plant_insect.batch import create_output_directory, run
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_versioned_output_directory():

@@ -17,6 +17,21 @@ from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from tests.support import config, raises
 
 
+def test_audit_accepts_original_slim_source_key():
+    """Pre-migration v0.1.11 records retain their original script-source path."""
+    result = simulate(config(generations=1))
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "run"
+        save_result(result, path)
+        metadata_path = path / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata["source_hash"]["models/plant_insect/helpers/slim_reproduction.slim"] = metadata[
+            "source_hash"
+        ].pop("models/plant_insect/biology/genetics/slim_reproduction.slim")
+        write_json(metadata_path, metadata)
+        assert audit_run(path)["genetic_audit"]
+
+
 def test_v016_column_checks_preserve_mixed_values_and_key_validation():
     frame = pd.DataFrame(
         dict(id=[2, 1], value=[0.5, np.nan], flag=["False", "True"], label=["b", "a"])

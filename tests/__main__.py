@@ -16,11 +16,13 @@ except SlimError as error:
 print(f"SLiM preflight: {slim['version'].splitlines()[0]} ({slim['executable']})", flush=True)
 
 count = 0
-for path in sorted(Path(__file__).parent.glob("test_*.py")):
-    module = importlib.import_module(f"tests.{path.stem}")
+root = Path(__file__).parent
+for path in sorted(root.rglob("test_*.py")):
+    module_name = ".".join(path.relative_to(root).with_suffix("").parts)
+    module = importlib.import_module(f"tests.{module_name}")
     for name, check in vars(module).items():
         if name.startswith("test_") and callable(check):
             check()
             count += 1
-            print(f"PASS {path.stem}.{name}", flush=True)
+            print(f"PASS {module_name}.{name}", flush=True)
 print(f"PASS {count} test groups")

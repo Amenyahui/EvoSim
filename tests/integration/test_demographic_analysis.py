@@ -17,7 +17,7 @@ from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.config.loader import read_config
 from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
-CONFIGS = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs"
+CONFIGS = Path(__file__).resolve().parents[2] / "evo_sim/models/plant_insect/configs"
 
 
 def test_demographic_design_preserves_baseline_and_single_factor_cases():

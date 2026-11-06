@@ -15,11 +15,11 @@ from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
 from evo_sim.models.plant_insect.biology.insects import sensory as _sensory
+from tests.scientific.test_independent_audit import reject_rehashed_tampering
 from tests.support import raises
-from tests.test_v016_audit import reject_rehashed_tampering
 
 CONFIG = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "evo_sim/models/plant_insect/configs/current_single_ancestor.yaml"
 )
 

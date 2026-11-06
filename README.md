@@ -32,6 +32,13 @@ python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/va
 | [参数与文献](docs/parameters.md) | 输入、取值、单位、分系统证据及未标定项；附[逐字段清单](docs/parameter_inventory.csv) |
 | [输出与绘图](docs/results.md) | 文件字段、审计、汇总及A–H/敏感性图 |
 | [开发规则](AGENTS.md) | 代码入口、检查和结果保护 |
+| [代码架构](docs/architecture.md) | 模块职责、依赖边界、迁移前后对应关系 |
+| [开发与验证](docs/development.md) | 完整测试、固定种子比较、SLiM 与打包检查 |
+
+代码按 `config/`、`biology/`、`simulation/`、`records/`、`audit/` 和
+`analysis/` 分层，生命周期在 `simulation/stages/` 中依次执行。测试按用途分为
+`unit/`、`integration/`、`scientific/` 和 `acceptance/`，仍使用 `python -m tests`
+运行全部检查。此次结构重构保留 0.1.11 科学协议、参数和随机行为；原分析命令继续可用。
 
 <a id="current-work"></a>
 

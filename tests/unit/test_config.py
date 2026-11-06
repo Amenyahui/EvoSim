@@ -20,7 +20,7 @@ from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.config.loader import read_config
 from tests.support import config, raises
 
-CONFIGS = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs"
+CONFIGS = Path(__file__).resolve().parents[2] / "evo_sim/models/plant_insect/configs"
 
 
 def test_yaml_is_complete_and_missing_parameters_fail():

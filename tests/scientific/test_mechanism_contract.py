@@ -18,8 +18,8 @@ from evo_sim.models.plant_insect.simulation.stages.adult_reproduction import (
     draw_fathers,
     sample_parents,
 )
+from tests.scientific.test_functional_modules import CONFIG, module_config
 from tests.support import raises
-from tests.test_v017_modules import CONFIG, module_config
 
 
 def test_larval_survival_probability_boundaries_and_cost_separation():

@@ -9,7 +9,49 @@
 科学方程、参数、配置协议、生命周期、随机流及抽样顺序、SLiM 5.2 脚本、
 输出列名和标识符均须保持。结构变更不会提升科学模型版本。
 
-## 当前模块地图（迁移前）
+## 当前架构
+
+2026-11-06，用户已批准本文计划；源码迁移与测试组织已完成，测试已归入四个用途目录。
+`helpers/` 和 `substeps/` 下的实现已迁出；`core/helpers.py` 继续保存原有通用操作。
+
+```text
+evo_sim/core/                     通用调度、文件写入与计算保护异常
+evo_sim/models/plant_insect/
+    config/                      schema、YAML 入口、CSV 加载
+    biology/                     群落数组、共享性状、空间
+        genetics/                QTL 状态与原生 SLiM 脚本/传输
+        plants/                  化学读出、表达成本、资源与存活
+        insects/                 感觉、逐卵择主、取食、繁殖机制
+    simulation/                  runtime、固定随机流、世代控制器
+        stages/                  七个有明确输入/输出的执行阶段
+    records/                     观察、事件、遗传贡献；只记录已有结果
+    audit/                       文件/批次验收与独立生命周期重建
+        lifecycle_checks/        独立遗传、人口、取食、资源、事件检查
+    analysis/
+        summaries/               生命周期、谱系、QTL 汇总
+        plots/                   诊断绘图
+tests/{unit,integration,scientific,acceptance}/
+```
+
+当前执行依赖为 `simulator → simulation → biology`；执行层将已有阶段结果交给
+`records` 格式化。记录中的阶段类型仅在 `TYPE_CHECKING` 下导入，不构成运行时环。
+`audit` 只共享配置和文件设施，独立重建方程与抽样；不导入生产 `biology` 计算。
+`ComputationalLimit` 放入通用 `core/runner.py`，避免遗传层依赖运行层。
+
+七阶段依次为 `prepare_adults → oviposit → inherit_offspring → develop_larvae →
+update_plants → reproduce_plants → recruit`。阶段用简单 dataclass 显式传递结果，
+检查点和原子提交仍由 `AdvanceGeneration.forward()` 管理。原约 450 行的世代函数
+现在负责顺序调用和未提交结果的返回。
+
+旧 `analysis/summarize_*.py`、`analysis/plot_diagnostics.py` 和 `audit_lifecycle.py`
+保留薄兼容入口，不保留两份机制。旧审计模块现在是 `audit` 包，原模块命令和导出仍可用。
+内部导入及测试补丁位置已更新；未承诺继续支持内部 `helpers.*` 导入路径。
+
+暂保留 QTL 状态类、较长的审计逐代重建循环和谱系汇总：这些代码需要共享明确的
+跨事件检查状态，继续拆分应另选有独立职责的块，不为缩短行数制造动态状态容器。
+遗传后端已有原生突变/重组实现，不另设空的 Python 模块。
+
+## 原始模块地图（迁移前）
 
 下表路径相对于 `evo_sim/models/plant_insect/`，除非另有说明。
 
@@ -38,12 +80,12 @@
 | `analysis/summarize_*.py` | 生命周期、谱系与 QTL 汇总 | `analysis/summaries/`；旧命令使用薄兼容入口 |
 | `analysis/plot_diagnostics.py`（1174 行） | A–H 与敏感性绘图 | `analysis/plots/diagnostics.py`；暂不按图逐一碎片化 |
 | `analysis/diagnose_initial_conditions.py`、`lineages.yaml` | 初始条件批次诊断、谱系分析配置 | 保留入口与配置路径 |
-| `tests/test_*.py`（27 个模块） | 单函数、跨模块、科学边界、完整运行与绘图混合 | 按测试目的渐进归类；保留所有仍检查当前机制的测试 |
+| `tests/test_*.py`（26 个模块） | 单函数、跨模块、科学边界、完整运行与绘图混合 | 按测试目的渐进归类；保留所有仍检查当前机制的测试 |
 | `tests/support.py`、`fixtures/`、`__main__.py` | 共用配置、断言、连锁图、完整测试入口 | 保持 `python -m tests`；归类时改为递归发现，避免漏跑 |
 
 ## 依赖与实际问题
 
-当前入口链为：`batch/simulator → helpers/runtime + substeps/lifecycle → helpers 生物机制`；
+迁移前入口链为：`batch/simulator → helpers/runtime + substeps/lifecycle → helpers 生物机制`；
 审计由 `audit → audit_lifecycle` 独立重建；分析读取批次和审计文件。
 `core/` 当前没有导入植物昆虫模型。生物机制当前未依赖执行、分析或审计层。
 配置验证对遗传/空间/繁殖验证使用函数内导入，迁移不能直接改成全部顶层导入。
@@ -78,7 +120,7 @@
 
 ## 分批迁移计划
 
-本计划先提交供审阅。依据 `AGENTS.md` 第 10 节，**大批文件迁移在计划批准后执行**。
+本计划先提交供审阅，已获用户批准。依据 `AGENTS.md` 第 10 节，大批文件迁移在批准后执行。
 每批完成相关测试和固定种子比较后再进入下一批，不一次改写整个仓库。
 
 | 批次 | 具体变更 | 验收 |
@@ -104,3 +146,8 @@ Git 中的基线提交和 tag 不删除、不重写。名称带旧版本号的�
 `build/` 是构建副本，可重新生成；Python/Ruff 缓存可清理。
 `codex/history/` 含 Git 忽略的本地快照和分析，远端提交一致并不证明其中全部内容都已备份；
 只有逐项核实被 Git 包含或内容冗余后才删除。`results/`、原始 CSV 和当前配置不作为废旧文件处理。
+
+本轮批量删除与单独删除 `build/` 均被自动审批拒绝（`blocked by policy`），因此
+未清理本地历史目录或生成目录。已生成源码清单供核查：部分本地历史文件只存在于
+本地 Git/tag 或忽略目录，不能根据 `origin/main` 一致就断言已远端备份。
+退役的受版本控制实现通过迁移删除，仍可从原 Git 提交取回。

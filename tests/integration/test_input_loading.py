@@ -11,10 +11,10 @@ from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.config.input_loader import load_inputs
 from evo_sim.models.plant_insect.config.loader import read_config
+from tests.integration.test_runtime import same_results
 from tests.support import raises
-from tests.test_runtime import same_results
 
-MODEL = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect"
+MODEL = Path(__file__).resolve().parents[2] / "evo_sim/models/plant_insect"
 
 
 def experiment(folder, names):

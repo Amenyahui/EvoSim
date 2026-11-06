@@ -15,7 +15,7 @@ from evo_sim.models.plant_insect.biology.insects import sensory as _sensory
 from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
 
 CONFIG = (
-    Path(__file__).resolve().parents[1]
+    Path(__file__).resolve().parents[2]
     / "evo_sim/models/plant_insect/configs/current_single_ancestor.yaml"
 )
 

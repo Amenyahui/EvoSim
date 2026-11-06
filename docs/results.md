@@ -25,6 +25,12 @@ python -m evo_sim.models.plant_insect.audit --input codex/validation/resource_ex
 
 `summarize_lifecycle`只读汇总阶段账本，`summarize_qtl_run`汇总性状与遗传，`summarize_lineages`及`plot_diagnostics`提供只读谱系与诊断；具体字段和当前批次适用性以实际运行元数据和审计为准。参考面板、候选谱系和网络不改变模拟行为；固定期限存续不证明长期共存或共同演化。
 
+结构重构后的实现分别位于 `analysis/summaries/{lifecycle,qtl,lineages}.py` 和
+`analysis/plots/diagnostics.py`。下文旧命令保留兼容入口，也可使用新模块路径。
+原始输出文件名、列名、事件/个体 ID、来源字段名称和科学含义不变；源码路径及指纹
+随结构变化重新记录，历史元数据不改写。审计同时接受迁移前后的 SLiM 脚本来源键。
+本次重构的验证与额外发现的既有审计重放问题见[开发记录](development.md#本轮执行记录2026-11-06)。
+
 ## 批次身份、阶段键与原始表
 
 批次根目录保存 `settings.json`、`data/run_status.csv`；各运行位于 `data/<case>/repNN/`，审计位于 `audits/`。`case/replicate` 标识运行，两类群个体ID不保证全局唯一，连接个体时还需 `kind/individual_id`。`reproduction_round=t` 是本轮繁殖，`adult_cohort=t+1` 是子代队列；不能仅按同名generation连接不同阶段：
