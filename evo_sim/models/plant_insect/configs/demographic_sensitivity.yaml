@@ -1,45 +1,34 @@
-extends: current_single_ancestor.yaml
+extends: current.yaml
 simulation_metadata:
-  num_steps_per_episode: 20
+  num_steps_per_episode: 200
 parameters:
   seed: 20261102
-  genetics:
-    mutation_enabled:
-      plant: false
-      insect: false
 batch:
-  purpose: Prespecified 20-generation demographic mechanism sensitivity; diagnostic only.
-  replicates: 8
+  purpose: Prespecified 200-generation K=10 demographic sensitivity; theoretical, not calibration.
+  replicates: 4
   cases:
   - name: baseline
     overrides: {}
-  - name: resource2
+  - name: damage_off
     overrides:
-      resource_capacity:
-        P1: 2.0
-  - name: resource4
+      plant_demography:
+        defoliation_mortality_rate: 0.0
+  - name: damage_half
     overrides:
-      resource_capacity:
-        P1: 4.0
-  - name: fecundity8
+      plant_demography:
+        defoliation_mortality_rate: 0.06931471805599453
+  - name: recovery_half
     overrides:
-      insect_offspring_lambda:
-        H1: 8.0
-  - name: search3
+      plant_demography:
+        resource_recovery_rate: 0.34657359027997264
+  - name: recovery_double
     overrides:
-      spatial:
-        search_radius: 3
-  - name: mate3
+      plant_demography:
+        resource_recovery_rate: 1.3862943611198906
+  - name: newborn_half
     overrides:
-      sexual_reproduction:
-        insect_mate_radius: 3
-  - name: dispersal2
+      plant_demography:
+        newborn_resource_fraction: 0.5
+  - name: plants_only
     overrides:
-      spatial:
-        insect_dispersal_radius: 2
-  - name: resource2_search3
-    overrides:
-      resource_capacity:
-        P1: 2.0
-      spatial:
-        search_radius: 3
+      insect_sizes: [0]

@@ -11,7 +11,7 @@ def prepare_diagnostics(batch):
     """Reuse stage-neutral trait/genetic summaries; add adult endpoints and larval resource shares."""
     from .summarize_qtl_run import summarize as summarize_genetics
 
-    assert read_settings(batch.path)["version"] == "0.1.9"
+    assert read_settings(batch.path)["version"] == "0.1.11"
     assert batch.audit["genetically_audited_runs"] == len(batch.status)
     if batch.status.generation.lt(1).any():
         raise ValueError(
@@ -91,7 +91,7 @@ def prepare_diagnostics(batch):
 
 def summarize(batch):
     settings = read_settings(batch)
-    if settings.get("version") != "0.1.9":
+    if settings.get("version") != "0.1.11":
         raise ValueError("summarize_lifecycle requires the current adult/larval ledgers")
     status = pd.read_csv(batch / "data/run_status.csv")
     assert read_audit(batch)["runs"] == len(status)
@@ -172,6 +172,20 @@ def sensitivity_survival(runs, horizon):
     return pd.DataFrame(rows)
 
 
+def coexistence_outcome(record, horizon):
+    """Classify observed finite-horizon coexistence, separately from execution success."""
+    if not record["coexistence_applicable"]:
+        return "not_applicable"
+    if not record["audited"]:
+        return "unknown"
+    if any(
+        pd.notna(record[key]) and record[key] <= horizon
+        for key in ("extinction_generation", "plant_extinction_generation")
+    ):
+        return "known_loss"
+    return "coexistence_at_horizon" if record["last_generation"] >= horizon else "unknown"
+
+
 def summarize_sensitivity(path):
     """Audit recorded runs and summarize abundance and stage denominators without imputing failure."""
     import json
@@ -184,6 +198,8 @@ def summarize_sensitivity(path):
 
     path = Path(path)
     settings = read_settings(path)
+    if settings.get("version") != "0.1.11":
+        raise ValueError("summarize_sensitivity requires the current model protocol")
     spec = settings["spec"]
     horizon = int(spec["base"]["generations"])
     status_file = path / "data/run_status.csv"
@@ -194,6 +210,8 @@ def summarize_sensitivity(path):
     for case in spec["cases"]:
         for rep in range(1, spec["replicates"] + 1):
             name = case["name"]
+            expected = merge_config(spec["base"], case["overrides"])
+            expected["seed"] += rep - 1
             match = (
                 status[(status.case == name) & (status.replicate == rep)]
                 if not status.empty
@@ -208,6 +226,9 @@ def summarize_sensitivity(path):
                 safety_stop=False,
                 last_generation=np.nan,
                 extinction_generation=np.nan,
+                plant_extinction_generation=np.nan,
+                coexistence_applicable=sum(expected["plant_sizes"]) > 0
+                and sum(expected["insect_sizes"]) > 0,
                 final_insects=np.nan,
                 final_plants=np.nan,
                 audit_error="",
@@ -230,8 +251,6 @@ def summarize_sensitivity(path):
                 meta = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
                 if int(meta["status"]["generation"]) != int(entry.generation):
                     raise ValueError("generation mismatch")
-                expected = merge_config(spec["base"], case["overrides"])
-                expected["seed"] += rep - 1
                 if entry.status != "invalid_parameter":
                     expected = config_payload(Config(**expected))
                 if meta["config"] != expected or int(entry.seed) != expected["seed"]:
@@ -257,6 +276,7 @@ def summarize_sensitivity(path):
                 # All insect pools must be absent; a per-species extinction alone is insufficient.
                 zero = [g for g, n in counts.items() if n == 0]
                 extinction = min(zero) if zero else np.nan
+                plant_zero = [g for g, n in plant_counts.items() if n == 0]
                 if final == 0 and not pd.isna(extinction):
                     for g in range(int(extinction), horizon + 1):
                         counts[g] = 0
@@ -265,6 +285,7 @@ def summarize_sensitivity(path):
                     complete=entry.status in ("completed", "all_species_extinct"),
                     last_generation=terminal,
                     extinction_generation=extinction,
+                    plant_extinction_generation=min(plant_zero) if plant_zero else np.nan,
                     final_insects=final,
                     final_plants=final_plants,
                 )
@@ -307,6 +328,11 @@ def summarize_sensitivity(path):
                         demand=demand,
                         consumed=consumed,
                         resource_gain=consumed / demand if demand else np.nan,
+                        larval_count=len(selected),
+                        larval_q_mean=selected.q.mean(),
+                        larval_q_saturated_fraction=selected.q.ge(1.0).mean()
+                        if len(selected)
+                        else np.nan,
                     )
                     plants = plant_ledger[plant_ledger.generation == g]
                     plant_population = plant_populations[plant_populations.generation == g]
@@ -319,16 +345,20 @@ def summarize_sensitivity(path):
                     newborns = plant_population.N_offspring.sum()
                     n_plants = plant_population.N_start.sum()
                     retained = plant_population.N_retained.sum()
+                    losses = n_plants - retained
+                    eligible = plant_parents.loc[plant_parents.eligible_as_mother.eq(True)]
                     diag.update(
                         plant_start=n_plants,
                         plant_retained=retained,
                         plant_propagules=propagules,
                         plant_newborns=newborns,
+                        plant_losses=losses,
+                        plant_net_change=retained + newborns - n_plants,
+                        plant_cycle_losses=losses,
+                        plant_cycle_replacement_fraction=newborns / losses if losses else np.nan,
                         plant_expected_propagules=plant_parents.expected_propagules.sum(),
-                        plant_reproduction_active=bool(
-                            (int(g) + 1) % expected["plant_demography"]["reproduction_interval"]
-                            == 0
-                        ),
+                        plant_reproduction_active=True,
+                        plant_reproductive_mothers=len(eligible),
                         plant_retention_fraction=retained / n_plants if n_plants else np.nan,
                         plant_establishment_fraction=newborns / propagules
                         if propagules
@@ -339,6 +369,10 @@ def summarize_sensitivity(path):
                         plant_resource_recovery=plants.resource_recovery.sum(),
                         plant_resource_next_retained=plants.resource_next.sum(),
                         plant_resource_fraction=b_total / k_total if k_total else np.nan,
+                        plant_defoliation_mean=plants.defoliation.mean(),
+                        plant_resource_limited_fraction=plants["T"].gt(plants.R).mean()
+                        if len(plants)
+                        else np.nan,
                     )
                     diagnostics.append(diag)
                 evidence[f"{name}/rep{rep:02d}"] = dict(
@@ -352,7 +386,9 @@ def summarize_sensitivity(path):
                     complete=False,
                     last_generation=np.nan,
                     extinction_generation=np.nan,
+                    plant_extinction_generation=np.nan,
                     final_insects=np.nan,
+                    final_plants=np.nan,
                     audit_error=str(error) or type(error).__name__,
                 )
             runs.append(record)
@@ -362,6 +398,9 @@ def summarize_sensitivity(path):
         runs=pd.DataFrame(runs),
         trajectories=pd.DataFrame(trajectories),
         diagnostics=pd.DataFrame(diagnostics),
+    )
+    tables["runs"]["coexistence_outcome"] = tables["runs"].apply(
+        coexistence_outcome, axis=1, horizon=horizon
     )
     tables["survival"] = sensitivity_survival(tables["runs"], horizon)
     for name, frame in tables.items():

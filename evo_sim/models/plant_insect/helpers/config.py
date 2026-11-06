@@ -265,13 +265,13 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version != "0.1.9"
-            or self.life_history != "perennial_plants_nonoverlapping_insects"
+            self.model_version != "0.1.11"
+            or self.life_history != "resource_coupled_plants_larval_insects"
             or not isinstance(self.genetics, dict)
-            or self.genetics.get("schema_version") != "slim-qtl-4"
+            or self.genetics.get("schema_version") != "slim-qtl-5"
         ):
             raise ValueError(
-                "current model_version=0.1.9 and slim-qtl-4 perennial plant life history required"
+                "current model_version=0.1.11 and slim-qtl-5 resource-coupled plant life history required"
             )
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
@@ -387,7 +387,6 @@ class Config(_ResourceConfig):
             "resource_recovery_rate",
         )
         required = set(rates) | {
-            "reproduction_interval",
             "newborn_resource_fraction",
             "microsites_per_cell",
         }
@@ -395,7 +394,7 @@ class Config(_ResourceConfig):
             raise ValueError(f"plant_demography requires exactly {sorted(required)}")
         for key in rates:
             numeric(spec[key], key)
-        for key in ("reproduction_interval", "microsites_per_cell"):
+        for key in ("microsites_per_cell",):
             if type(spec[key]) is not int or not 1 <= spec[key] < 2**63:
                 raise ValueError(f"{key} must be a positive int64 integer")
         numeric(spec["newborn_resource_fraction"], "newborn_resource_fraction")

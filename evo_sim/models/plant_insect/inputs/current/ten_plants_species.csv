@@ -1,0 +1,12 @@
+species_id,organism,initial_size,resource_capacity,max_feeding_demand,offspring_lambda,source_kind,source
+P1,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P2,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P3,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P4,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P5,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P6,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P7,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P8,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P9,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+P10,plant,20,10.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
+H1,insect,200,,1.0,4.0,theoretical_placeholder,"docs/model.md; lambda_egg=4 potential eggs per eligible female before host rejection and larval survival; v0.1.6 illustrative example, not empirically calibrated"

@@ -380,12 +380,12 @@ def audit_run_lifecycle(path, meta):
     assert __debug__, "scientific audits require assertions"
     c = Config(**meta["config"])
     c.validate()
-    assert c.model_version == meta["version"] == "0.1.9"
+    assert c.model_version == meta["version"] == "0.1.11"
     assert meta["genetics_version"] == c.genetics["schema_version"]
-    assert meta["genetics_version"] == "slim-qtl-4"
+    assert meta["genetics_version"] == "slim-qtl-5"
     assert meta["ecology_rule_version"] == c.model_version
     assert meta["functional_schema"] == "expression-tuning-2"
-    assert meta["lifecycle_schema"] == "perennial-plants-larval-recruitment-1"
+    assert meta["lifecycle_schema"] == "resource-coupled-plants-larval-recruitment-1"
     payload = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(payload).hexdigest() == meta["config_sha256"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]
@@ -647,9 +647,12 @@ def audit_run_lifecycle(path, meta):
     if "stored_genotype_values" in meta:
         assert retained_values == meta["stored_genotype_values"]
         assert retained_values <= spec["max_genotype_values_safety"]
-    unique_keys(tx, ("generation", "kind", "offspring_id", "role", "locus_id"), "transmissions")
+    unique_keys(
+        tx, ("generation", "kind", "offspring_id", "role", "copy", "locus_id"), "transmissions"
+    )
     tx_lookup = {
-        (r.generation, r.kind, r.offspring_id, r.role, r.locus_id): r for r in tx.itertuples()
+        (r.generation, r.kind, r.offspring_id, r.role, r.copy, r.locus_id): r
+        for r in tx.itertuples()
     }
     seen_tx, seen_mutations = set(), set()
     calls = {(r["generation"], r["kind"]): r for r in meta["slim_calls"]}
@@ -723,11 +726,15 @@ def audit_run_lifecycle(path, meta):
                 cells = hcells
             maternal = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 0
             donor = np.ones(len(ids), bool) if k == 0 else state["insect_sex"] == 1
-            radius = c.sexual_reproduction["pollen_radius" if k == 0 else "insect_mate_radius"]
-            active = bool(k or (t + 1) % c.plant_demography["reproduction_interval"] == 0)
+            radius = c.sexual_reproduction["insect_mate_radius"] if k else 0
+            active = True
             potential = []
             for i in range(len(ids)):
-                mask = donor & (labels == labels[i]) & (distance(cells[i], cells, shape) <= radius)
+                mask = (
+                    donor & (labels == labels[i]) & (distance(cells[i], cells, shape) <= radius)
+                    if k
+                    else donor.copy()
+                )
                 mask[i] = False
                 potential.append(
                     np.flatnonzero(mask) if active and maternal[i] else np.empty(0, int)
@@ -899,6 +906,7 @@ def audit_run_lifecycle(path, meta):
                             kind,
                             row.offspring_id,
                             "maternal" if role == 0 else "paternal",
+                            role,
                             locus["locus_id"],
                         )
                         transmission = tx_lookup[key]
@@ -921,7 +929,11 @@ def audit_run_lifecycle(path, meta):
                         mutation = mutation_lookup.get(mutation_key)
                         if old == new:
                             assert mutation is None and pd.isna(transmission.mutation_event_id)
-                            assert not spec["mutation_enabled"][kind] or locus["mutation_rate"] != 1
+                            assert (
+                                not k
+                                or not spec["mutation_enabled"][kind]
+                                or locus["mutation_rate"] != 1
+                            )
                         else:
                             assert (
                                 mutation is not None
@@ -1079,8 +1091,7 @@ def audit_run_lifecycle(path, meta):
             -spec_plant["background_mortality_rate"]
             - spec_plant["defoliation_mortality_rate"] * defoliation
         )
-        pulse = (t + 1) % spec_plant["reproduction_interval"] == 0
-        pcounts, ppools, psurvived = parents("plant", Sp, fp, np.ones(len(pids)))
+        pcounts, ppools, psurvived = parents("plant", Sp, fp * post / K, np.ones(len(pids)))
         proposal_mothers = np.repeat(np.arange(len(pids)), pcounts)
         proposal_indices = (
             np.concatenate([np.arange(n) for n in pcounts])
@@ -1143,7 +1154,7 @@ def audit_run_lifecycle(path, meta):
                 V_emit_mean=V[i].mean(),
                 defense_cost=c.plant_cost * D[i].sum(),
                 voc_cost=c.voc_cost * chemical[i, 2],
-                W_plant=Sp[i] * fp[i],
+                W_plant=Sp[i] * fp[i] * post[i] / K[i],
                 resource_capacity=K[i],
                 resource_after_feeding=post[i],
                 defoliation=defoliation[i],
@@ -1152,7 +1163,7 @@ def audit_run_lifecycle(path, meta):
                 resource_recovery=recovery[i] if psurvived[i] else None,
                 resource_next=replenished[i] if psurvived[i] else None,
                 microsite=int(state["plant_microsite"][i]),
-                reproduction_active=pulse,
+                reproduction_active=True,
                 cell_row=int(pcells[i, 0]),
                 cell_col=int(pcells[i, 1]),
             )
@@ -1162,7 +1173,8 @@ def audit_run_lifecycle(path, meta):
         ):
             k = int(kind == "insect")
             ids, labels = state[kind + "_ids"], state[kind + "_species"]
-            bm, bf = np.bincount(mm, minlength=len(ids)), np.bincount(ff, minlength=len(ids))
+            bm = np.bincount(mm, minlength=len(ids))
+            bf = np.bincount(ff, minlength=len(ids))
             rm, rf = (
                 np.bincount(mm[survivor], minlength=len(ids)),
                 np.bincount(ff[survivor], minlength=len(ids)),
@@ -1245,9 +1257,10 @@ def audit_run_lifecycle(path, meta):
                     int(child_selected.sum()),
                     int(np.count_nonzero(child_selected & survivor)),
                 )
-                assert np.isclose(weights[selected].sum(), born) and np.isclose(
-                    recruited[selected].sum(), recruited_next
-                )
+                if k:
+                    assert np.isclose(weights[selected].sum(), born) and np.isclose(
+                        recruited[selected].sum(), recruited_next
+                    )
                 n_retained = int(live_parents[selected].sum()) if k == 0 else 0
                 n_next = recruited_next + n_retained
                 if n == 0:
@@ -1281,11 +1294,26 @@ def audit_run_lifecycle(path, meta):
                     before = state[kind + "_genotypes"][selected]
                     after = birth_genotypes[kind][child_selected & chosen]
                     count = len(after)
+                    if not k:
+                        children_for_label = child_selected & chosen
+                        ww = (
+                            np.bincount(mm[children_for_label], minlength=len(ids))
+                            + np.bincount(ff[children_for_label], minlength=len(ids))
+                        ) / 2
                     for l, locus in enumerate(loci[kind]):
-                        for allele in np.union1d(before[:, :, l], after[:, :, l]):
+                        alleles = np.union1d(before[:, :, l], after[:, :, l])
+                        if not k:
+                            alleles = np.union1d(alleles, state[kind + "_genotypes"][ww > 0, :, l])
+                        for allele in alleles:
                             z = (before[:, :, l] == allele).sum(axis=1) / 2
                             p0 = float(z.mean()) if n else np.nan
-                            pw = float(ww[selected] @ z / count) if count else np.nan
+                            if k:
+                                pw = float(ww[selected] @ z / count) if count else np.nan
+                            else:
+                                all_z = (state[kind + "_genotypes"][:, :, l] == allele).sum(
+                                    axis=1
+                                ) / 2
+                                pw = float(ww @ all_z / count) if count else np.nan
                             p1 = float(np.mean(after[:, :, l] == allele)) if count else np.nan
                             add(
                                 "allele_contributions",

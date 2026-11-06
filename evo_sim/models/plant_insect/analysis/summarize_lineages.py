@@ -124,8 +124,8 @@ def _source(mapping, ident):
 def _summarize_run(folder, design, ancestry_reference_generation=None):
     """Return tables from one saved run without calling simulation functions."""
     metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-    if metadata["version"] != "0.1.9" or metadata.get("genetics_version") != "slim-qtl-4":
-        raise ValueError("lineages require current 0.1.9 / slim-qtl-4 saved ledgers")
+    if metadata["version"] != "0.1.11" or metadata.get("genetics_version") != "slim-qtl-5":
+        raise ValueError("lineages require current 0.1.11 / slim-qtl-5 saved ledgers")
     hashes = {}
 
     def checked(name):
@@ -184,15 +184,24 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
     tables = {name: [] for name in TABLE_COLUMNS}
     mappings, groups, continuity = {}, {}, {}
     all_pools = {
-        kind: sorted({int(p) for s in states.values() for p in s[kind + "_species"]})
+        kind: (
+            [0]
+            if kind == "plant"
+            else sorted({int(p) for s in states.values() for p in s[kind + "_species"]})
+        )
         for kind in KINDS
     }
     for t in sorted(states):
         state = states[t]
         for kind in KINDS:
+            pools = (
+                np.zeros(len(state["plant_ids"]), dtype=int)
+                if kind == "plant"
+                else state["insect_species"]
+            )
             mapping, current, component_sizes = cluster_genotypes(
                 state[kind + "_ids"],
-                state[kind + "_species"],
+                pools,
                 state[kind + "_genotypes"],
                 kind=kind,
                 generation=t,
@@ -249,9 +258,7 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                     )
                 for old, details in groups[t - 1, kind].items():
                     if not outgoing[old]:
-                        pool_alive = np.any(
-                            state[kind + "_species"] == details["compatibility_pool"]
-                        )
+                        pool_alive = np.any(pools == details["compatibility_pool"])
                         represented = any(
                             source == old for source, _ in set(weights) | set(retained_weights)
                         )
@@ -315,7 +322,7 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                         event_scope="operational_component",
                     )
                 )
-            for ident, pool in zip(state[kind + "_ids"], state[kind + "_species"]):
+            for ident, pool in zip(state[kind + "_ids"], pools):
                 label = mapping[int(ident)]
                 lineage, age = continuity.get(label, (UNASSIGNED, 0))
                 tables["memberships"].append(
@@ -332,7 +339,7 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                     )
                 )
             for pool in all_pools[kind]:
-                n = int(np.count_nonzero(state[kind + "_species"] == pool))
+                n = int(np.count_nonzero(pools == pool))
                 tables["populations"].append(
                     dict(
                         generation=t,
@@ -344,7 +351,13 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
                         ),
                         pool_state="present" if n else "empty_at_snapshot",
                         extinction_observed=bool(
-                            t and n == 0 and np.any(states[t - 1][kind + "_species"] == pool)
+                            t
+                            and n == 0
+                            and (
+                                len(states[t - 1]["plant_ids"]) > 0
+                                if kind == "plant"
+                                else np.any(states[t - 1][kind + "_species"] == pool)
+                            )
                         ),
                     )
                 )
@@ -516,10 +529,10 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
 
 
 def summarize(batch, design, ancestry_reference_generation=None):
-    """Summarize an audited v0.1.9 batch; return output tables for further inspection."""
+    """Summarize an audited v0.1.11 batch; return output tables for further inspection."""
     batch = batch if isinstance(batch, Batch) else Batch.open(Path(batch))
-    if read_settings(batch.path).get("version") != "0.1.9":
-        raise ValueError("lineages require a v0.1.9 batch")
+    if read_settings(batch.path).get("version") != "0.1.11":
+        raise ValueError("lineages require a v0.1.11 batch")
     settings = read_design(design)
     collected, inputs, processing = defaultdict(list), {}, []
     for run in batch.status.itertuples(index=False):

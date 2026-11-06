@@ -18,7 +18,7 @@ def test_versioned_output_directory():
         marker = first / "preserve.txt"
         marker.write_text("existing results")
         second = create_output_directory()
-        assert first.relative_to(tmp).as_posix() == "codex/validation/v0.1.9/run1"
+        assert first.relative_to(tmp).as_posix() == "codex/validation/v0.1.11/run1"
         assert not (Path(tmp) / "results").exists()
         assert second.name == "run2" and marker.read_text() == "existing results"
         try:
@@ -101,6 +101,6 @@ def test_long_run_inherits_cases():
 
     c = read_config(ROOT / "evo_sim/models/plant_insect/configs/current_200gen.yaml")
     assert c["batch"]["replicates"] == 4
-    assert [x["name"] for x in c["batch"]["cases"]] == ["resource10"]
-    assert c["parameters"]["resource_capacity"] == {"P1": 10.0}
+    assert [x["name"] for x in c["batch"]["cases"]] == ["ten_types", "ten_types_no_insects"]
+    assert c["parameters"]["resource_capacity"] == {f"P{i}": 10.0 for i in range(1, 11)}
     assert c["simulation_metadata"]["num_steps_per_episode"] == 200

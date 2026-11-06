@@ -24,7 +24,9 @@ def commit_parent_contributions(parent_groups):
             row["contribution_committed"] = True
 
 
-def allele_contributions(current, offspring, parent_groups, genetic, generation, sizes):
+def allele_contributions(
+    current, offspring, parent_groups, genetic, generation, sizes, plant_records
+):
     """Parent/child allele union per species/locus; extinct offspring are missing."""
     rows = []
     for k, kind in enumerate(("plant", "insect")):
@@ -37,16 +39,29 @@ def allele_contributions(current, offspring, parent_groups, genetic, generation,
         for s in range(sizes[k]):
             parent_mask, child_mask = before.species == s, after.species == s
             n, next_n = int(parent_mask.sum()), int(child_mask.sum())
-            w = weights[parent_mask]
+            if kind == "plant":
+                ids = {int(id_): i for i, id_ in enumerate(before.ids)}
+                w = np.zeros(len(before))
+                for record in plant_records:
+                    if record["species"] == f"P{s + 1}":
+                        w[ids[record["maternal_id"]]] += 0.5
+                        w[ids[record["paternal_id"]]] += 0.5
+                weighted_parents = before.genotypes
+            else:
+                w = weights[parent_mask]
+                weighted_parents = before.genotypes[parent_mask]
             if not np.isclose(w.sum(), next_n):
                 raise ValueError("biparental contribution does not equal offspring population")
             for l, locus in enumerate(genetic.loci[kind]):
                 parental = before.genotypes[parent_mask, :, l]
                 child = after.genotypes[child_mask, :, l]
-                for allele_id in np.union1d(parental, child):
+                for allele_id in np.union1d(
+                    np.union1d(parental, child), weighted_parents[w > 0, :, l]
+                ):
                     z = (parental == allele_id).sum(axis=1) / 2
                     p = float(z.mean()) if n else np.nan
-                    weighted = float(w @ z / next_n) if next_n else np.nan
+                    wz = (weighted_parents[:, :, l] == allele_id).sum(axis=1) / 2
+                    weighted = float(w @ wz / next_n) if next_n else np.nan
                     actual = float(np.mean(child == allele_id)) if next_n else np.nan
                     rows.append(
                         dict(

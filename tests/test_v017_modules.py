@@ -28,7 +28,7 @@ def module_config(**changes):
     values.update(generations=1, plant_sizes=[8], insect_sizes=[16])
     values.update(changes)
     c = Config(**values)
-    c.plant_demography.update(reproduction_interval=1, microsites_per_cell=4 * sum(c.plant_sizes))
+    c.plant_demography.update(microsites_per_cell=4 * sum(c.plant_sizes))
     c.spatial.update(
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes),
         initial_insect_cells=[[0, 0]] * sum(c.insect_sizes),
@@ -147,11 +147,14 @@ def test_v017_current_contract_rejects_removed_settlement_and_preserves_formal_d
     assert loaded["simulation_metadata"]["num_steps_per_episode"] == 200
     assert loaded["batch"]["replicates"] == 4
     base = loaded["parameters"]
-    assert base["plant_sizes"] == [40] and base["insect_sizes"] == [40]
-    assert base["genetics"]["schema_version"] == "slim-qtl-4"
+    assert base["plant_sizes"] == [20] * 10 and base["insect_sizes"] == [200]
+    assert base["genetics"]["schema_version"] == "slim-qtl-5"
     assert "adult_settlement_enabled" not in base["functional_modules"]
     assert "flowering_kappa" not in base["functional_modules"]
-    assert [case["name"] for case in loaded["batch"]["cases"]] == ["resource10"]
+    assert [case["name"] for case in loaded["batch"]["cases"]] == [
+        "ten_types",
+        "ten_types_no_insects",
+    ]
     assert base["seed"] == 20261102
     for case in loaded["batch"]["cases"]:
         values = merge_config(base, case["overrides"])
@@ -162,11 +165,11 @@ def test_v017_native_lifecycle_independent_audit_and_tamper_rejection():
     c = module_config(generations=2)
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
-    assert result["metadata"]["version"] == "0.1.9"
+    assert result["metadata"]["version"] == "0.1.11"
     assert result["metadata"]["functional_schema"] == "expression-tuning-2"
     first = result["snapshots"][0]
     assert first["insect_module_traits"].shape == (16, 8)
-    assert result["metadata"]["genetics_version"] == "slim-qtl-4"
+    assert result["metadata"]["genetics_version"] == "slim-qtl-5"
     assert not any("flower" in key or "theta" in key for key in result["metadata"])
     assert not any("flower" in key or "theta" in key for key in first)
     assert "flowering_kappa" not in c.functional_modules
@@ -258,7 +261,7 @@ def test_v017_adults_mate_at_existing_cells_and_failure_is_atomic():
 
 
 def test_superseded_protocols_and_removed_modules_are_rejected():
-    for protocol in ("slim-qtl-1", "slim-qtl-2", "slim-qtl-3"):
+    for protocol in ("slim-qtl-1", "slim-qtl-2", "slim-qtl-3", "slim-qtl-4"):
         old = module_config()
         old.genetics["schema_version"] = protocol
         raises(old.validate)

@@ -79,7 +79,7 @@ def test_shared_qtl_shapes_native_inheritance_and_chemical_audit():
         if kind == "plant":
             assert values["plant_chemical_traits"].shape[1] == 3
     result = simulate(c)
-    assert result["metadata"]["genetics_version"] == "slim-qtl-4"
+    assert result["metadata"]["genetics_version"] == "slim-qtl-5"
     assert result["metadata"]["plant_trait_order"] == ["x_N", "x_S", "x_V"]
     for state in result["snapshots"]:
         assert "plant_voc_independent_trait" not in state

@@ -1,0 +1,38 @@
+extends: current_base.yaml
+input_files:
+  species: ../inputs/current/ten_plants_species.csv
+  alleles: ../inputs/current/ten_plants_alleles.csv
+  founder_frequencies: ../inputs/current/ten_plants_founder_frequencies.csv
+  reference_traits: ../inputs/current/ten_plants_reference_traits.csv
+simulation_metadata:
+  num_steps_per_episode: 30
+parameters:
+  seed: 20261102
+  genetics:
+    mutation_enabled:
+      plant: false
+      insect: false
+    provenance:
+      founders:
+        source_kind: theoretical_placeholder
+        description: Ten illustrative chemical centers with two segregating alleles per plant locus;
+          the P1 and insect founder distributions retain the baseline reference. Plant labels track maternal initial chemical types, not reproductive isolation or calibrated species.
+  plant_demography:
+    microsites_per_cell: 3
+  parameter_provenance:
+    resources:
+      kind: theoretical_placeholder
+      source: Dimensionless K=10 and demand=1 are theoretical references, not measured values.
+batch:
+  purpose: Thirty-round development mechanism check of ten initial chemical types.
+    Each type starts with 20 plants; 200 insects and 300 shared establishment sites.
+    Plants retain biparental QTL inheritance and recombination with global random donors.
+    Mutation is disabled in this mechanism control; use current_base for mutation-enabled runs.
+    The no-insects case is a matched control; this is not a speciation experiment.
+  replicates: 4
+  cases:
+  - name: ten_types
+    overrides: {}
+  - name: ten_types_no_insects
+    overrides:
+      insect_sizes: [0]

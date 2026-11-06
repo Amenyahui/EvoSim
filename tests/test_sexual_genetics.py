@@ -87,12 +87,13 @@ def test_fertilization_mutation_and_phenotype():
     np.testing.assert_allclose(raw[0], expected)
     np.testing.assert_array_equal(values["D"][0], np.clip(expected, 0, 1)[:2])
     raises(
-        lambda: genetic.fertilize(g, np.array([0, 1]), np.array([0, 1]), [0], [1], "plant", 2, 1)
+        lambda: genetic.fertilize(g, np.array([0, 1]), np.array([0, 1]), [0], [0], "plant", 2, 1)
     )
 
 
 def test_per_offspring_mutation_probability():
     c = config()
+    c.genetics["mutation_enabled"]["plant"] = True
     genetic = GeneticState(c)
     g = genetic.founders([2, 0], "plant")
     n = 3000

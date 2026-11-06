@@ -88,8 +88,10 @@ def test_terminal_and_atomic_failure():
     with TemporaryDirectory() as tmp:
         save_result(runner.result, Path(tmp) / "injected")
         assert audit_run(Path(tmp) / "injected")["status"] == "computational_limit"
-    for field, value in (("max_alleles_safety", 48), ("max_genotype_values_safety", 736)):
-        c = config()
+    for field, value in (("max_alleles_safety", 44), ("max_genotype_values_safety", 736)):
+        c = config(insect_sizes=[40], choice_mode="forced")
+        c.spatial["initial_plant_cells"] = [[0, 0]] * 40
+        c.spatial["initial_insect_cells"] = [[0, 0]] * 40
         c.genetics[field] = value
         r = simulate(c)
         assert r["metadata"]["status"]["status"] == "computational_limit" and not r["offspring"]
@@ -100,7 +102,9 @@ def test_terminal_and_atomic_failure():
 
 
 def test_linked_run_audit_and_tampering():
-    c = config(generations=3)
+    c = config(generations=3, insect_sizes=[40], choice_mode="forced")
+    c.spatial["initial_plant_cells"] = [[0, 0]] * 40
+    c.spatial["initial_insect_cells"] = [[0, 0]] * 40
     for l, locus in enumerate(c.genetics["loci"]):
         locus.update(chromosome_id=locus["organism"] + "_linked", position_cM=float(10 * l))
     result = simulate(c)
@@ -117,7 +121,7 @@ def test_linked_run_audit_and_tampering():
             file = path / (table + ".csv")
             original = file.read_bytes()
             frame = pd.read_csv(file)
-            row = frame.index[frame.kind == "insect"][0] if table == "parents" else 0
+            row = frame.index[frame.kind == "insect"][0]
             assert not pd.isna(frame.loc[row, column])
             frame.loc[row, column] += 100000
             frame.to_csv(file, index=False)
@@ -178,11 +182,11 @@ def test_slim_failure_does_not_commit_or_fall_back():
 
     c = config()
     g = GeneticState(c)
-    parents = g.founders([2, 0], "plant")
+    parents = g.founders([2], "insect")
     before = g.alleles.copy()
     with patch.object(slim_backend.subprocess, "run", corrupt):
         raises(
-            lambda: g.fertilize(parents, np.zeros(2, int), np.arange(2), [0], [1], "plant", 2, 1),
+            lambda: g.fertilize(parents, np.zeros(2, int), np.arange(2), [0], [1], "insect", 2, 1),
             SlimError,
         )
     assert g.alleles == before and not g.events and not g.engine_calls

@@ -25,6 +25,8 @@ def audit_run(path):
     """Check saved records; a valid failure ledger does not imply successful execution."""
     path = Path(path)
     meta = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
+    if meta["version"] != "0.1.11":
+        raise ValueError("Use the frozen historical source to audit a superseded model protocol")
     status = meta["status"]["status"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]
     for name, digest in meta["output_sha256"].items():
@@ -42,8 +44,6 @@ def audit_run(path):
                 max_balance_error=0.0,
             )
         raise AssertionError("invalid_parameter record has valid configuration")
-    if meta["version"] != "0.1.9":
-        raise ValueError("Use the frozen historical source to audit a superseded model protocol")
     from .audit_lifecycle import audit_run_lifecycle
 
     return dict(audit_run_lifecycle(path, meta), execution_success=status in SUCCESS_STATUSES)

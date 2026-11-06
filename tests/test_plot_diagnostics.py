@@ -124,7 +124,7 @@ def test_summary_batch_has_no_figure_side_effect():
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "data").mkdir()
-        (root / "settings.json").write_text(json.dumps({"version": "0.1.9"}))
+        (root / "settings.json").write_text(json.dumps({"version": "0.1.11"}))
         (root / "audits").mkdir()
         (root / "audits/integrity_audit.json").write_text(json.dumps({"runs": 1}))
         (root / "data/run_status.csv").write_text("case,replicate,status\nx,1,completed\n")
@@ -186,7 +186,7 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
                 "host_resource_by_generation",
             )
         }
-        data["lifecycle_schema"] = "perennial-plants-larval-recruitment-1"
+        data["lifecycle_schema"] = "resource-coupled-plants-larval-recruitment-1"
         assert data["host_resource_by_generation"].generation.max() == 3
         captured = []
         with patch(
@@ -278,7 +278,7 @@ def test_v017_module_panels_and_surviving_recruitment():
                 population_timeseries=pop,
                 species_extinction=ext,
                 host_resource_by_generation=resource,
-                lifecycle_schema="perennial-plants-larval-recruitment-1",
+                lifecycle_schema="resource-coupled-plants-larval-recruitment-1",
             ),
             Path(tmp),
             60,

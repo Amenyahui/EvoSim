@@ -10,37 +10,36 @@ class ComputationalLimit(RuntimeError):
 
 
 def plant_resource_update(stock, consumed, capacity, spec):
-    """One insect-generation of defoliation mortality and potential survivor regrowth."""
+    """Update resource and survival from the post-feeding capacity deficit."""
     stock, consumed, capacity = (np.asarray(a, float) for a in (stock, consumed, capacity))
     if (
         stock.shape != consumed.shape
         or stock.shape != capacity.shape
         or not all(np.isfinite(a).all() for a in (stock, consumed, capacity))
         or (capacity <= 0).any()
+        or (stock < 0).any()
         or (consumed < 0).any()
         or (consumed > stock).any()
         or (stock > capacity).any()
     ):
-        raise ValueError("plant stock must be within positive capacity and cover consumption")
+        raise ValueError("plant stock must cover consumption and satisfy 0 <= stock <= K")
     post = stock - consumed
-    defoliation = 1 - post / capacity
+    deficit = 1 - post / capacity
     survival = np.exp(
-        -spec["background_mortality_rate"] - spec["defoliation_mortality_rate"] * defoliation
+        -spec["background_mortality_rate"] - spec["defoliation_mortality_rate"] * deficit
     )
     recovered = capacity - (capacity - post) * np.exp(-spec["resource_recovery_rate"])
-    return post, defoliation, survival, recovered
+    return post, deficit, survival, recovered
 
 
 def validate_sexual(c):
     spec = c.sexual_reproduction
     fixed = dict(
-        plant_mating_system="hermaphroditic_obligate_outcrossing",
-        plant_selfing=False,
         insect_mating_system="dioecious",
         father_sampling="uniform_with_replacement",
     )
     probabilities = ("insect_founder_female_probability", "insect_offspring_female_probability")
-    radii = ("pollen_radius", "insect_mate_radius")
+    radii = ("insect_mate_radius",)
     if not isinstance(spec, dict) or set(spec) != set(fixed) | set(probabilities) | set(radii) | {
         "provenance"
     }:

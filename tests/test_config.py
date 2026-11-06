@@ -30,7 +30,7 @@ def test_yaml_is_complete_and_missing_parameters_fail():
             loaded["parameters"], generations=loaded["simulation_metadata"]["num_steps_per_episode"]
         )
         assert set(values) == {field.name for field in fields(Config)} - (
-            {"functional_modules"} if values["model_version"] != "0.1.9" else set()
+            {"functional_modules"} if values["model_version"] != "0.1.11" else set()
         ), path
         for case in loaded["batch"]["cases"]:
             Config(**merge_config(values, case["overrides"])).validate()
@@ -134,7 +134,8 @@ def test_nondefault_mapping_flows_through_simulation_and_independent_audit():
 
 
 def test_configured_mutation_mean_is_applied_and_audited():
-    c = config(generations=1)
+    c = config(generations=1, insect_sizes=[40], choice_mode="forced")
+    c.spatial.update(initial_plant_cells=[[0, 0]] * 40, initial_insect_cells=[[0, 0]] * 40)
     for locus in c.genetics["loci"]:
         locus["mutation_rate"] = 1.0
         locus["mutation_sd"] = [0.0] * len(locus["mutation_sd"])

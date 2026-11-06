@@ -24,7 +24,7 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
     runner.init()
     runtime = runner.state["environment"]["runtime"]
     runtime.update = True
-    runtime.c.sexual_reproduction.update(pollen_radius=0, insect_mate_radius=0)
+    runtime.c.sexual_reproduction.update(insect_mate_radius=0)
     runner.state["agents"]["plants"]["cells"][:] = [[0, 0], [0, 0], [5, 5], [0, 0]]
     runner.state["agents"]["insects"]["sex"][:] = [0, 1, 0, 1]
     runner.state["agents"]["insects"]["cells"][:] = [[0, 0], [0, 0], [5, 5], [5, 5]]
@@ -58,35 +58,34 @@ def test_v015_roles_zero_cost_multiplier_and_mate_boundaries():
             return counts, candidates, rows
 
         counts, candidates, rows = sample()
-        assert candidates[0].tolist() == [1]  # A zero-cost-multiplier father remains eligible.
-        assert rows[1]["eligible_as_donor"] and rows[1]["F_i"] == 0
-        assert counts[0] == (2 if kind == 0 else 4)
-        assert not counts[1:].any()
-        assert rows[0]["expected_propagules" if kind == 0 else "expected_maternal_offspring"] == (
-            2 if kind == 0 else 4
-        )
         if kind == 0:
-            assert rows[0]["eligible_as_donor"]
+            assert candidates[0].tolist() == [1, 2, 3]  # Includes distant and other-label plants.
+            assert counts.tolist() == [2, 0, 2, 2]
+            assert rows[0]["expected_propagules"] == 2
             assert rows[1]["eligible_as_mother"] and rows[1]["conditional_mu"] == 0
-            assert not candidates[2].size  # Outside pollen radius.
-            assert not candidates[3].size  # A different compatibility pool cannot donate.
+            assert rows[1]["eligible_as_donor"]  # Zero maternal fecundity does not bar siring.
         else:
+            assert candidates[0].tolist() == [1]
+            assert rows[1]["eligible_as_donor"] and rows[1]["F_i"] == 0
+            assert counts.tolist() == [4, 0, 0, 0]
+            assert rows[0]["expected_maternal_offspring"] == 4
             assert not rows[0]["eligible_as_donor"] and not rows[1]["eligible_as_mother"]
             assert np.isnan(rows[1]["expected_maternal_offspring"])
             assert rows[2]["expected_maternal_offspring"] == 0
-            assert rows[3][
-                "eligible_as_donor"
-            ]  # Current adults are not sampled for survival again.
+            assert rows[3]["eligible_as_donor"]
         fecundity[:] = 0
         assert not sample()[0].any()
         fecundity[0] = 1
         if kind == 0:
             survival[1] = 0
+            counts, candidates, rows = sample()
+            assert counts[0] == 2 and rows[0]["expected_propagules"] == 2
+            assert candidates[0].tolist() == [2, 3]
         else:
             population.cells[1] = [5, 5]
-        counts, candidates, rows = sample()
-        assert not candidates[0].size and not counts.any()
-        assert rows[0]["expected_propagules" if kind == 0 else "expected_maternal_offspring"] == 0
+            counts, candidates, rows = sample()
+            assert not candidates[0].size and not counts.any()
+            assert rows[0]["expected_maternal_offspring"] == 0
 
 
 def test_v015_cost_functions_and_maternal_mean():
@@ -163,9 +162,10 @@ def test_v015_native_zero_multiplier_fathers_and_contribution_audit():
         start = result["snapshots"][0]
         start_lookup = {int(i): row for row, i in enumerate(start[f"{kind}_ids"])}
         for row, child in enumerate(offspring):
+            genotype = np.array(json.loads(child["genotype"]))
             for copy, role in enumerate(("maternal_id", "paternal_id")):
                 source = start[f"{kind}_genotypes"][start_lookup[child[role]]]
-                for locus, allele in enumerate(json.loads(child["genotype"])[copy]):
+                for locus, allele in enumerate(genotype[copy]):
                     assert allele in source[:, locus]
         with TemporaryDirectory() as tmp:
             folder = Path(tmp) / kind
@@ -196,4 +196,5 @@ def test_v015_historical_configuration_execution_boundary():
             dict(base=config_payload(old), cases=[dict(name="check", overrides={})], replicates=1),
             path,
         )
-        assert audit_run(path / "data/check/rep01")["status"] == "invalid_parameter"
+        # A legacy-version record must use its frozen reader, including failed requests.
+        raises(lambda: audit_run(path / "data/check/rep01"))

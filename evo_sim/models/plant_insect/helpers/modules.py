@@ -4,7 +4,7 @@ import numpy as np
 
 
 def enabled(c):
-    return c.genetics["schema_version"] == "slim-qtl-4"
+    return c.genetics["schema_version"] == "slim-qtl-5"
 
 
 def validate(spec):

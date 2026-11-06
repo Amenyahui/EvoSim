@@ -1,7 +1,7 @@
 import numpy as np
 
 from evo_sim.models.plant_insect import simulate
-from evo_sim.models.plant_insect.helpers.demography import maternal_moments, mating_candidates
+from evo_sim.models.plant_insect.helpers.demography import mating_candidates
 from evo_sim.models.plant_insect.helpers.runtime import community_state
 from evo_sim.models.plant_insect.helpers.spatial import disperse, distance
 from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
@@ -22,10 +22,10 @@ def test_periodic_mates_and_dispersal():
 
 def test_maternal_sampling_moments_and_survival():
     runner = base_runner()
-    runner.config["parameters"]["plant_sizes"] = [3, 0]
+    runner.config["parameters"]["plant_sizes"] = [2, 1]
     runner.init()
     runtime = runner.state["environment"]["runtime"]
-    runner.state["agents"]["plants"]["cells"][:] = 0
+    runner.state["agents"]["plants"]["cells"][:] = [[0, 0], [5, 5], [9, 9]]
     runtime.update = True
     runtime.e = dict(S_plant=np.array([0.6, 0.4, 0.5]), fp=np.ones(3))
     population = community_state(runner.state["agents"]).plants
@@ -39,7 +39,9 @@ def test_maternal_sampling_moments_and_survival():
             runtime,
             0,
         )
-        return dict(offspring_count=counts, survived_to_reproduce=survived, candidates=candidates)
+        return dict(
+            offspring_count=counts, survived_to_reproduce=survived, rows=rows, candidates=candidates
+        )
 
     samples = []
     for _ in range(12000):
@@ -47,28 +49,20 @@ def test_maternal_sampling_moments_and_survival():
         values = sample()
         samples.append(values["offspring_count"][0])
         assert np.all(values["offspring_count"][~values["survived_to_reproduce"]] == 0)
-    q, mean, variance = maternal_moments(
-        np.array([0.6, 0.4, 0.5]),
-        np.full(3, 2.0),
-        [np.array([1, 2]), np.array([0]), np.array([], int)],
-        np.ones(3, bool),
-    )
-    np.testing.assert_allclose(q, [0.7, 0.6, 0])
-    assert abs(np.mean(samples) - mean[0]) < 0.04
-    assert abs(np.var(samples) - variance[0]) < 0.1
-    print(
-        "maternal moments: N=12000",
-        np.mean(samples),
-        np.var(samples),
-        "expected",
-        mean[0],
-        variance[0],
-    )
+    p = 0.6 * (1 - (1 - 0.4) * (1 - 0.5))
+    mean = p * 2.0
+    variance = mean + p * (1 - p) * 2.0**2
+    assert np.isclose(values["rows"][0]["expected_propagules"], mean)
+    assert np.isclose(values["rows"][0]["propagule_variance"], variance)
+    assert abs(np.mean(samples) - mean) < 0.04
+    assert abs(np.var(samples) - variance) < 0.1
     runtime.e["S_plant"] = np.array([1.0, 0.0, 0.0])
     values = sample()
-    assert not values["offspring_count"].any()
     assert values["survived_to_reproduce"].tolist() == [True, False, False]
+    assert not values["offspring_count"].any()
     runtime.e["S_plant"][:] = 1
+    values = sample()
+    assert values["candidates"][0].tolist() == [1, 2]
     runtime.e["fp"][:] = 0
     assert not sample()["offspring_count"].any()
 
@@ -84,8 +78,10 @@ def test_single_sex_singleton_and_extinction():
             if x["kind"] == "insect"
         )
         assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 16)
-    r = simulate(config(plant_sizes=[1, 0], insect_sizes=[0]))
-    assert not r["offspring"]  # A living singleton cannot outcross; it is not automatically dead.
+    c = config(plant_sizes=[1, 0], insect_sizes=[0])
+    c.plant_offspring_lambda["P1"] = 100.0
+    r = simulate(c)
+    assert not r["offspring"]  # A lone surviving plant cannot outcross.
     r = simulate(config(plant_sizes=[0, 0], insect_sizes=[0]))
     assert r["metadata"]["status"]["generation"] == 0
     r = simulate(config(plant_sizes=[0, 0]))

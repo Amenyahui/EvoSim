@@ -1,3 +1,3 @@
 species_id,organism,initial_size,resource_capacity,max_feeding_demand,offspring_lambda,source_kind,source
-P1,plant,40,1.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per reproductive pulse before vacant-site establishment; theoretical reference
+P1,plant,40,1.0,,2.0,theoretical_placeholder,docs/model.md; lambda_P=2 effective propagule proposals per eligible plant per round before vacant-site establishment; theoretical reference
 H1,insect,40,,1.0,4.0,theoretical_placeholder,docs/model.md v0.1.7 potential eggs per female

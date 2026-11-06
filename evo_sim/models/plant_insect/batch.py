@@ -33,7 +33,8 @@ COLUMNS = {
         "generation plant_id plant_row species species_id R T gamma X h herbivore_load D_sum "
         "V_emit_mean defense_cost voc_cost W_plant cell_row cell_col "
         "resource_capacity resource_after_feeding defoliation survival_probability survived "
-        "resource_recovery resource_next microsite reproduction_active"
+        "resource_recovery resource_next "
+        "microsite reproduction_active"
     ),
     "parents": (
         "generation reproduction_round kind species species_id individual_id "
@@ -104,7 +105,7 @@ COLUMNS = {
         "offspring_id locus_id copy parent_allele_id allele_id delta mutation_stream"
     ),
     "gamete_transmissions": (
-        "generation reproduction_round adult_cohort kind offspring_id role parent_id "
+        "generation reproduction_round adult_cohort kind offspring_id role copy parent_id "
         "chromosome_id locus_id position_cM inherited_allele_id child_allele_id "
         "transmitted_homolog_before_mutation crossover_count switch_before_locus "
         "mutation_event_id"

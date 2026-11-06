@@ -32,7 +32,7 @@ state:
       - adult_cohort
 substeps:
   '0':
-    name: perennial_plants_larval_recruitment
+    name: resource_coupled_plants_larval_recruitment
     active_agents: []
     transition:
       advance:

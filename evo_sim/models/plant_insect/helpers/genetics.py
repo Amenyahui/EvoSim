@@ -66,16 +66,16 @@ def validate(c, K):
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
-        c.model_version != "0.1.9"
+        c.model_version != "0.1.11"
         or c.mapping != "shared_chemical_modules"
         or g["mode"] != "sexual_qtl"
-        or g["schema_version"] != "slim-qtl-4"
+        or g["schema_version"] != "slim-qtl-5"
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
         or g["recombination_model"] != "slim_haldane_marker_map"
     ):
-        raise ValueError("current model requires the native slim-qtl-4 module protocol")
+        raise ValueError("current model requires the native slim-qtl-5 module protocol")
     settings = g["slim"]
     if not isinstance(settings, dict) or set(settings) != {"executable", "timeout_seconds"}:
         raise ValueError("slim requires executable and timeout_seconds")
@@ -223,7 +223,7 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
-        if c.genetics["schema_version"] != "slim-qtl-4":
+        if c.genetics["schema_version"] != "slim-qtl-5":
             raise ValueError("SLiM QTL execution requires a declared supported native protocol")
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n
@@ -318,7 +318,9 @@ class GeneticState:
             raise ValueError("aligned parental indices required")
         if any(((p < 0) | (p >= len(ids))).any() for p in (mothers, fathers)):
             raise ValueError("parent index outside current population")
-        if (mothers == fathers).any() or (labels[mothers] != labels[fathers]).any():
+        if (mothers == fathers).any() or (
+            kind == "insect" and (labels[mothers] != labels[fathers]).any()
+        ):
             raise ValueError("distinct parents from the same ancestral compatibility pool required")
         if next_id + len(mothers) >= 2**63:
             raise ComputationalLimit("individual ID int64 limit")
@@ -434,6 +436,7 @@ class GeneticState:
                             kind=kind,
                             offspring_id=int(child_ids[i]),
                             role="maternal" if h == 0 else "paternal",
+                            copy=h,
                             parent_id=int(ids[parent]),
                             chromosome_id=locus["chromosome_id"],
                             locus_id=locus["locus_id"],

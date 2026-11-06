@@ -1,4 +1,4 @@
-"""Perennial stock, finite establishment and atomic-storage contracts."""
+"""Resource stock, finite establishment and atomic-storage contracts."""
 
 import copy
 from types import SimpleNamespace
@@ -11,12 +11,11 @@ from evo_sim.models.plant_insect.helpers.spatial import establish_propagules
 from tests.support import config, raises
 
 
-def perennial_config(**changes):
+def plant_config(**changes):
     c = config(**dict(dict(plant_sizes=[2, 0], insect_sizes=[0], generations=10), **changes))
     c.plant_demography.update(
         background_mortality_rate=0.0,
         defoliation_mortality_rate=0.0,
-        reproduction_interval=5,
         microsites_per_cell=4,
     )
     c.spatial.update(
@@ -27,7 +26,7 @@ def perennial_config(**changes):
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes),
         initial_insect_cells=None,
     )
-    c.sexual_reproduction.update(pollen_radius=0, insect_mate_radius=0)
+    c.sexual_reproduction.update(insect_mate_radius=0)
     c.genetics["mutation_enabled"] = {"plant": False, "insect": False}
     return c
 
@@ -43,8 +42,8 @@ def runner_for(c):
     return r
 
 
-def test_perennial_resource_equations_and_invalid_stock():
-    c = perennial_config()
+def test_resource_equations_and_invalid_stock():
+    c = plant_config()
     spec = c.plant_demography
     spec.update(background_mortality_rate=np.log(2), defoliation_mortality_rate=np.log(4))
     post, deficit, survival, recovered = plant_resource_update(
@@ -74,8 +73,19 @@ def test_perennial_resource_equations_and_invalid_stock():
     raises(bad.validate)
 
 
+def test_resource_deficit_depends_only_on_current_stock_and_recovers():
+    spec = plant_config().plant_demography
+    spec.update(background_mortality_rate=-np.log(0.99), defoliation_mortality_rate=0.3)
+    post, deficit, survival, recovered = plant_resource_update([2.5], [0], [10], spec)
+    np.testing.assert_allclose(deficit, 0.75)
+    np.testing.assert_allclose(survival, 0.99 * np.exp(-0.3 * 0.75))
+    np.testing.assert_allclose(recovered, 6.25)
+    _, following, _, _ = plant_resource_update(recovered, [0], [10], spec)
+    assert following[0] < deficit[0]
+
+
 def test_initial_sites_are_unique_and_explicit_overflow_is_rejected():
-    c = perennial_config()
+    c = plant_config()
     c.plant_demography["microsites_per_cell"] = 1
     raises(c.validate)
     c.spatial.update(grid_shape=[2, 2], initial_plant_cells=None)
@@ -87,7 +97,7 @@ def test_initial_sites_are_unique_and_explicit_overflow_is_rejected():
 
 
 def test_full_sites_retain_adults_without_manufacturing_newborns():
-    c = perennial_config()
+    c = plant_config()
     c.plant_demography["microsites_per_cell"] = 2
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
@@ -100,37 +110,31 @@ def test_full_sites_retain_adults_without_manufacturing_newborns():
     assert all(p["N_retained"] == p["N_next"] == 2 and p["N_offspring"] == 0 for p in plants)
 
 
-def test_pulse_establishment_only_and_newborns_wait_until_next_pulse():
-    c = perennial_config()
+def test_each_round_establishment_and_newborn_resource():
+    c = plant_config()
     c.plant_offspring_lambda = {"P1": 20.0, "P2": 20.0}
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
     births = [p for p in result["offspring"] if p["kind"] == "plant"]
-    assert len(births) == 2 and {p["generation"] for p in births} == {5}
+    assert len(births) == 2 and {p["generation"] for p in births} == {1}
     new_ids = {p["offspring_id"] for p in births}
     for parent in result["parents"]:
         if parent["kind"] == "plant":
             assert parent["expected_maternal_offspring"] is None
-            assert parent["maternal_offspring_variance"] is None
-            assert parent["reproduction_active"] == ((parent["generation"] + 1) % 5 == 0)
-            if parent["individual_id"] in new_ids and parent["generation"] < 9:
-                assert parent["propagule_count"] == 0
-                assert not parent["eligible_as_mother"]
-    at_next_pulse = [
-        p
-        for p in result["parents"]
-        if p["kind"] == "plant" and p["individual_id"] in new_ids and p["generation"] == 9
-    ]
-    assert len(at_next_pulse) == 2 and all(p["propagule_count"] > 0 for p in at_next_pulse)
-    assert {row["reproduction_round"] for row in result["plant_proposals"]} == {4, 9}
+            assert parent["reproduction_active"]
+            if parent["individual_id"] in new_ids:
+                assert parent["eligible_as_mother"]
+                assert parent["conditional_mu"] > 0
+    assert {row["reproduction_round"] for row in result["plant_proposals"]} == set(range(10))
     for newborn in births:
-        state = result["snapshots"][5]
+        state = result["snapshots"][1]
         i = np.flatnonzero(state["plant_ids"] == newborn["offspring_id"])[0]
         assert state["plant_resource"][i] == c.plant_demography["newborn_resource_fraction"]
+        assert newborn["paternal_id"] != newborn["maternal_id"]
 
 
 def test_shared_lottery_is_unbiased_and_never_fills_untargeted_sites():
-    c = perennial_config()
+    c = plant_config()
     c.plant_demography["microsites_per_cell"] = 1
     c.spatial["grid_shape"] = [2, 2]
     rng = np.random.default_rng(771)
@@ -145,7 +149,8 @@ def test_shared_lottery_is_unbiased_and_never_fills_untargeted_sites():
 
 
 def test_survivor_snapshot_budget_and_failure_rollback():
-    c = perennial_config(generations=4)
+    c = plant_config(generations=4)
+    c.plant_demography["microsites_per_cell"] = 2
     initial = 2 * sum(c.plant_sizes) * 6
     c.genetics["max_genotype_values_safety"] = initial * 5
     passed = simulate(c)
@@ -170,8 +175,8 @@ def test_survivor_snapshot_budget_and_failure_rollback():
 
 
 def test_only_established_seedlings_get_native_genotypes():
-    c = perennial_config(generations=1)
-    c.plant_demography.update(reproduction_interval=1, microsites_per_cell=3)
+    c = plant_config(generations=1)
+    c.plant_demography.update(microsites_per_cell=3)
     c.plant_offspring_lambda = {"P1": 20.0, "P2": 20.0}
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
@@ -184,7 +189,7 @@ def test_only_established_seedlings_get_native_genotypes():
 
 
 def test_feeding_uses_carried_stock_then_survivors_regrow():
-    c = perennial_config(generations=2, insect_sizes=[2], choice_mode="forced")
+    c = plant_config(generations=2, insect_sizes=[2], choice_mode="forced")
     r = runner_for(c)
     r.state["agents"]["insects"]["sex"][:] = [0, 1]
     rt = r.state["environment"]["runtime"]
@@ -194,6 +199,18 @@ def test_feeding_uses_carried_stock_then_survivors_regrow():
     first = [row for row in r.result["plants"] if row["generation"] == 0]
     second = [row for row in r.result["plants"] if row["generation"] == 1]
     assert sum(row["X"] for row in first) > 0
+    parents = {
+        row["individual_id"]: row
+        for row in r.result["parents"]
+        if row["kind"] == "plant" and row["generation"] == 0
+    }
+    for row in first:
+        expected_f = max(0, 1 - row["defense_cost"] - row["voc_cost"])
+        expected_f *= row["resource_after_feeding"] / row["resource_capacity"]
+        assert np.isclose(parents[row["plant_id"]]["F_i"], expected_f)
+        assert np.isclose(row["W_plant"], parents[row["plant_id"]]["W_i"])
+        if row["resource_after_feeding"] == 0:
+            assert parents[row["plant_id"]]["propagule_count"] == 0
     for before, after in zip(first, second, strict=True):
         expected = 1 - (1 - before["resource_after_feeding"]) * np.exp(
             -c.plant_demography["resource_recovery_rate"]

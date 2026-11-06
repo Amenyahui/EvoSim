@@ -34,8 +34,8 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_larval_feeding
   demand_window: one_generation_larval_feeding
-  model_version: 0.1.9
-  life_history: perennial_plants_nonoverlapping_insects
+  model_version: 0.1.11
+  life_history: resource_coupled_plants_larval_insects
   demography:
     plant_survival: bernoulli
     insect_survival: bernoulli
@@ -58,7 +58,7 @@ parameters:
       source: docs/model.md; theoretical resource and chemistry reference, not empirically calibrated
     plant_demography:
       kind: theoretical_placeholder
-      source: docs/model.md; researcher-selected perennial mortality, recovery, pulse and microsite reference;
+      source: docs/model.md; researcher-selected resource-coupled mortality, recovery and shared establishment capacity;
         no empirical calibration
   record_observations: true
   spatial:
@@ -78,7 +78,7 @@ parameters:
       - 0.0
       - 1.0
     mode: sexual_qtl
-    schema_version: slim-qtl-4
+    schema_version: slim-qtl-5
     slim:
       executable: slim
       timeout_seconds: 120
@@ -108,7 +108,7 @@ parameters:
         source_kind: theoretical_placeholder
         description: Three plant chemical and eight insect additive coordinates, clipped to configured
           bounds. Fixed Gaussian expression/tuning modules are project assumptions; plant reproduction
-          uses uniform local surviving donors.
+          uses uniformly sampled global surviving donors, excluding self; insects use local same-pool male donors.
       mutation:
         source_kind: theoretical_placeholder
         description: Independent per-copy per-locus per-generation probability 0.01; normal SD 0.02 in
@@ -128,17 +128,14 @@ parameters:
         description: Two QTLs per axis spaced 10 cM on the same abstract linkage group; groups are independent.
     recombination_model: slim_haldane_marker_map
   sexual_reproduction:
-    plant_mating_system: hermaphroditic_obligate_outcrossing
-    plant_selfing: false
     insect_mating_system: dioecious
     insect_founder_female_probability: 0.5
     insect_offspring_female_probability: 0.5
-    pollen_radius: 1
     insect_mate_radius: 2
     father_sampling: uniform_with_replacement
     provenance:
       source_kind: theoretical_placeholder
-      description: Strict outcrossing, equal sex probabilities, insect mate radius 2; exploratory demographic
+      description: Insect outcrossing, equal sex probabilities, insect mate radius 2; exploratory demographic
         correction, not calibrated.
   functional_modules:
     chemical_features:
@@ -156,9 +153,8 @@ parameters:
     background_mortality_rate: 0.01005033585350145
     defoliation_mortality_rate: 0.13862943611198905
     resource_recovery_rate: 0.6931471805599453
-    reproduction_interval: 5
     newborn_resource_fraction: 0.25
-    microsites_per_cell: 1
+    microsites_per_cell: 3
 batch:
   purpose: Current expression/tuning mechanism reference; illustrative parameters only.
   replicates: 1

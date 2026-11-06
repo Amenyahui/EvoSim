@@ -71,9 +71,9 @@ def load_inputs(files, directory, parameters):
         p.get("n") != 2
         or p.get("B") is not None
         or p.get("mapping") != "shared_chemical_modules"
-        or p.get("genetics", {}).get("schema_version") != "slim-qtl-4"
+        or p.get("genetics", {}).get("schema_version") != "slim-qtl-5"
     ):
-        raise ValueError("CSV inputs require current n=2/B=null shared modules and slim-qtl-4")
+        raise ValueError("CSV inputs require current n=2/B=null shared modules and slim-qtl-5")
     width = 8
 
     def coordinates(row, field, kind):

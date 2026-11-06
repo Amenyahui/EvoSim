@@ -45,15 +45,15 @@ python -m tests
 | helpers/agents.py | 植物三模块、资源存量和建立位点；昆虫模块及派生 I/A、性别、出生寄主、队列及基因型 |
 | helpers/chemistry.py | 当前 x→D/V 的确定性映射；历史映射由冻结副本读取 |
 | helpers/voc.py、ecology.py、demography.py、spatial.py | 选择/拒绝、摄入与成本、植物死亡/资源恢复、空间候选和空位建立 |
-| substeps/lifecycle.py | AdvanceGeneration 完成成年交配→逐卵择主→SLiM幼虫→取食/存活→植物保留及繁殖脉冲→成年补充 |
-| helpers/genetics.py、slim_backend.py、slim_reproduction.slim | 当前3/8维加性 QTL、原生 addCrossed、标记重组、项目突变及位点传递 |
+| substeps/lifecycle.py | AdvanceGeneration 完成成年交配→逐卵择主→SLiM幼虫→取食/存活→植物存活、每轮繁殖及恢复→成年补充 |
+| helpers/genetics.py、slim_backend.py、slim_reproduction.slim | 当前3/8维加性 QTL、植物和昆虫原生 addCrossed、双亲遗传、重组、突变及位点传递 |
 | helpers/contributions.py | 阶段双亲计数、等位贡献分解；本版生命周期分别调用出生/补充两次 |
 | batch.py、simulator.py | 调度、批次、状态、文件及指纹；历史结果不覆盖 |
 | audit.py、audit_lifecycle.py | 核对当前遗传/资源/阶段来源/事件映射，区分账本完整性与执行验收 |
 | analysis/summarize_lifecycle.py | 新阶段原始账本只读汇总；不增加宏观网络指标 |
 | analysis/common.py | 只接收当前协议的常规审计批次，历史结果交由冻结副本读取 |
 
-`helpers/modules.py` 实现功能核和表达成本；`analysis/summarize_lineages.py` 只读计算候选群、来源、事件和网络，不回写交配或遗传。植物跨昆虫世代保留身份、基因型及位置，资源逐轮恢复，繁殖只在预定脉冲发生。`offspring` 和遗传贡献只计新生后代，存活老株另外计数；`plant_proposals` 保存所有传播提议及空位建立结果。整轮资源/遗传/空间检查成功后才提交账本，失败不提交半轮；计算保护停止不截断人口。
+`helpers/modules.py` 实现功能核和表达成本；`analysis/summarize_lineages.py` 只读计算候选群、来源、事件和网络，不回写交配或遗传。植物跨昆虫世代保留身份、基因型及位置，资源逐轮恢复，幸存母株每轮繁殖，植物父本从全局其他幸存株随机选取，不按化学类型或距离限制；每格多个位点仅限制建立，不模拟共享光水养分。`offspring` 和遗传贡献只计新生后代，存活老株另外计数；`plant_proposals` 保存所有传播提议及空位建立结果。整轮资源/遗传/空间检查成功后才提交账本，失败不提交半轮；计算保护停止不截断人口。
 
 `analysis/summarize_*.py` 输出汇总；`plot_diagnostics.py` 是统一绘图入口，提供A–E诊断、F–H谱系及敏感性图。各汇总共享Batch；当前命令及适用协议见 docs/results.md，`summarize_qtl_run`仅提供阶段无关的性状/遗传汇总，阶段生态量由`summarize_lifecycle`读取幼虫账本。汇总写批次 `data/summary/`，绘图可指定 `--out`。
 

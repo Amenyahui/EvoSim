@@ -31,9 +31,7 @@ def small_config(**changes):
     values.update(generations=1, plant_sizes=[8], insect_sizes=[16], choice_mode="forced")
     values.update(changes)
     c = Config(**values)
-    c.plant_demography.update(
-        reproduction_interval=1, microsites_per_cell=max(1, 4 * sum(c.plant_sizes))
-    )
+    c.plant_demography.update(microsites_per_cell=max(1, 4 * sum(c.plant_sizes)))
     c.spatial.update(
         initial_plant_cells=[[0, 0]] * sum(c.plant_sizes),
         initial_insect_cells=[[0, 0]] * sum(c.insect_sizes),
@@ -52,7 +50,7 @@ def stored_values(result):
 
 
 def test_native_stage_keys_and_empty_table_schema():
-    c = small_config()
+    c = small_config(resource_capacity={"P1": 100.0})
     c.genetics["mutation_enabled"] = {"plant": True, "insect": True}
     for locus in c.genetics["loci"]:
         locus["mutation_rate"] = 1.0
@@ -123,9 +121,15 @@ def test_storage_budget_includes_initial_terminal_and_zero_birth_snapshots():
         result = simulate(zero)
         assert result["metadata"]["status"]["status"] == expected
         assert result["metadata"]["stored_genotype_values"] <= budget
-    # Neither a lone plant nor a lone insect has a compatible nonself mate.
+    # Full plant occupancy and a lone insect yield no newborns.
     zero = small_config(plant_sizes=[1], insect_sizes=[1])
-    zero.plant_demography.update(background_mortality_rate=0, defoliation_mortality_rate=0)
+    zero.plant_demography.update(
+        background_mortality_rate=0, defoliation_mortality_rate=0, microsites_per_cell=1
+    )
+    zero.spatial.update(
+        grid_shape=[1, 1], search_radius=0, plant_dispersal_radius=0, insect_dispersal_radius=0
+    )
+    zero.sexual_reproduction["insect_mate_radius"] = 0
     initial = 2 * len(zero.genetics["loci"])
     retained_plant_values = 2 * sum(l["organism"] == "plant" for l in zero.genetics["loci"])
     zero.genetics["max_genotype_values_safety"] = initial + retained_plant_values

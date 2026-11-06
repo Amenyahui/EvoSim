@@ -58,9 +58,9 @@ def get_runner(config_path=None, *, config=None):
         raise ValueError("Provide config or config_path, not both")
     if config is None:
         config = read_config(config_path or MODEL_DIR / "configs/current.yaml")
-    if config["parameters"].get("model_version") != "0.1.9":
+    if config["parameters"].get("model_version") != "0.1.11":
         raise ValueError(
-            "Only current model protocol 0.1.9 executes; use the frozen history for old protocols"
+            "Only current model protocol 0.1.11 executes; use the frozen history for old protocols"
         )
     steps = list(config["substeps"].values())
     transitions = list(steps[0].get("transition", {}).values()) if len(steps) == 1 else []

@@ -16,11 +16,8 @@ def config(**changes):
     values.update(generations=2, plant_sizes=[20, 20], insect_sizes=[6])
     values.update(changes)
     c = Config(**values)
-    # Inheritance fixtures use a pulse each round and ample local microsites;
-    # perennial cadence and finite establishment have separate explicit checks.
-    c.plant_demography.update(
-        reproduction_interval=1, microsites_per_cell=max(1, sum(c.plant_sizes)) * 4
-    )
+    # Inheritance fixtures provide ample microsites; finite establishment has separate checks.
+    c.plant_demography.update(microsites_per_cell=max(1, sum(c.plant_sizes)) * 4)
     return c
 
 

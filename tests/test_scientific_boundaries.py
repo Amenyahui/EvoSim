@@ -11,7 +11,10 @@ from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.helpers import ecology, modules, spatial, traits, voc
 from evo_sim.models.plant_insect.helpers.demography import plant_resource_update
 
-CONFIG = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs/current.yaml"
+CONFIG = (
+    Path(__file__).resolve().parents[1]
+    / "evo_sim/models/plant_insect/configs/current_single_ancestor.yaml"
+)
 
 
 def reference_config():
@@ -113,7 +116,7 @@ def test_heterogeneous_shares_change_under_defense_and_expected_recruitment_is_n
     assert np.isclose(heterogeneous["g"].sum(), 3 / 4)
 
 
-def test_zero_stock_has_zero_herbivory_and_perennial_mortality_still_applies():
+def test_zero_stock_has_zero_herbivory_and_resource_mortality_still_applies():
     allocation = ecology.allocate_resources(np.array([0, 0]), [1, 0.5], [0], [1, 1])
     np.testing.assert_array_equal(allocation["h"], [0])
     np.testing.assert_array_equal(allocation["g"], [0, 0])
@@ -135,6 +138,11 @@ def test_completed_feeding_window_does_not_repeat_host_death_on_larvae():
     c = reference_config()
     c.generations, c.plant_sizes, c.insect_sizes = 1, [2], [20]
     c.resource_capacity, c.choice_mode = {"P1": 1.0}, "forced"
+    c.plant_offspring_lambda = {"P1": c.plant_offspring_lambda["P1"]}
+    c.parameter_provenance["plant_offspring_lambda"] = {
+        "P1": c.parameter_provenance["plant_offspring_lambda"]["P1"]
+    }
+    c.genetics["founder_frequencies"].pop("P2", None)
     c.plant_demography.update(background_mortality_rate=1000.0, microsites_per_cell=2)
     c.spatial.update(initial_plant_cells=[[0, 0]] * 2, initial_insect_cells=[[0, 0]] * 20)
     result = simulate(c)
