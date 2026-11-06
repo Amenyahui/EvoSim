@@ -6,7 +6,7 @@ import numpy as np
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
-from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
+from evo_sim.models.plant_insect.simulation.stages.adult_reproduction import sample_parents
 from tests.support import config
 
 

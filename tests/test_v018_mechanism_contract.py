@@ -14,7 +14,10 @@ from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
-from evo_sim.models.plant_insect.substeps.lifecycle import draw_fathers, sample_parents
+from evo_sim.models.plant_insect.simulation.stages.adult_reproduction import (
+    draw_fathers,
+    sample_parents,
+)
 from tests.support import raises
 from tests.test_v017_modules import CONFIG, module_config
 

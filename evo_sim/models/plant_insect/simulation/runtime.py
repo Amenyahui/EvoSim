@@ -22,23 +22,9 @@ from evo_sim.models.plant_insect.biology.genetics import qtl as genetics
 from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError
 from evo_sim.models.plant_insect.biology.insects import feeding
 from evo_sim.models.plant_insect.config.schema import Config, config_payload, resource_values
+from evo_sim.models.plant_insect.records.contributions import mark_uncommitted
 
-from .contributions import mark_uncommitted
-
-
-def streams(c):
-    """Fixed stage/taxon/species IDs, so demographic draws never consume ecological draws."""
-
-    def rng(phase, kind, s):
-        return np.random.default_rng(np.random.SeedSequence([c.seed, 130, phase, kind, s]))
-
-    return {
-        phase: (
-            [rng(phase, 0, s) for s in range(len(c.plant_sizes))],
-            [rng(phase, 1, s) for s in range(len(c.insect_sizes))],
-        )
-        for phase in range(10)
-    }
+from .random import streams
 
 
 def resource_vector(value, sizes, labels, prefix):

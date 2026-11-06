@@ -11,7 +11,7 @@ from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
 from evo_sim.models.plant_insect.biology.insects import host_selection as _host_selection
 from evo_sim.models.plant_insect.config.schema import config_payload
-from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
+from evo_sim.models.plant_insect.records.events import source_flows
 from tests.support import base_runner, config, raises
 
 
@@ -221,7 +221,7 @@ def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
     runtime = runner.state["environment"]["runtime"]
     streams = copy.deepcopy(runtime.rng)
     with patch(
-        "evo_sim.models.plant_insect.substeps.lifecycle.source_flows",
+        "evo_sim.models.plant_insect.records.events.source_flows",
         side_effect=ValueError("late ledger failure"),
     ):
         runner.step(1)

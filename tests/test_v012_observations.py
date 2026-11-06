@@ -14,7 +14,7 @@ from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
 from evo_sim.models.plant_insect.biology.traits import effective
-from evo_sim.models.plant_insect.helpers.observations import standardized
+from evo_sim.models.plant_insect.records.observations import standardized
 from tests.support import config, raises
 
 

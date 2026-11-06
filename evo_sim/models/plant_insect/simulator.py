@@ -7,9 +7,8 @@ from evo_sim.core.registry import Registry
 from evo_sim.core.runner import ComputationalLimit, Runner
 from evo_sim.models.plant_insect.config.loader import read_config
 from evo_sim.models.plant_insect.config.schema import config_payload
-
-from .helpers.runtime import fail, finalize, initialize_community
-from .substeps.lifecycle import AdvanceGeneration
+from evo_sim.models.plant_insect.simulation.lifecycle import AdvanceGeneration
+from evo_sim.models.plant_insect.simulation.runtime import fail, finalize, initialize_community
 
 MODEL_DIR = Path(__file__).resolve().parent
 

@@ -81,3 +81,19 @@ def allele_contributions(
                         )
                     )
     return rows
+
+
+def contributions(rows, mothers, fathers, survived):
+    bm = np.bincount(mothers, minlength=len(rows))
+    bf = np.bincount(fathers, minlength=len(rows))
+    rm = np.bincount(mothers[survived], minlength=len(rows))
+    rf = np.bincount(fathers[survived], minlength=len(rows))
+    for i, row in enumerate(rows):
+        row.update(
+            offspring_count_as_mother=int(bm[i]),
+            offspring_count_sired=int(bf[i]),
+            recruited_count_as_mother=int(rm[i]),
+            recruited_count_sired=int(rf[i]),
+            realized_recruitment_contribution=float((rm[i] + rf[i]) / 2),
+        )
+    commit_parent_contributions([rows])

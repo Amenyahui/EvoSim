@@ -4,7 +4,10 @@ import numpy as np
 
 from evo_sim.models.plant_insect.biology.insects.feeding import consumption
 from evo_sim.models.plant_insect.biology.insects.sensory import conditional_probabilities
+from evo_sim.models.plant_insect.biology.plants import chemistry
 from evo_sim.models.plant_insect.biology.plants.chemistry import reference
+
+from .events import host_name
 
 
 def standardized(state, c, B, w, generation):
@@ -45,3 +48,51 @@ def standardized(state, c, B, w, generation):
                 )
             )
     return rows, probability, q
+
+
+def observe(runtime, current, generation):
+    values = current.plants.genotypes.size + current.insects.genotypes.size
+    runtime.genetic.preflight([0, 0], runtime.stored_genotype_values + values)
+    snapshot = current.snapshot(generation)
+    snapshot["V_emit"] = chemistry.plant_voc(
+        current.plants.defense,
+        current.plants.voc_trait,
+        runtime.c,
+        runtime.B,
+        current.plants.chemical_traits,
+    )
+    snapshot["R"] = current.plants.resource.copy()
+    runtime.result["snapshots"].append(snapshot)
+    runtime.stored_genotype_values += values
+    sizes = (len(runtime.c.plant_sizes), len(runtime.c.insect_sizes))
+    runtime.result["genetic_summary"].extend(runtime.genetic.summary(current, generation, sizes))
+    runtime.result["haplotype_summary"].extend(
+        runtime.genetic.haplotype_summary(current, generation, sizes)
+    )
+    if runtime.observe:
+        rows, probability, q = standardized(current, runtime.c, runtime.B, runtime.w, generation)
+        runtime.result["diagnostics"].extend(rows)
+        snapshot.update(
+            reference_p=probability,
+            reference_q=q,
+            reference_plant_species=np.array(
+                runtime.c.observation_reference_traits["reference_ids"]
+            ),
+        )
+    for h in range(sizes[1]):
+        for p in range(-1, sizes[0]):
+            count = int(
+                np.count_nonzero(
+                    (current.insects.species == h) & (current.insects.birth_host_species == p)
+                )
+            )
+            runtime.result["host_groups"].append(
+                dict(
+                    generation=generation,
+                    insect_species=f"H{h + 1}",
+                    birth_host_species=host_name(p),
+                    N=count,
+                    status="present" if count else "absent",
+                )
+            )
+    return snapshot
