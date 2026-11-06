@@ -11,8 +11,8 @@ import pandas as pd
 from evo_sim.models.plant_insect import get_runner, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
-from evo_sim.models.plant_insect.helpers.genetics import GeneticState
-from evo_sim.models.plant_insect.helpers.slim_backend import SlimError
+from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
+from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError
 from tests.support import config, raises
 
 
@@ -169,7 +169,7 @@ def test_slim_failure_does_not_commit_or_fall_back():
         assert audit_run(path)["status"] == "backend_error"
 
     # Reject malformed returned material after a real SLiM process, before publication.
-    from evo_sim.models.plant_insect.helpers import slim_backend
+    from evo_sim.models.plant_insect.biology.genetics import slim_backend
 
     original = slim_backend.subprocess.run
 

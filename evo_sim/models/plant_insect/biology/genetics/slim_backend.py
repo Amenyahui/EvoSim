@@ -24,7 +24,7 @@ def engine_info(settings):
     executable = shutil.which(requested)
     if executable is None:
         # Local development install; installed packages should use PATH, YAML or EVOSIM_SLIM.
-        candidate = Path(__file__).resolve().parents[4] / "codex/slim_runtime/Library/bin/slim.exe"
+        candidate = Path(__file__).resolve().parents[5] / "codex/slim_runtime/Library/bin/slim.exe"
         if requested == "slim" and candidate.is_file():
             executable = str(candidate)
     if executable is None:

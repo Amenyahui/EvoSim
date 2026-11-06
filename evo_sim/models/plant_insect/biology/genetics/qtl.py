@@ -8,10 +8,11 @@ from itertools import combinations
 
 import numpy as np
 
-from . import modules
-from .config import normalized_bounds, numeric
-from .demography import ComputationalLimit
-from .slim_backend import SlimError, reproduce
+from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError, reproduce
+
+from ...helpers import modules
+from ...helpers.config import normalized_bounds, numeric
+from ...helpers.demography import ComputationalLimit
 
 KINDS = ("plant", "insect")
 

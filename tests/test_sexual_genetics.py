@@ -6,11 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
-from evo_sim.models.plant_insect.helpers.genetics import (
-    GeneticState,
-    validate_genome_map,
-)
-from evo_sim.models.plant_insect.helpers.slim_backend import reproduce
+from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState, validate_genome_map
+from evo_sim.models.plant_insect.biology.genetics.slim_backend import reproduce
 from tests.support import config, raises
 
 

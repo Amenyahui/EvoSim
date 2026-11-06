@@ -11,8 +11,8 @@ from evo_sim.core.config import merge_config
 from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
+from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.helpers import ecology, modules, voc
-from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from tests.support import raises
 from tests.test_v016_audit import reject_rehashed_tampering
 

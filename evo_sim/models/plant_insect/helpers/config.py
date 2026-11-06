@@ -368,7 +368,7 @@ class Config(_ResourceConfig):
 
         validate_spatial(self)
         validate_sexual(self)
-        from .genetics import validate
+        from evo_sim.models.plant_insect.biology.genetics.qtl import validate
 
         validate(self, len(B))
         return B, w

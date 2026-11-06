@@ -886,7 +886,12 @@ def audit_run_lifecycle(path, meta):
                 assert "SLiM version 5.2" in call["version"]
                 assert (
                     call["script_sha256"]
-                    == meta["source_hash"]["models/plant_insect/helpers/slim_reproduction.slim"]
+                    == meta["source_hash"][
+                        "models/plant_insect/biology/genetics/slim_reproduction.slim"
+                        if "models/plant_insect/biology/genetics/slim_reproduction.slim"
+                        in meta["source_hash"]
+                        else "models/plant_insect/helpers/slim_reproduction.slim"
+                    ]
                 )
             for i, row in enumerate(rows.itertuples()):
                 values = dict(

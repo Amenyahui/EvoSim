@@ -20,7 +20,7 @@ include = ["evo_sim*"]
 
 [tool.setuptools.package-data]
 "evo_sim.models.plant_insect" = ["config.yaml", "configs/*.yaml", "analysis/*.yaml", "inputs/current/*.csv"]
-"evo_sim.models.plant_insect.helpers" = ["*.slim"]
+"evo_sim.models.plant_insect.biology.genetics" = ["*.slim"]
 
 [tool.ruff]
 line-length = 100

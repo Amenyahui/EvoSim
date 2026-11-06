@@ -7,9 +7,9 @@ from unittest.mock import patch
 import numpy as np
 
 from evo_sim.models.plant_insect import simulate
+from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
 from evo_sim.models.plant_insect.helpers import ecology
 from evo_sim.models.plant_insect.helpers.config import config_payload
-from evo_sim.models.plant_insect.helpers.genetics import GeneticState
 from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
 from tests.support import base_runner, config, raises
 

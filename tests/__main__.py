@@ -3,7 +3,7 @@
 import importlib
 from pathlib import Path
 
-from evo_sim.models.plant_insect.helpers.slim_backend import SlimError, engine_info
+from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError, engine_info
 
 if not __debug__:
     raise SystemExit("Run tests without python -O; assertions are required")
