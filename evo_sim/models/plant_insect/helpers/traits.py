@@ -8,7 +8,7 @@ def encounter_candidates(pool, size, rng):
 
 
 def chemical_scores(V, A, c, weights):
-    from .modules import scores
+    from evo_sim.models.plant_insect.biology.traits import scores
 
     return scores(V, A, c)
 

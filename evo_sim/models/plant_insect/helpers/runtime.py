@@ -10,12 +10,17 @@ import pandas as pd
 
 from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
+from evo_sim.models.plant_insect.biology import traits as modules
+from evo_sim.models.plant_insect.biology.agents import (
+    CommunityState,
+    InsectPopulation,
+    PlantPopulation,
+)
 from evo_sim.models.plant_insect.biology.genetics import qtl as genetics
 from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError
-from evo_sim.models.plant_insect.helpers import ecology, modules, spatial
+from evo_sim.models.plant_insect.config.schema import Config, config_payload, resource_values
+from evo_sim.models.plant_insect.helpers import ecology, spatial
 
-from .agents import CommunityState, InsectPopulation, PlantPopulation
-from .config import Config, config_payload, resource_values
 from .contributions import mark_uncommitted
 from .demography import ComputationalLimit
 

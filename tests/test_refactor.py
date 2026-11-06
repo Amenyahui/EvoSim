@@ -1,7 +1,7 @@
 """Current state snapshots must remain independent of mutable live arrays."""
 
 from evo_sim.models.plant_insect import simulate
-from evo_sim.models.plant_insect.helpers.agents import CommunityState
+from evo_sim.models.plant_insect.biology.agents import CommunityState
 from tests.support import config as tiny
 
 

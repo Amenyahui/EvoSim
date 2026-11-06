@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
 
 def test_long_run_inherits_cases():
-    from evo_sim.models.plant_insect.helpers.inputs import read_config
+    from evo_sim.models.plant_insect.config.loader import read_config
 
     c = read_config(ROOT / "evo_sim/models/plant_insect/configs/current_200gen.yaml")
     assert c["batch"]["replicates"] == 4

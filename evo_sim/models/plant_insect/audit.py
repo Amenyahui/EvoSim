@@ -9,9 +9,9 @@ import pandas as pd
 
 from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
+from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
 from .batch import SUCCESS_STATUSES, write_json
-from .helpers.config import Config, config_payload
 
 if not __debug__:
     raise RuntimeError("Run scientific audits without python -O; assertions are required")

@@ -15,7 +15,7 @@ from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
 from evo_sim.models.plant_insect.analysis.summarize_lineages import summarize as summarize_lineages
 from evo_sim.models.plant_insect.audit import audit, audit_run
 from evo_sim.models.plant_insect.batch import run
-from evo_sim.models.plant_insect.helpers.config import config_payload
+from evo_sim.models.plant_insect.config.schema import config_payload
 from tests.support import config, raises
 from tests.test_v016_audit import reject_rehashed_tampering
 

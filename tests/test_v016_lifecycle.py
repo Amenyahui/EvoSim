@@ -8,8 +8,8 @@ import numpy as np
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
+from evo_sim.models.plant_insect.config.schema import config_payload
 from evo_sim.models.plant_insect.helpers import ecology
-from evo_sim.models.plant_insect.helpers.config import config_payload
 from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
 from tests.support import base_runner, config, raises
 
@@ -144,7 +144,7 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
             raw = np.array(catalog.spec["background"]["insect"], float)
             for allele in g.ravel():
                 raw += catalog.spec["phenotype_map"]["effect_scale"] * effects[allele]
-            from evo_sim.models.plant_insect.helpers.modules import effective
+            from evo_sim.models.plant_insect.biology.traits import effective
 
             derived.append(
                 effective(

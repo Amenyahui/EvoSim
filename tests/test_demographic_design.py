@@ -14,8 +14,8 @@ from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
     summarize_sensitivity,
 )
 from evo_sim.models.plant_insect.audit import audit_run
-from evo_sim.models.plant_insect.helpers.config import Config, config_payload
-from evo_sim.models.plant_insect.helpers.inputs import read_config
+from evo_sim.models.plant_insect.config.loader import read_config
+from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
 CONFIGS = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs"
 

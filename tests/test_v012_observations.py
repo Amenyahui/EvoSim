@@ -13,7 +13,7 @@ import pandas as pd
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result, write_json
-from evo_sim.models.plant_insect.helpers.modules import effective
+from evo_sim.models.plant_insect.biology.traits import effective
 from evo_sim.models.plant_insect.helpers.observations import standardized
 from tests.support import config, raises
 
@@ -28,7 +28,7 @@ def test_joint_response_preserves_individual_associations():
         species=np.zeros(2, int),
     )
     # The production population exposes its size through __len__.
-    from evo_sim.models.plant_insect.helpers.agents import InsectPopulation
+    from evo_sim.models.plant_insect.biology.agents import InsectPopulation
 
     state = SimpleNamespace(
         insects=InsectPopulation(

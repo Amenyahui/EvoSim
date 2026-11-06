@@ -14,9 +14,9 @@ from evo_sim import __version__
 from evo_sim.core.config import merge_config
 from evo_sim.core.helpers import source_hashes
 from evo_sim.core.io import atomic_csv, atomic_text
+from evo_sim.models.plant_insect.config.loader import read_config
+from evo_sim.models.plant_insect.config.schema import Config
 
-from .helpers.config import Config
-from .helpers.inputs import read_config
 from .simulator import simulate
 
 ROOT = Path(__file__).resolve().parents[3]

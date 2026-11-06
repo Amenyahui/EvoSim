@@ -32,7 +32,7 @@ def plant_config(**changes):
 
 
 def runner_for(c):
-    from evo_sim.models.plant_insect.helpers.config import config_payload
+    from evo_sim.models.plant_insect.config.schema import config_payload
 
     r = get_runner()
     r.config["parameters"] = config_payload(c)

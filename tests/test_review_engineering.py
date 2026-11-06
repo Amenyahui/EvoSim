@@ -20,7 +20,7 @@ from evo_sim.models.plant_insect.analysis.summarize_lifecycle import (
 )
 from evo_sim.models.plant_insect.audit import audit, audit_run
 from evo_sim.models.plant_insect.batch import COLUMNS, run, save_result
-from evo_sim.models.plant_insect.helpers.config import config_payload
+from evo_sim.models.plant_insect.config.schema import config_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "evo_sim/models/plant_insect/configs/current_single_ancestor.yaml"

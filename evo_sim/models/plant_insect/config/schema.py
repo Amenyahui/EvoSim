@@ -337,7 +337,7 @@ class Config(_ResourceConfig):
         B, w = _ResourceConfig(**args).validate()
         if type(self.record_observations) is not bool:
             raise ValueError("record_observations must be boolean")
-        from .modules import validate as validate_modules
+        from evo_sim.models.plant_insect.biology.traits import validate as validate_modules
 
         validate_modules(self.functional_modules)
         if self.record_observations:
@@ -363,8 +363,8 @@ class Config(_ResourceConfig):
                 or ((values < 0) | (values > 1)).any()
             ):
                 raise ValueError("invalid observation reference panel")
-        from .demography import validate_sexual
-        from .spatial import validate_spatial
+        from evo_sim.models.plant_insect.helpers.demography import validate_sexual
+        from evo_sim.models.plant_insect.helpers.spatial import validate_spatial
 
         validate_spatial(self)
         validate_sexual(self)

@@ -9,7 +9,8 @@ import yaml
 from evo_sim.models.plant_insect import Config, get_runner, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
-from evo_sim.models.plant_insect.helpers.inputs import load_inputs, read_config
+from evo_sim.models.plant_insect.config.input_loader import load_inputs
+from evo_sim.models.plant_insect.config.loader import read_config
 from tests.support import raises
 from tests.test_runtime import same_results
 

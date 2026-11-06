@@ -17,7 +17,7 @@ from evo_sim.models.plant_insect.analysis.diagnose_initial_conditions import mai
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
-from evo_sim.models.plant_insect.helpers.inputs import read_config
+from evo_sim.models.plant_insect.config.loader import read_config
 from tests.support import config, raises
 
 CONFIGS = Path(__file__).resolve().parents[1] / "evo_sim/models/plant_insect/configs"

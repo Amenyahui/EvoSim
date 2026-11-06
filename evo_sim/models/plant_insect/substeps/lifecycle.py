@@ -10,10 +10,12 @@ import json
 import numpy as np
 
 from evo_sim.core.substep import SubstepTransition
+from evo_sim.models.plant_insect.biology import traits as modules
+from evo_sim.models.plant_insect.biology.agents import CommunityState
+from evo_sim.models.plant_insect.biology.plants import chemistry
+from evo_sim.models.plant_insect.helpers import spatial
 
-from ..helpers import chemistry, modules, spatial
 from ..helpers import ecology as feeding
-from ..helpers.agents import CommunityState
 from ..helpers.contributions import allele_contributions, commit_parent_contributions
 from ..helpers.demography import (
     ComputationalLimit,

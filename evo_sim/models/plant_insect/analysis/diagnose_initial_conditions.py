@@ -6,7 +6,7 @@ import pandas as pd
 
 from evo_sim.models.plant_insect.audit import audit
 from evo_sim.models.plant_insect.batch import run
-from evo_sim.models.plant_insect.helpers.inputs import read_config
+from evo_sim.models.plant_insect.config.loader import read_config
 
 
 def main():

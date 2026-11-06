@@ -10,7 +10,7 @@ import pandas as pd
 
 from evo_sim.core.config import read_config
 from evo_sim.models.plant_insect import get_runner, simulate
-from evo_sim.models.plant_insect.helpers.config import Config
+from evo_sim.models.plant_insect.config.schema import Config
 from tests.support import config as tiny
 
 

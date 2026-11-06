@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 
 from evo_sim.core.config import merge_config
-from evo_sim.models.plant_insect.helpers.config import Config
-from evo_sim.models.plant_insect.helpers.inputs import read_config
+from evo_sim.models.plant_insect.config.loader import read_config
+from evo_sim.models.plant_insect.config.schema import Config
 
 
 def test_ten_plant_type_design():

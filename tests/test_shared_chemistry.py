@@ -9,8 +9,9 @@ from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
-from evo_sim.models.plant_insect.helpers import chemistry, voc
-from evo_sim.models.plant_insect.helpers.inputs import load_inputs
+from evo_sim.models.plant_insect.biology.plants import chemistry
+from evo_sim.models.plant_insect.config.input_loader import load_inputs
+from evo_sim.models.plant_insect.helpers import voc
 from evo_sim.models.plant_insect.helpers.traits import consumption
 from tests.support import config, raises
 

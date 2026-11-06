@@ -8,7 +8,8 @@ from types import SimpleNamespace
 import numpy as np
 
 from evo_sim.models.plant_insect import Config, get_runner, simulate
-from evo_sim.models.plant_insect.helpers import ecology, modules, spatial, traits, voc
+from evo_sim.models.plant_insect.biology import traits as modules
+from evo_sim.models.plant_insect.helpers import ecology, spatial, traits, voc
 from evo_sim.models.plant_insect.helpers.demography import plant_resource_update
 
 CONFIG = (

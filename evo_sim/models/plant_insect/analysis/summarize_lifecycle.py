@@ -192,8 +192,8 @@ def summarize_sensitivity(path):
     from pathlib import Path
 
     from evo_sim.core.config import merge_config
+    from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
-    from ..helpers.config import Config, config_payload
     from .common import sha256
 
     path = Path(path)

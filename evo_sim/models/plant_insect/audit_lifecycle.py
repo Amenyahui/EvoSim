@@ -11,7 +11,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from .helpers.config import Config, config_payload
+from evo_sim.models.plant_insect.config.schema import Config, config_payload
 
 
 def close(actual, expected, context):

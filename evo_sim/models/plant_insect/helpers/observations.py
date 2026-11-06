@@ -2,7 +2,8 @@
 
 import numpy as np
 
-from .chemistry import reference
+from evo_sim.models.plant_insect.biology.plants.chemistry import reference
+
 from .traits import consumption
 from .voc import conditional_probabilities
 

@@ -144,7 +144,7 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
     from evo_sim.models.plant_insect.analysis.summarize_lifecycle import prepare_diagnostics
     from evo_sim.models.plant_insect.audit import audit
     from evo_sim.models.plant_insect.batch import run
-    from evo_sim.models.plant_insect.helpers.config import config_payload
+    from evo_sim.models.plant_insect.config.schema import config_payload
     from tests.support import config
 
     c = config(generations=4)

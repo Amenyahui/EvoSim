@@ -36,7 +36,7 @@ def conditional_probabilities(V, A, c, w):
 
 def fecundity(D, V_emit, c, chemical=None):
     defense_cost = c.plant_cost * D.sum(axis=1)
-    from .chemistry import outputs
+    from evo_sim.models.plant_insect.biology.plants.chemistry import outputs
 
     chemical = np.asarray(chemical, float)
     defense, _ = outputs(chemical, c.eta_shared)

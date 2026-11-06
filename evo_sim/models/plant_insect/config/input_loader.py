@@ -6,8 +6,6 @@ import io
 import math
 from copy import deepcopy
 
-from evo_sim.core.config import read_config as read_yaml_config
-
 
 def finite(value):
     number = float(value)
@@ -214,8 +212,3 @@ def load_inputs(files, directory, parameters):
             "reference_ids": [row["species_id"] for row in rows],
         }
     return p, sources
-
-
-def read_config(path):
-    """Resolve YAML inheritance and CSV paths relative to their declaring YAML."""
-    return read_yaml_config(path, input_loader=load_inputs)

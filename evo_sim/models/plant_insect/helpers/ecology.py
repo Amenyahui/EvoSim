@@ -218,7 +218,7 @@ def settle_feeding(
     q[found] = traits.consumption(D[host[found]], I[found])
     allocation = allocate_resources(host, q, capacity, dmax)
     fp, defense_cost, voc_cost = voc.fecundity(D, V_emit, c, chemical)
-    from .modules import maternal_fecundity
+    from evo_sim.models.plant_insect.biology.traits import maternal_fecundity
 
     if module_traits is None:
         raise ValueError("module feeding diagnostics require original expression/tuning traits")
