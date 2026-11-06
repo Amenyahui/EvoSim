@@ -6,8 +6,8 @@ from types import SimpleNamespace
 import numpy as np
 
 from evo_sim.models.plant_insect import get_runner, simulate
-from evo_sim.models.plant_insect.helpers.demography import plant_resource_update
-from evo_sim.models.plant_insect.helpers.spatial import establish_propagules
+from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
+from evo_sim.models.plant_insect.biology.spatial import establish_propagules
 from tests.support import config, raises
 
 

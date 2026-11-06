@@ -1,8 +1,21 @@
-"""Simultaneous host choices and a conserved shared resource ledger."""
+"""Feeding mechanisms; equations preserved from v0.1.11."""
 
 import numpy as np
 
-from . import traits, voc
+from evo_sim.models.plant_insect.biology.plants import defense
+
+
+def consumption(D, I):
+    """Most limiting positive-defense component; absent defenses impose no limit."""
+    D, I = np.broadcast_arrays(np.asarray(D, float), np.asarray(I, float))
+    if D.ndim == 0 or D.shape[-1] == 0:
+        raise ValueError("defense and processing require a nonempty component axis")
+    if not np.isfinite(D).all() or not np.isfinite(I).all() or (D < 0).any() or (I < 0).any():
+        raise ValueError("defense and processing must be finite and nonnegative")
+    # A finite capacity divided by a tiny defense may overflow: q still saturates at 1.
+    with np.errstate(over="ignore"):
+        ratios = np.divide(I, D, out=np.full_like(D, np.inf, dtype=float), where=D > 0)
+    return np.minimum(1, ratios.min(axis=-1))
 
 
 def larval_survival_probability(g):
@@ -33,7 +46,7 @@ def founder_feeding_diagnostics(D, I, capacity, dmax):
     resource_masked = np.zeros_like(q_sensitive)
     # ponytail: one insect against all plants bounds memory by the initial plant count.
     for response, demand in zip(I, dmax, strict=True):
-        q = traits.consumption(D, response)
+        q = consumption(D, response)
         q_min, q_max = min(q_min, float(q.min())), max(q_max, float(q.max()))
         q_sum += float(q.sum())
         unsaturated += int(np.count_nonzero(q < 1 - tolerance))
@@ -41,8 +54,8 @@ def founder_feeding_diagnostics(D, I, capacity, dmax):
             resource_ceiling = capacity / demand
         limited += int(np.count_nonzero(resource_ceiling < q))
         for axis, (lower, upper) in enumerate(perturbations):
-            q_lower = traits.consumption(lower, response)
-            q_upper = traits.consumption(upper, response)
+            q_lower = consumption(lower, response)
+            q_upper = consumption(upper, response)
             q_changed = q_lower - q_upper > tolerance
             g_changed = (
                 np.minimum(q_lower, resource_ceiling) - np.minimum(q_upper, resource_ceiling)
@@ -156,68 +169,15 @@ def allocate_resources(host, q, capacity, dmax):
     )
 
 
-def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_pools=None):
-    """The pool is fixed during choice: acceptance never removes a plant."""
-    host = np.full(len(A), -1, int)
-    reason = np.full(len(A), "rejected", dtype="<U12")
-    rank = np.empty(len(A), int)
-    candidate_count = np.zeros(len(A), int)
-    exposures = np.zeros((len(c.insect_sizes), len(p_labels)), int)
-    candidate_share = np.full((len(A), len(c.plant_sizes)), np.nan)
-    conditional_share = np.full_like(candidate_share, np.nan)
-    pool = np.arange(len(p_labels))
-    recorded_candidates = [np.empty(0, int) for _ in A] if candidate_pools is not None else None
-    for order, i in enumerate(rng_p.permutation(len(A))):
-        rank[i] = order
-        rng = rng_H[h_labels[i]]
-        available = pool if candidate_pools is None else candidate_pools[i]
-        candidates = traits.encounter_candidates(available, c.candidate_size, rng)
-        candidate_count[i] = len(candidates)
-        if recorded_candidates is not None:
-            recorded_candidates[i] = candidates.copy()
-        if not len(candidates):
-            reason[i] = "no_candidate"
-            continue
-        exposures[h_labels[i], candidates] += 1
-        conditional = voc.conditional_probabilities(V_cue[candidates], A[i], c, w)
-        if c.choice_mode == "forced":
-            probabilities = np.append(conditional, 0.0)
-        else:
-            scores = traits.chemical_scores(V_cue[candidates], A[i], c, w)
-            probabilities = voc.choice_probabilities(
-                scores, c.tau, c.outside_utility, c.choice_mode
-            )
-        for s in range(len(c.plant_sizes)):
-            mask = p_labels[candidates] == s
-            candidate_share[i, s] = mask.mean()
-            conditional_share[i, s] = conditional[mask].sum()
-        host[i] = traits.draw_host(candidates, probabilities, rng)
-        if host[i] >= 0:
-            reason[i] = "accepted"
-    result = dict(
-        host=host,
-        host_found=host >= 0,
-        reason=reason,
-        choice_order=rank,
-        candidate_count=candidate_count,
-        candidate_exposure=exposures,
-        candidate_share=candidate_share,
-        conditional_share=conditional_share,
-    )
-    if recorded_candidates is not None:
-        result["candidate_rows"] = recorded_candidates
-    return result
-
-
 def settle_feeding(
     D, I, p_labels, h_labels, V_emit, host, c, capacity, dmax, chemical=None, module_traits=None
 ):
     """Return larval survival plus separate maternal output and plant fitness diagnostics."""
     found = host >= 0
     q = np.full(len(I), np.nan)
-    q[found] = traits.consumption(D[host[found]], I[found])
+    q[found] = consumption(D[host[found]], I[found])
     allocation = allocate_resources(host, q, capacity, dmax)
-    fp, defense_cost, voc_cost = voc.fecundity(D, V_emit, c, chemical)
+    fp, defense_cost, voc_cost = defense.fecundity(D, V_emit, c, chemical)
     from evo_sim.models.plant_insect.biology.traits import maternal_fecundity
 
     if module_traits is None:

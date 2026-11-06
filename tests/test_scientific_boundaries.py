@@ -8,9 +8,11 @@ from types import SimpleNamespace
 import numpy as np
 
 from evo_sim.models.plant_insect import Config, get_runner, simulate
+from evo_sim.models.plant_insect.biology import spatial
 from evo_sim.models.plant_insect.biology import traits as modules
-from evo_sim.models.plant_insect.helpers import ecology, spatial, traits, voc
-from evo_sim.models.plant_insect.helpers.demography import plant_resource_update
+from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
+from evo_sim.models.plant_insect.biology.insects import sensory as _sensory
+from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
 
 CONFIG = (
     Path(__file__).resolve().parents[1]
@@ -59,7 +61,7 @@ def test_current_founder_reference_crosses_both_defense_thresholds():
     allocation = tuning / (c.functional_modules["processing_idle"] + tuning.sum(axis=1)[:, None])
     np.testing.assert_allclose(allocation.T @ centers[:2], [0.35, 0.55], atol=1e-14)
     response = modules.effective(values, c.functional_modules)[0]
-    q = traits.consumption(defense[None, :, :], response[:, None, :])
+    q = _feeding.consumption(defense[None, :, :], response[:, None, :])
     assert q.size == 15625 and 0.75 < q.min() < 0.76 and q.max() == 1
     assert np.count_nonzero(q < 1 - 1e-12) == 11828
     assert abs(weights[q < 1 - 1e-12].sum() - 0.7512261867523193) < 1e-12
@@ -69,12 +71,12 @@ def test_current_founder_reference_crosses_both_defense_thresholds():
     original_ratios = original_response[:, None, :] / defense[None, :, :]
     assert np.isclose(original_ratios.min(), 1.1135204602329019)
     np.testing.assert_array_equal(
-        traits.consumption(defense[None, :, :], original_response[:, None, :]), np.ones_like(q)
+        _feeding.consumption(defense[None, :, :], original_response[:, None, :]), np.ones_like(q)
     )
     for axis in range(2):
         stronger = defense.copy()
         stronger[:, axis] += 1e-4
-        assert (traits.consumption(stronger[None, :, :], response[:, None, :]) < q - 1e-12).any()
+        assert (_feeding.consumption(stronger[None, :, :], response[:, None, :]) < q - 1e-12).any()
     # The preserved four independent 0.5-frequency copies retain coordinate SD=.025.
     assert abs(np.sqrt(4 * 0.5**2 * 0.025**2) - 0.025) < 1e-15
 
@@ -83,42 +85,44 @@ def test_founder_diagnostic_reports_single_larva_resource_masking_and_empty_stat
     defense = np.array([[0.5, 0.5]])
     response = np.array([[0.25, 1.0], [1.0, 0.25]])
     before = defense.copy(), response.copy()
-    ample = ecology.founder_feeding_diagnostics(defense, response, [10.0], [1.0, 1.0])
+    ample = _feeding.founder_feeding_diagnostics(defense, response, [10.0], [1.0, 1.0])
     assert ample["pair_count"] == 2 and ample["q_mean"] == 0.5
     assert ample["q_sensitive_fraction"] == [0.5, 0.5]
     assert ample["single_larva_g_sensitive_fraction"] == [0.5, 0.5]
-    limited = ecology.founder_feeding_diagnostics(defense, response, [0.1], [1.0, 1.0])
+    limited = _feeding.founder_feeding_diagnostics(defense, response, [0.1], [1.0, 1.0])
     assert limited["q_sensitive_fraction"] == [0.5, 0.5]
     assert limited["single_larva_g_sensitive_fraction"] == [0.0, 0.0]
     assert limited["single_larva_resource_masked_q_sensitive_fraction"] == [0.5, 0.5]
     assert limited["single_larva_resource_limited_fraction"] == 1
     np.testing.assert_array_equal(defense, before[0])
     np.testing.assert_array_equal(response, before[1])
-    saturated = ecology.founder_feeding_diagnostics(defense, [[1.0, 1.0]], [10.0], [1.0])
+    saturated = _feeding.founder_feeding_diagnostics(defense, [[1.0, 1.0]], [10.0], [1.0])
     assert saturated["q_unsaturated_fraction"] == 0
     assert saturated["q_sensitive_fraction"] == [0.0, 0.0]
-    empty = ecology.founder_feeding_diagnostics(np.empty((0, 2)), response, [], [1.0, 1.0])
+    empty = _feeding.founder_feeding_diagnostics(np.empty((0, 2)), response, [], [1.0, 1.0])
     assert empty["pair_count"] == 0 and empty["status"] == "no_initial_pairs"
 
 
 def test_heterogeneous_shares_change_under_defense_and_expected_recruitment_is_not_a_cap():
     host, demand = np.zeros(2, int), np.ones(2)
     response = [[1.0, 1.0], [0.4, 1.0]]
-    weak = ecology.allocate_resources(host, traits.consumption([0.3, 0.5], response), [1], demand)
-    strong = ecology.allocate_resources(host, traits.consumption([1, 1], response), [1], demand)
+    weak = _feeding.allocate_resources(
+        host, _feeding.consumption([0.3, 0.5], response), [1], demand
+    )
+    strong = _feeding.allocate_resources(host, _feeding.consumption([1, 1], response), [1], demand)
     np.testing.assert_allclose(weak["g"], [0.5, 0.5])
     np.testing.assert_allclose(strong["g"], [5 / 7, 2 / 7])
     np.testing.assert_array_equal(weak["h"], strong["h"])
     # Independent Bernoulli trials can recruit both larvae despite expected sum=1.
     assert np.prod(strong["g"]) > 0 and np.isclose(strong["g"].sum(), 1)
-    homogeneous = ecology.allocate_resources(host, [1, 1], [1], [1, 2])
-    heterogeneous = ecology.allocate_resources(host, [1, 0.5], [1], [1, 2])
+    homogeneous = _feeding.allocate_resources(host, [1, 1], [1], [1, 2])
+    heterogeneous = _feeding.allocate_resources(host, [1, 0.5], [1], [1, 2])
     assert np.isclose(homogeneous["g"].sum(), 2 / 3)
     assert np.isclose(heterogeneous["g"].sum(), 3 / 4)
 
 
 def test_zero_stock_has_zero_herbivory_and_resource_mortality_still_applies():
-    allocation = ecology.allocate_resources(np.array([0, 0]), [1, 0.5], [0], [1, 1])
+    allocation = _feeding.allocate_resources(np.array([0, 0]), [1, 0.5], [0], [1, 1])
     np.testing.assert_array_equal(allocation["h"], [0])
     np.testing.assert_array_equal(allocation["g"], [0, 0])
     c = reference_config()
@@ -166,10 +170,10 @@ def test_relative_avoidance_and_outside_logit_are_distinct():
     sensory = np.array([0.6, 0.4, 0, 1, 0, 1, 0, 1])
     scores = modules.scores(np.array([[0, 0], [0, 1]]), sensory, c)
     assert 0 < scores[1] < scores[0]
-    probabilities = voc.choice_probabilities(scores, c.tau, c.outside_utility, "outside")
+    probabilities = _sensory.choice_probabilities(scores, c.tau, c.outside_utility, "outside")
     assert probabilities[1] < probabilities[0] and probabilities[-1] < 1 / 3
-    assert voc.choice_probabilities(scores, 1, 10, "outside")[-1] > 0.99
-    assert voc.choice_probabilities(scores, 0, 10, "outside")[-1] > 0.99
+    assert _sensory.choice_probabilities(scores, 1, 10, "outside")[-1] > 0.99
+    assert _sensory.choice_probabilities(scores, 0, 10, "outside")[-1] > 0.99
     for valence in ([1, 1], [-1, -1], [0, 0]):
         modules.validate(dict(c.functional_modules, sensory_valence=valence))
     c.b = 0

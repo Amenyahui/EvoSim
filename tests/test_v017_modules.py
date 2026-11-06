@@ -13,7 +13,8 @@ from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
-from evo_sim.models.plant_insect.helpers import ecology, voc
+from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
+from evo_sim.models.plant_insect.biology.insects import sensory as _sensory
 from tests.support import raises
 from tests.test_v016_audit import reject_rehashed_tampering
 
@@ -86,12 +87,12 @@ def test_v017_sensory_processing_and_zero_expression_cost_causal_controls():
     x[1, 6:8] = x[1, 6:8][::-1]  # Sensory tuning only.
     x[2, :2] = x[2, :2][::-1]  # Processing allocation only; same total expression.
     V = np.array([[0.1, 0.8], [0.8, 0.1]])
-    choices = [voc.conditional_probabilities(V, row, c, None) for row in x]
+    choices = [_sensory.conditional_probabilities(V, row, c, None) for row in x]
     assert np.argmax(choices[0]) != np.argmax(choices[1])
     np.testing.assert_array_equal(choices[0], choices[2])
     I, _ = modules.effective(x, c.functional_modules)
     # One fixed host and ample resources isolate processing from sensory host choice.
-    feeding = ecology.settle_feeding(
+    feeding = _feeding.settle_feeding(
         np.array([[1.0, 0.0]]),
         I,
         np.zeros(1, int),

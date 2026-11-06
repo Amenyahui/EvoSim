@@ -9,10 +9,10 @@ from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
+from evo_sim.models.plant_insect.biology.insects.feeding import consumption
 from evo_sim.models.plant_insect.biology.plants import chemistry
+from evo_sim.models.plant_insect.biology.plants import defense as _defense
 from evo_sim.models.plant_insect.config.input_loader import load_inputs
-from evo_sim.models.plant_insect.helpers import voc
-from evo_sim.models.plant_insect.helpers.traits import consumption
 from tests.support import config, raises
 
 
@@ -22,13 +22,13 @@ def test_shared_module_paths_and_hand_calculation():
     D, V = chemistry.outputs(x, c.eta_shared)
     np.testing.assert_array_equal(D, [[0.2, 0.6]])
     np.testing.assert_allclose(V, [[0.3, 0.4]])
-    fm, cd, cv = voc.fecundity(D, V, c, x)
+    fm, cd, cv = _defense.fecundity(D, V, c, x)
     np.testing.assert_allclose([fm[0], cd[0], cv[0]], [0.88, 0.10, 0.02])
     for j in range(3):
         changed = x.copy()
         changed[:, j] += 0.1
         d, v = chemistry.outputs(changed, c.eta_shared)
-        new_fm = voc.fecundity(d, v, c, changed)[0]
+        new_fm = _defense.fecundity(d, v, c, changed)[0]
         np.testing.assert_allclose(fm - new_fm, 0.1 * (c.plant_cost if j < 2 else c.voc_cost))
         np.testing.assert_allclose(d - D, [[0.1 if j == 0 else 0, 0.1 if j == 1 else 0]])
         np.testing.assert_allclose(v - V, [[0.05 if j == 1 else 0, 0.1 if j == 2 else 0]])
@@ -36,7 +36,7 @@ def test_shared_module_paths_and_hand_calculation():
         d, v = chemistry.outputs(x, eta)
         np.testing.assert_array_equal(d, D)
         np.testing.assert_allclose(v, [[eta * 0.6, 0.4]])
-        np.testing.assert_array_equal(voc.fecundity(d, v, config(eta_shared=eta), x)[0], fm)
+        np.testing.assert_array_equal(_defense.fecundity(d, v, config(eta_shared=eta), x)[0], fm)
 
 
 def test_shared_module_boundaries_and_configuration_contract():
@@ -46,10 +46,10 @@ def test_shared_module_boundaries_and_configuration_contract():
         D, V = chemistry.outputs(x, c.eta_shared)
         assert np.isfinite(D).all() and np.isfinite(V).all()
         expected = max(0, 1 - 2 * c.plant_cost * value - c.voc_cost * value)
-        np.testing.assert_allclose(voc.fecundity(D, V, c, x)[0], expected)
+        np.testing.assert_allclose(_defense.fecundity(D, V, c, x)[0], expected)
     x = np.ones((1, 3))
     D, V = chemistry.outputs(x, 1.0)
-    assert voc.fecundity(D, V, config(plant_cost=1.0), x)[0][0] == 0
+    assert _defense.fecundity(D, V, config(plant_cost=1.0), x)[0][0] == 0
     np.testing.assert_array_equal(consumption(np.zeros((1, 2)), np.zeros((1, 2))), [1.0])
     for bad in (
         np.full((1, 4), 0.5),

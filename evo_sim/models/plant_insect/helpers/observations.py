@@ -2,10 +2,9 @@
 
 import numpy as np
 
+from evo_sim.models.plant_insect.biology.insects.feeding import consumption
+from evo_sim.models.plant_insect.biology.insects.sensory import conditional_probabilities
 from evo_sim.models.plant_insect.biology.plants.chemistry import reference
-
-from .traits import consumption
-from .voc import conditional_probabilities
 
 
 def standardized(state, c, B, w, generation):

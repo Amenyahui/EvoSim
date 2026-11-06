@@ -8,11 +8,10 @@ from itertools import combinations
 
 import numpy as np
 
+from evo_sim.core.runner import ComputationalLimit
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError, reproduce
 from evo_sim.models.plant_insect.config.schema import normalized_bounds, numeric
-
-from ...helpers.demography import ComputationalLimit
 
 KINDS = ("plant", "insect")
 

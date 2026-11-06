@@ -13,14 +13,14 @@ from evo_sim.models.plant_insect import get_runner, simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology import traits as modules
-from evo_sim.models.plant_insect.helpers import ecology, traits
+from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
 from evo_sim.models.plant_insect.substeps.lifecycle import draw_fathers, sample_parents
 from tests.support import raises
 from tests.test_v017_modules import CONFIG, module_config
 
 
 def test_larval_survival_probability_boundaries_and_cost_separation():
-    probability = ecology.larval_survival_probability
+    probability = _feeding.larval_survival_probability
     np.testing.assert_array_equal(probability([0, 0.25, 1]), [0, 0.25, 1])
     assert probability([]).shape == (0,)
     for invalid in (-0.01, 1.01, np.nan, np.inf, -np.inf):
@@ -29,7 +29,7 @@ def test_larval_survival_probability_boundaries_and_cost_separation():
     values = np.array([[0.6, 0.4, 0, 1, 0.5, 0.2, 0, 1]] * 2)
     I = modules.effective(values, c.functional_modules)[0]
     for resource, expected in ((0.0, 0.0), (2.0, 1.0)):
-        result = ecology.settle_feeding(
+        result = _feeding.settle_feeding(
             np.zeros((1, 2)),
             I,
             np.zeros(1, int),
@@ -54,7 +54,7 @@ def test_competing_larvae_conserve_resources_and_fraction():
     capacity = np.array([30.0, 30.0, 300.0])
     for order in (np.arange(len(host)), np.arange(len(host))[::-1]):
         selected = host[order]
-        result = ecology.allocate_resources(
+        result = _feeding.allocate_resources(
             selected, np.ones(len(host)), capacity, np.ones(len(host))
         )
         assert (result["X"] <= capacity).all()
@@ -63,7 +63,7 @@ def test_competing_larvae_conserve_resources_and_fraction():
             values = result["x"][selected == plant]
             assert np.all(values == values[0])
     for count in (10, 15):
-        result = ecology.allocate_resources(
+        result = _feeding.allocate_resources(
             np.zeros(count, dtype=int), np.ones(count), np.array([10.0]), np.ones(count)
         )
         np.testing.assert_allclose(result["g"], np.ones(count) if count == 10 else 10 / 15)
@@ -71,16 +71,16 @@ def test_competing_larvae_conserve_resources_and_fraction():
     host = np.array([0, 0, 1, 1, -1])
     q = np.array([1.0, 0.5, 1.0, 0.0, np.nan])
     capacity, dmax = np.array([1.0, 0.0]), np.array([2.0, 2.0, 1.0, 1.0, 1.0])
-    e = ecology.allocate_resources(host, q, capacity, dmax)
+    e = _feeding.allocate_resources(host, q, capacity, dmax)
     np.testing.assert_allclose(e["x"], [2 / 3, 1 / 3, 0, 0, 0])
     np.testing.assert_array_equal(e["g"], e["x"] / dmax)
-    np.testing.assert_array_equal(ecology.larval_survival_probability(e["g"]), e["g"])
+    np.testing.assert_array_equal(_feeding.larval_survival_probability(e["g"]), e["g"])
     assert (e["X"] <= capacity).all() and e["x"].sum() <= capacity.sum()
     rng = np.random.default_rng(18)
     for _ in range(30):
         host = rng.integers(0, 4, 100)
         q, capacity, dmax = rng.random(100), rng.random(4), rng.uniform(0.01, 2, 100)
-        e = ecology.allocate_resources(host, q, capacity, dmax)
+        e = _feeding.allocate_resources(host, q, capacity, dmax)
         assert (e["X"] <= capacity).all()
         np.testing.assert_array_equal(e["X"], np.bincount(host, weights=e["x"], minlength=4))
         np.testing.assert_array_equal(e["g"], e["x"] / dmax)
@@ -88,16 +88,16 @@ def test_competing_larvae_conserve_resources_and_fraction():
 
 
 def test_limiting_component_boundaries_and_processing_monotonicity():
-    np.testing.assert_array_equal(traits.consumption([[0, 0], [1, 0]], [[0, 0], [0, 1]]), [1, 0])
+    np.testing.assert_array_equal(_feeding.consumption([[0, 0], [1, 0]], [[0, 0], [0, 1]]), [1, 0])
     np.testing.assert_array_equal(
-        traits.consumption([[0, 1], [1, 1]], [[0, 0.5], [1, 0]]), [0.5, 0]
+        _feeding.consumption([[0, 1], [1, 1]], [[0, 0.5], [1, 0]]), [0.5, 0]
     )
-    assert traits.consumption([[1e-320, 0]], [[1, 0]])[0] == 1
-    assert traits.consumption(np.empty((0, 2)), np.empty((0, 2))).shape == (0,)
+    assert _feeding.consumption([[1e-320, 0]], [[1, 0]])[0] == 1
+    assert _feeding.consumption(np.empty((0, 2)), np.empty((0, 2))).shape == (0,)
     for bad in (-1.0, np.nan, np.inf):
-        raises(lambda: traits.consumption([[bad, 1]], [[1, 1]]))
-        raises(lambda: traits.consumption([[1, 1]], [[bad, 1]]))
-    raises(lambda: traits.consumption([], []))
+        raises(lambda: _feeding.consumption([[bad, 1]], [[1, 1]]))
+        raises(lambda: _feeding.consumption([[1, 1]], [[bad, 1]]))
+    raises(lambda: _feeding.consumption([], []))
     c = module_config()
     rng = np.random.default_rng(18)
     values, D = rng.random((100, 8)), rng.random((100, 2))
@@ -107,7 +107,7 @@ def test_limiting_component_boundaries_and_processing_monotonicity():
     more = modules.effective(enhanced, c.functional_modules)[0]
     assert (I.sum(axis=1) <= values[:, :2].sum(axis=1)).all()
     assert (more >= I).all()
-    assert (traits.consumption(D, more) >= traits.consumption(D, I)).all()
+    assert (_feeding.consumption(D, more) >= _feeding.consumption(D, I)).all()
 
 
 def test_mating_roles_distance_compatibility_and_per_egg_fathers():
@@ -196,7 +196,7 @@ def test_lifecycle_consumes_explicit_probability_and_records_it():
     # Wiring test: a replacement kernel must drive both the draw and event field.
     c = module_config(choice_mode="forced")
     with patch.object(
-        ecology, "larval_survival_probability", side_effect=lambda g: np.zeros_like(g)
+        _feeding, "larval_survival_probability", side_effect=lambda g: np.zeros_like(g)
     ):
         result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"

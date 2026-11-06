@@ -365,7 +365,7 @@ def summarize_sensitivity(path):
                         else np.nan,
                         plant_resource_before=b_total,
                         plant_resource_capacity=k_total,
-                        plant_resource_after_feeding=plants.resource_after_feeding.sum(),
+                        plant_resource_after_feeding=plants.resource_afterfeeding.sum(),
                         plant_resource_recovery=plants.resource_recovery.sum(),
                         plant_resource_next_retained=plants.resource_next.sum(),
                         plant_resource_fraction=b_total / k_total if k_total else np.nan,

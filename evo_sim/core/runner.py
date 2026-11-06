@@ -61,3 +61,7 @@ class Runner:
     def forward(self):
         self.init()
         return self.step()
+
+
+class ComputationalLimit(RuntimeError):
+    pass

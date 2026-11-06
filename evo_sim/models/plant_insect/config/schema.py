@@ -363,8 +363,8 @@ class Config(_ResourceConfig):
                 or ((values < 0) | (values > 1)).any()
             ):
                 raise ValueError("invalid observation reference panel")
-        from evo_sim.models.plant_insect.helpers.demography import validate_sexual
-        from evo_sim.models.plant_insect.helpers.spatial import validate_spatial
+        from evo_sim.models.plant_insect.biology.insects.demography import validate_sexual
+        from evo_sim.models.plant_insect.biology.spatial import validate_spatial
 
         validate_spatial(self)
         validate_sexual(self)

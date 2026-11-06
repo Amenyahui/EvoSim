@@ -8,8 +8,9 @@ import numpy as np
 
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
+from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
+from evo_sim.models.plant_insect.biology.insects import host_selection as _host_selection
 from evo_sim.models.plant_insect.config.schema import config_payload
-from evo_sim.models.plant_insect.helpers import ecology
 from evo_sim.models.plant_insect.substeps.lifecycle import source_flows
 from tests.support import base_runner, config, raises
 
@@ -109,7 +110,7 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
     )
     c.spatial.update(initial_plant_cells=[[0, 0]] * 40, initial_insect_cells=[[0, 0]] * 20)
     seen_A, seen_I = [], []
-    choose, settle = ecology.choose_hosts, ecology.settle_feeding
+    choose, settle = _host_selection.choose_hosts, _feeding.settle_feeding
 
     def choices(A, *args, **kwargs):
         seen_A.append(A.copy())
@@ -120,8 +121,8 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
         return settle(D, I, *args, **kwargs)
 
     with (
-        patch.object(ecology, "choose_hosts", choices),
-        patch.object(ecology, "settle_feeding", feeding),
+        patch.object(_host_selection, "choose_hosts", choices),
+        patch.object(_feeding, "settle_feeding", feeding),
     ):
         result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
@@ -159,16 +160,16 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
 
 
 def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
-    allocation = ecology.allocate_resources(
+    allocation = _feeding.allocate_resources(
         np.array([0]), np.array([1.0]), np.array([0.0]), np.array([1.0])
     )
     assert allocation["x"].tolist() == allocation["g"].tolist() == allocation["h"].tolist() == [0.0]
-    empty = ecology.allocate_resources(
+    empty = _feeding.allocate_resources(
         np.array([], int), np.array([]), np.array([0.0]), np.array([])
     )
     assert empty["h"].tolist() == [0.0]
     raises(
-        lambda: ecology.allocate_resources(
+        lambda: _feeding.allocate_resources(
             np.array([0]), np.array([1.0]), np.array([-1.0]), np.array([1.0])
         )
     )

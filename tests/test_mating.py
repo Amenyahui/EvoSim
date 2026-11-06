@@ -1,9 +1,9 @@
 import numpy as np
 
 from evo_sim.models.plant_insect import simulate
-from evo_sim.models.plant_insect.helpers.demography import mating_candidates
+from evo_sim.models.plant_insect.biology.insects.demography import mating_candidates
+from evo_sim.models.plant_insect.biology.spatial import disperse, distance
 from evo_sim.models.plant_insect.helpers.runtime import community_state
-from evo_sim.models.plant_insect.helpers.spatial import disperse, distance
 from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
 from tests.support import base_runner, config
 

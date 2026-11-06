@@ -11,8 +11,8 @@ import numpy as np
 from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit import audit_run
 from evo_sim.models.plant_insect.batch import run, save_result, write_json
+from evo_sim.models.plant_insect.biology.insects.feeding import settle_feeding
 from evo_sim.models.plant_insect.config.schema import config_payload
-from evo_sim.models.plant_insect.helpers.ecology import settle_feeding
 from evo_sim.models.plant_insect.helpers.runtime import community_state
 from evo_sim.models.plant_insect.substeps.lifecycle import sample_parents
 from tests.support import base_runner, config, raises

@@ -9,20 +9,20 @@ import json
 
 import numpy as np
 
+from evo_sim.core.runner import ComputationalLimit
 from evo_sim.core.substep import SubstepTransition
+from evo_sim.models.plant_insect.biology import spatial
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.agents import CommunityState
-from evo_sim.models.plant_insect.biology.plants import chemistry
-from evo_sim.models.plant_insect.helpers import spatial
-
-from ..helpers import ecology as feeding
-from ..helpers.contributions import allele_contributions, commit_parent_contributions
-from ..helpers.demography import (
-    ComputationalLimit,
+from evo_sim.models.plant_insect.biology.insects import feeding, host_selection
+from evo_sim.models.plant_insect.biology.insects.demography import (
     maternal_moments,
     mating_candidates,
-    plant_resource_update,
 )
+from evo_sim.models.plant_insect.biology.plants import chemistry
+from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
+
+from ..helpers.contributions import allele_contributions, commit_parent_contributions
 from ..helpers.observations import standardized
 from ..helpers.runtime import agent_state, community_state, resource_vector
 
@@ -248,7 +248,7 @@ def transition(runtime, current, t):
     egg_mothers = np.repeat(np.arange(len(insects)), counts)
     V = chemistry.plant_voc(plants.defense, plants.voc_trait, c, runtime.B, plants.chemical_traits)
     V_cue = V[runtime.rng[8][0][0].permutation(len(V))] if c.shuffle_voc else V.copy()
-    choice = feeding.choose_hosts(
+    choice = host_selection.choose_hosts(
         insects.module_traits[egg_mothers],
         pl,
         hl[egg_mothers],

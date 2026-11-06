@@ -4,11 +4,10 @@ from copy import deepcopy
 from pathlib import Path
 
 from evo_sim.core.registry import Registry
-from evo_sim.core.runner import Runner
+from evo_sim.core.runner import ComputationalLimit, Runner
 from evo_sim.models.plant_insect.config.loader import read_config
 from evo_sim.models.plant_insect.config.schema import config_payload
 
-from .helpers.demography import ComputationalLimit
 from .helpers.runtime import fail, finalize, initialize_community
 from .substeps.lifecycle import AdvanceGeneration
 

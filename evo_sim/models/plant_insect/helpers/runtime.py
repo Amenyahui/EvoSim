@@ -10,6 +10,8 @@ import pandas as pd
 
 from evo_sim import __version__
 from evo_sim.core.helpers import source_hashes
+from evo_sim.core.runner import ComputationalLimit
+from evo_sim.models.plant_insect.biology import spatial
 from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.agents import (
     CommunityState,
@@ -18,11 +20,10 @@ from evo_sim.models.plant_insect.biology.agents import (
 )
 from evo_sim.models.plant_insect.biology.genetics import qtl as genetics
 from evo_sim.models.plant_insect.biology.genetics.slim_backend import SlimError
+from evo_sim.models.plant_insect.biology.insects import feeding
 from evo_sim.models.plant_insect.config.schema import Config, config_payload, resource_values
-from evo_sim.models.plant_insect.helpers import ecology, spatial
 
 from .contributions import mark_uncommitted
-from .demography import ComputationalLimit
 
 
 def streams(c):
@@ -185,7 +186,7 @@ def initialize_community(config, initial=None):
                 for k in range(2)
             ]
         community.validate()
-        runtime.founder_feeding_diagnostics = ecology.founder_feeding_diagnostics(
+        runtime.founder_feeding_diagnostics = feeding.founder_feeding_diagnostics(
             community.plants.defense,
             community.insects.resistance,
             resource_vector(runtime.c.resource_capacity, runtime.c.plant_sizes, pl, "P"),
