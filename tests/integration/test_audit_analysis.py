@@ -7,12 +7,13 @@ import numpy as np
 import pandas as pd
 
 from evo_sim.models.plant_insect import get_runner
-from evo_sim.models.plant_insect.analysis.common import Batch
+from evo_sim.models.plant_insect.analysis.common import Batch, sha256
 from evo_sim.models.plant_insect.analysis.summaries.lifecycle import (
     summarize,
     summarize_sensitivity,
 )
 from evo_sim.models.plant_insect.analysis.summaries.lineages import summarize as summarize_lineages
+from evo_sim.models.plant_insect.analysis.summaries.qtl import summarize as summarize_qtl
 from evo_sim.models.plant_insect.audit.run import audit, audit_run
 from evo_sim.models.plant_insect.batch import run
 from evo_sim.models.plant_insect.config.schema import config_payload
@@ -49,6 +50,29 @@ def test_sexual_plants_are_audited_and_summarized():
         assert raw["plant_resource_cycles"].resource_capacity.gt(0).all()
         tables, _ = summarize_sensitivity(root)
         assert tables["diagnostics"].plant_reproduction_active.all()
+        inputs = {file: sha256(file) for file in folder.rglob("*") if file.is_file()}
+        summarize_qtl(Batch.open(root), print_summary=False)
+        partitions = pd.read_csv(root / "data/summary/trait_variance_partition.csv")
+        assert set(partitions.generation) == {0, 1, 2}
+        with np.load(folder / "snapshots/g000002.npz") as state:
+            for kind, key in (
+                ("plant", "plant_chemical_traits"),
+                ("insect", "insect_module_traits"),
+                ("plant", "D"),
+                ("insect", "I"),
+            ):
+                for axis in range(state[key].shape[1]):
+                    row = partitions.loc[
+                        (partitions.generation == 2)
+                        & (partitions.kind == kind)
+                        & (partitions.trait == f"{key}_{axis + 1}")
+                    ].iloc[0]
+                    assert row.N == len(state[key])
+                    np.testing.assert_allclose(row["mean"], state[key][:, axis].mean(), atol=1e-14)
+                    np.testing.assert_allclose(
+                        row.total_variance, state[key][:, axis].var(), atol=1e-14
+                    )
+        assert inputs == {file: sha256(file) for file in inputs}
         lineages = summarize_lineages(
             Batch.open(root),
             dict(distance_threshold=1.0, minimum_cluster_size=2, persistence_generations=2),

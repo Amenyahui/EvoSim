@@ -89,6 +89,64 @@ A–E默认绘图命令为 `python -m evo_sim.models.plant_insect.analysis.plot_
 
 完整性审计可验证失败账本：`integrity_status=passed`不代表运行成功。`execution_success`和`acceptance_passed`分别反映执行状态及额外验收条件；`--require-success --min-transitions 1`要求成功状态且至少一次已提交转移，并不证明达到固定期限。计算保护停止后的状态为未知，不当作灭绝。绘图和汇总检查输入指纹；不回写原始metadata。
 
+### Review 后的长期诊断入口
+
+`configs/review_diagnostics.yaml` 是独立的300轮、每情景4重复开发诊断设计，不改变
+`current.yaml` 的五轮默认设置。包含无突变基线、双方启用突变、各自匹配的无虫对照，
+以及分别扩大寄主搜索、昆虫交配、昆虫扩散半径的三个单因素情景。
+半径5覆盖当前周期10×10空间；扩大搜索半径仍只抽至多8株候选，不能解释为同时评估全部植物。
+这些设置是理论比较，不能解释为拟合共存、均衡遗传方差或冻结演化；关闭突变仍有选择与重组。
+
+```powershell
+python -m evo_sim.models.plant_insect.batch --config evo_sim/models/plant_insect/configs/review_diagnostics.yaml
+python -m evo_sim.models.plant_insect.analysis.summarize_lifecycle --input <batch> --sensitivity
+python -m evo_sim.models.plant_insect.audit --input <batch>
+python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input <batch>
+```
+
+第一条命令默认创建新的 `codex/validation/v0.1.11/run<N>/`，不会写入正式科研结果目录。
+完整设计是否已执行须以实际运行状态为准。`--sensitivity` 可独立读取并审计已记录的运行，
+写 `sensitivity_runs/trajectories/diagnostics/survival.csv` 及 `sensitivity_audit.json`；
+未启动、审计失败和计算停止后的未知状态保留原有区别，固定期限存续不等于稳定共存。
+
+阶段诊断新增以下口径（每次运行、每个已提交转移分别计算，不跨重复合并）：
+
+- `eggs_rejected` 和 `eggs_without_candidates` 区分拒绝与没有局部候选；
+  `females_without_mates` 是无配偶雌虫数。它们不等于幼虫死亡。
+- `larval_expected_recruits` 为已记录 `g` 之和，`larval_realized_recruits` 为实际存活计数；
+  无出生幼虫时计数为0，`larval_survival_fraction` 为NA。
+- `plant_resource_exhausted_fraction` 的分母是轮初资源 `R>0` 的植株；
+  `plant_attacked_resource_exhausted_fraction` 进一步要求 `herbivore_load>0`。
+  耗尽按食后资源不超过 `1e-12 R` 判断。另列两个分母计数与 `plant_zero_stock_fraction`，
+  不把轮初已无资源的植物算成当轮被吃光；分母为0时比例为NA。
+- `plant_start_deficit_mean` 是平均 `1-R/K`；
+  `plant_consumption_capacity_fraction_mean` 是平均 `(R-B_post)/K`。
+  二者相加为原来的平均食后亏损，不能把初始小体型或先前亏损都归因于当轮食害。
+- `plant_survivors_without_mates` 单列存活但无配偶的植物；
+  `plant_mothers_with_mates` 是存活且有父本的母株数；在此集合内，
+  `plant_zero_mean_mothers` 统计母源Poisson均值为0，
+  `plant_stochastic_zero_propagules` 统计均值大于0却抽到0传播子的母株。
+  历史列 `plant_reproductive_mothers` 仍仅统计存活母本资格，不能代替有配偶计数。
+
+QTL汇总另写 `trait_variance_partition.csv`。按各轮各类型的个体数加权，
+总体方差 = 类型内方差加权均值 + 类型均值的加权方差（均用 `ddof=0`）。
+包含原发性状坐标，以及直接读取快照的防御 `D` 和处理能力 `I`，不重新执行生物方程。
+类型内、类型间及总方差使用各自性状单位的平方；植物类型为母系初始来源、昆虫类型为预设兼容池。
+空类型不加权，全空原发性状行保留 `N=0`、均值和方差NA；快照中不存在的功能类型没有行。
+这不是加性遗传方差、遗传力、进化潜力或跨类群演化速度排名。
+输入快照与遗传汇总的SHA256、计算口径保存在 `summarize_qtl_run_metadata.json`。
+
+2026-11-09 的首批开发验证：[七情景短程批次](../codex/validation/v0.1.11/run6/data/run_status.csv)
+每情景1重复、2轮，7次运行均完成；[阶段诊断审计](../codex/validation/v0.1.11/run6/data/summary/sensitivity_audit.json)
+覆盖14次转移，资源超用和相对收支误差均为0。
+[固定种子比较](../codex/validation/v0.1.11/run6/behavior_preservation.json)核对修改前后突变关闭与开启的
+46项原始CSV及快照，CSV逐字节相同、快照全部数组相同；
+[诊断核对](../codex/validation/v0.1.11/run6/diagnostic_verification.json)另检验无虫零分母与亏损分解。
+`ruff check` 和 `ruff format --check` 均通过（113个Python文件）；
+[完整测试日志](../codex/validation/v0.1.11/run6/tests.log)记录 `python -m tests` 的114组检查全部通过，
+包括真实快照的方差核对、汇总前后原始文件哈希不变和已有独立审计篡改检查。
+此处没有执行300轮完整设计，不作为长期共存或共同演化证据。
+
 <a id="current-validation"></a>
 
 ## 0.1.11 实施验收

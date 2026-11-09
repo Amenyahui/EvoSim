@@ -51,6 +51,12 @@ update_plants → reproduce_plants → recruit`。阶段用简单 dataclass 显�
 跨事件检查状态，继续拆分应另选有独立职责的块，不为缩短行数制造动态状态容器。
 遗传后端已有原生突变/重组实现，不另设空的 Python 模块。
 
+2026-11-09 的 review 诊断属于 **Analysis Extension**，继续使用现有结构：
+`summaries/lifecycle.py` 读取已审计账本并汇总有限期限结局、资源耗尽与繁殖失败原因；
+`summaries/qtl.py` 读取遗传汇总和 D/I 快照，以个体数加权分解类型内与类型间方差。
+两者不改变模拟状态、不重新计算生物输出，保留原始记录与既有汇总列。
+`configs/review_diagnostics.yaml` 是独立实验配置，默认入口和科学协议仍为 v0.1.11。
+
 ## 原始模块地图（迁移前）
 
 下表路径相对于 `evo_sim/models/plant_insect/`，除非另有说明。

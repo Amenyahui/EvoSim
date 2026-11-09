@@ -139,19 +139,33 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
             )
         pd.DataFrame(populations).to_csv(folder / "populations.csv", index=False)
         pd.DataFrame(
-            dict(generation=[0, 0, 1], q=[0.5, 1.0, 1.0], dmax=[1.0] * 3, x=[0.5] * 3)
+            dict(
+                generation=[0, 0, 1],
+                q=[0.5, 1.0, 1.0],
+                dmax=[1.0] * 3,
+                x=[0.5] * 3,
+                g=[0.5] * 3,
+                survived_to_adult=[True, False, True],
+            )
         ).to_csv(folder / "larvae.csv", index=False)
         pd.DataFrame(
             dict(
-                generation=[0, 1],
-                resource_capacity=[10.0, 10.0],
-                R=[2.5, 2.5],
-                T=[0.0, 5.0],
-                resource_after_feeding=[2.5, 0.0],
-                resource_recovery=[3.75, 5.0],
-                resource_next=[6.25, 5.0],
-                defoliation=[0.75, 1.0],
-                gamma=[1.0, 0.5],
+                reproduction_round=[0, 0, 1, 1],
+                reason=["accepted", "rejected", "accepted", "no_candidate"],
+            )
+        ).to_csv(folder / "oviposition.csv", index=False)
+        pd.DataFrame(
+            dict(
+                generation=[0, 0, 1],
+                resource_capacity=[10.0] * 3,
+                R=[2.5, 0.0, 2.5],
+                T=[0.0, 0.0, 5.0],
+                resource_after_feeding=[2.5, 0.0, 0.0],
+                resource_recovery=[3.75, 5.0, 5.0],
+                resource_next=[6.25, 5.0, 5.0],
+                defoliation=[0.75, 1.0, 1.0],
+                gamma=[1.0, 1.0, 0.5],
+                herbivore_load=[0, 0, 1],
             )
         ).to_csv(folder / "plants.csv", index=False)
         pd.DataFrame(
@@ -160,7 +174,9 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
                 kind=["plant"] * 2,
                 expected_propagules=[0.0, 2.0],
                 eligible_as_mother=[False, True],
-                has_mate=[False, False],
+                has_mate=[False, True],
+                conditional_mu=[0.0, 2.0],
+                propagule_count=[0, 0],
             )
         ).to_csv(folder / "parents.csv", index=False)
         # Synthetic ledgers exercise summary semantics; integrity itself is tested elsewhere.
@@ -171,13 +187,48 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
             tables, _ = summarize_sensitivity(root)
         assert tables["runs"].iloc[0].coexistence_outcome == "coexistence_at_horizon"
         before, pulse = tables["diagnostics"].iloc[0], tables["diagnostics"].iloc[1]
-        assert before.plant_resource_fraction == 0.25 and before.plant_defoliation_mean == 0.75
+        assert before.plant_resource_fraction == 0.125 and before.plant_defoliation_mean == 0.875
         assert before.plant_losses == before.plant_cycle_losses == 1
         assert before.plant_resource_limited_fraction == 0.0
         assert before.larval_q_saturated_fraction == 0.5 and before.larval_q_mean == 0.75
         assert pulse.plant_cycle_losses == 0 and np.isnan(pulse.plant_cycle_replacement_fraction)
         assert pulse.plant_reproductive_mothers == 1
         assert pulse.plant_resource_limited_fraction == 1.0
+        assert before.eggs_rejected == 1 and before.eggs_without_candidates == 0
+        assert pulse.eggs_rejected == 0 and pulse.eggs_without_candidates == 1
+        assert before.larval_expected_recruits == 1 and before.larval_realized_recruits == 1
+        assert before.larval_survival_fraction == 0.5
+        assert before.plant_resource_exhausted_fraction == 0
+        assert before.plant_positive_stock_count == 1 and before.plant_zero_stock_fraction == 0.5
+        assert np.isnan(before.plant_attacked_resource_exhausted_fraction)
+        assert pulse.plant_resource_exhausted_fraction == 1
+        assert pulse.plant_attacked_resource_exhausted_fraction == 1
+        assert pulse.plant_stochastic_zero_propagules == 1
+        assert before.plant_start_deficit_mean == 0.875
+        assert before.plant_consumption_capacity_fraction_mean == 0
+        assert pulse.plant_consumption_capacity_fraction_mean == 0.25
+
+
+def test_review_diagnostic_design_preserves_baseline_and_declares_each_intervention():
+    baseline = read_config(CONFIGS / "current.yaml")
+    design = read_config(CONFIGS / "review_diagnostics.yaml")
+    assert design["parameters"] == baseline["parameters"]
+    assert design["simulation_metadata"]["num_steps_per_episode"] == 300
+    assert design["batch"]["replicates"] == 4
+    cases = {case["name"]: case["overrides"] for case in design["batch"]["cases"]}
+    assert cases == dict(
+        baseline={},
+        mutation_on=dict(genetics=dict(mutation_enabled=dict(plant=True, insect=True))),
+        plants_only=dict(insect_sizes=[0]),
+        plants_only_mutation_on=dict(
+            insect_sizes=[0], genetics=dict(mutation_enabled=dict(plant=True, insect=True))
+        ),
+        global_host_search=dict(spatial=dict(search_radius=5)),
+        global_insect_mating=dict(sexual_reproduction=dict(insect_mate_radius=5)),
+        wide_insect_dispersal=dict(spatial=dict(insect_dispersal_radius=5)),
+    )
+    for overrides in cases.values():
+        Config(**dict(merge_config(design["parameters"], overrides), generations=300)).validate()
 
 
 def test_readers_reject_old_invalid_run_and_empty_batch():

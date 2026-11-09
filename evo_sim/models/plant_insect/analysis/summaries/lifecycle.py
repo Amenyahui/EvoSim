@@ -129,12 +129,17 @@ def summarize(batch):
 
 
 def main():
-    args = batch_parser(__doc__).parse_args()
-    summarize(args.input)
-
-
-if __name__ == "__main__":
-    main()
+    parser = batch_parser(__doc__)
+    parser.add_argument(
+        "--sensitivity",
+        action="store_true",
+        help="Audit finite-horizon outcomes and stage diagnostics",
+    )
+    args = parser.parse_args()
+    if args.sensitivity:
+        summarize_sensitivity(args.input)
+    else:
+        summarize(args.input)
 
 
 def sensitivity_survival(runs, horizon):
@@ -308,6 +313,7 @@ def summarize_sensitivity(path):
                 larvae = pd.read_csv(folder / "larvae.csv")
                 plant_ledger = pd.read_csv(folder / "plants.csv")
                 parent_ledger = pd.read_csv(folder / "parents.csv")
+                oviposition = pd.read_csv(folder / "oviposition.csv")
                 plant_populations = pop[pop.kind == "plant"]
                 for g, frame in ins.groupby("generation"):
                     female = frame.N_female.sum()
@@ -325,6 +331,12 @@ def summarize_sensitivity(path):
                         mate_fraction=mates / female if female else np.nan,
                         acceptance=born / eggs if eggs else np.nan,
                     )
+                    choices = oviposition[oviposition.reproduction_round == g]
+                    diag.update(
+                        females_without_mates=female - mates,
+                        eggs_rejected=int(choices.reason.eq("rejected").sum()),
+                        eggs_without_candidates=int(choices.reason.eq("no_candidate").sum()),
+                    )
                     selected = larvae[larvae.generation == g]
                     demand = selected.dmax.sum()
                     consumed = selected.x.sum()
@@ -333,6 +345,11 @@ def summarize_sensitivity(path):
                         consumed=consumed,
                         resource_gain=consumed / demand if demand else np.nan,
                         larval_count=len(selected),
+                        larval_expected_recruits=selected.g.sum(),
+                        larval_realized_recruits=int(selected.survived_to_adult.eq(True).sum()),
+                        larval_survival_fraction=selected.survived_to_adult.eq(True).mean()
+                        if len(selected)
+                        else np.nan,
                         larval_q_mean=selected.q.mean(),
                         larval_q_saturated_fraction=selected.q.ge(1.0).mean()
                         if len(selected)
@@ -351,6 +368,10 @@ def summarize_sensitivity(path):
                     retained = plant_population.N_retained.sum()
                     losses = n_plants - retained
                     eligible = plant_parents.loc[plant_parents.eligible_as_mother.eq(True)]
+                    reproductive = eligible[eligible.has_mate.eq(True)]
+                    positive_stock = plants.R > 0
+                    attacked = positive_stock & plants.herbivore_load.gt(0)
+                    exhausted = plants.resource_after_feeding.le(plants.R * 1e-12)
                     diag.update(
                         plant_start=n_plants,
                         plant_retained=retained,
@@ -363,6 +384,15 @@ def summarize_sensitivity(path):
                         plant_expected_propagules=plant_parents.expected_propagules.sum(),
                         plant_reproduction_active=True,
                         plant_reproductive_mothers=len(eligible),
+                        plant_mothers_with_mates=len(reproductive),
+                        plant_survivors_without_mates=int(eligible.has_mate.eq(False).sum()),
+                        plant_zero_mean_mothers=int(reproductive.conditional_mu.eq(0).sum()),
+                        plant_stochastic_zero_propagules=int(
+                            (
+                                reproductive.conditional_mu.gt(0)
+                                & reproductive.propagule_count.eq(0)
+                            ).sum()
+                        ),
                         plant_retention_fraction=retained / n_plants if n_plants else np.nan,
                         plant_establishment_fraction=newborns / propagules
                         if propagules
@@ -374,6 +404,15 @@ def summarize_sensitivity(path):
                         plant_resource_next_retained=plants.resource_next.sum(),
                         plant_resource_fraction=b_total / k_total if k_total else np.nan,
                         plant_defoliation_mean=plants.defoliation.mean(),
+                        plant_start_deficit_mean=(1 - plants.R / plants.resource_capacity).mean(),
+                        plant_consumption_capacity_fraction_mean=(
+                            (plants.R - plants.resource_after_feeding) / plants.resource_capacity
+                        ).mean(),
+                        plant_positive_stock_count=int(positive_stock.sum()),
+                        plant_attacked_positive_stock_count=int(attacked.sum()),
+                        plant_zero_stock_fraction=plants.R.eq(0).mean() if len(plants) else np.nan,
+                        plant_resource_exhausted_fraction=exhausted[positive_stock].mean(),
+                        plant_attacked_resource_exhausted_fraction=exhausted[attacked].mean(),
                         plant_resource_limited_fraction=plants["T"].gt(plants.R).mean()
                         if len(plants)
                         else np.nan,
@@ -418,6 +457,18 @@ def summarize_sensitivity(path):
             status_sha256=sha256(status_file) if status_file.exists() else None,
             source_sha256=sha256(Path(__file__)),
             runs=evidence,
+            diagnostic_definitions=dict(
+                generations="committed transitions only; no extrapolation of stage diagnostics",
+                exhaustion="post-feeding resource <= 1e-12 * starting stock; denominator excludes zero starting stock",
+                attacked_exhaustion="same threshold; denominator is positive-stock plants with herbivore_load > 0",
+                resource_deficit="start deficit + consumption/capacity = post-feeding deficit; not all herbivore damage",
+                plant_reproduction="zero mean and positive-mean Poisson zeros among surviving mothers with mates",
+                larval_recruits="sum of recorded g versus count of survived_to_adult; zero larvae gives NA fraction",
+            ),
         ),
     )
     return tables, settings
+
+
+if __name__ == "__main__":
+    main()

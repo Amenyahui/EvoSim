@@ -1,0 +1,39 @@
+extends: ten_plant_types.yaml
+simulation_metadata:
+  num_steps_per_episode: 300
+batch:
+  purpose: Prespecified finite-horizon review diagnostics, not calibration or proof of stable coexistence.
+    Each spatial case changes one radius from the mutation-off baseline. Radius 5 covers
+    the periodic 10x10 habitat; global host search still samples at most 8 candidates.
+  replicates: 4
+  cases:
+  - name: baseline
+    overrides: {}
+  - name: mutation_on
+    overrides:
+      genetics:
+        mutation_enabled:
+          plant: true
+          insect: true
+  - name: plants_only
+    overrides:
+      insect_sizes: [0]
+  - name: plants_only_mutation_on
+    overrides:
+      insect_sizes: [0]
+      genetics:
+        mutation_enabled:
+          plant: true
+          insect: true
+  - name: global_host_search
+    overrides:
+      spatial:
+        search_radius: 5
+  - name: global_insect_mating
+    overrides:
+      sexual_reproduction:
+        insect_mate_radius: 5
+  - name: wide_insect_dispersal
+    overrides:
+      spatial:
+        insect_dispersal_radius: 5
