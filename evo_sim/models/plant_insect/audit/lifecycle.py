@@ -169,6 +169,7 @@ def audit_run_lifecycle(path, meta):
             reason = "no_candidate"
             visited, acceptance_probabilities, contact_results = [], [], []
             if len(candidates):
+                reason = "rejected"
                 remaining = candidates.copy()
                 while len(remaining):
                     probabilities = module_choice(
@@ -176,6 +177,7 @@ def audit_run_lifecycle(path, meta):
                     )
                     selected = stream.choice(len(probabilities), p=probabilities)
                     if selected == len(remaining):
+                        reason = "outside_option"
                         break
                     plant = int(remaining[selected])
                     probability = float(
@@ -187,9 +189,9 @@ def audit_run_lifecycle(path, meta):
                     contact_results.append(contact_ok)
                     if contact_ok:
                         hosts[j] = plant
+                        reason = "accepted"
                         break
                     remaining = np.delete(remaining, selected)
-                reason = "accepted" if hosts[j] >= 0 else "rejected"
             p = hosts[j]
             add(
                 "oviposition",
@@ -385,7 +387,7 @@ def audit_run_lifecycle(path, meta):
         )
         recovery_rate = (
             spec_plant["resource_recovery_rate"]
-            + spec_plant["tolerance_recovery_rate"] * chemical[:, 2]
+            + spec_plant["tolerance_recovery_rate"] * chemical[:, 2] * defoliation
         )
         replenished = K - (K - post) * np.exp(-recovery_rate)
         pcounts, ppools, psurvived = parents("plant", Sp, fp * replenished / K, np.ones(len(pids)))

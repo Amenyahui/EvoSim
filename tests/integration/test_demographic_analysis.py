@@ -132,8 +132,8 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
                         N_start=1,
                         N_female=1,
                         N_mothers_with_mates=1,
-                        N_potential_eggs=2,
-                        N_offspring=2,
+                        N_potential_eggs=4 if generation == 0 else 2,
+                        N_offspring=2 if generation == 0 else 1,
                     ),
                 ]
             )
@@ -151,8 +151,15 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
         ).to_csv(folder / "larvae.csv", index=False)
         pd.DataFrame(
             dict(
-                reproduction_round=[0, 0, 1, 1],
-                reason=["accepted", "rejected", "accepted", "no_candidate"],
+                reproduction_round=[0, 0, 0, 0, 1, 1],
+                reason=[
+                    "accepted",
+                    "accepted",
+                    "rejected",
+                    "outside_option",
+                    "accepted",
+                    "no_candidate",
+                ],
             )
         ).to_csv(folder / "oviposition.csv", index=False)
         pd.DataFrame(
@@ -197,7 +204,16 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
         assert pulse.plant_reproductive_mothers == 1
         assert pulse.plant_resource_limited_fraction == 1.0
         assert before.eggs_rejected == 1 and before.eggs_without_candidates == 0
+        assert before.eggs_outside_option == 1 and pulse.eggs_outside_option == 0
         assert pulse.eggs_rejected == 0 and pulse.eggs_without_candidates == 1
+        for row in (before, pulse):
+            assert (
+                row.eggs
+                == row.born
+                + row.eggs_rejected
+                + row.eggs_outside_option
+                + row.eggs_without_candidates
+            )
         assert before.larval_expected_recruits == 0.7 and before.larval_realized_recruits == 1
         assert before.larval_survival_fraction == 0.5
         assert before.plant_resource_exhausted_fraction == 0

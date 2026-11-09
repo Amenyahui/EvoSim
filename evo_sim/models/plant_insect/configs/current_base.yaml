@@ -57,8 +57,9 @@ parameters:
       source: docs/model.md; theoretical resource and chemistry reference, not empirically calibrated
     plant_demography:
       kind: theoretical_placeholder
-      source: docs/model.md; researcher-selected resource-coupled mortality, recovery and shared establishment
-        capacity; no empirical calibration
+      source: Theoretical mortality, shared establishment capacity and base recovery; compensatory rate
+        is r0+rZ*Z*H with current-round actual damage H=X/R (zero at R=0). Z has no undamaged growth
+        effect or cross-round induction memory. Coefficients unchanged and empirically uncalibrated.
   record_observations: true
   spatial:
     grid_shape:
@@ -174,15 +175,19 @@ parameters:
     nutrition_exponent: 1.0
     provenance:
       kind: theoretical_placeholder
-      source: docs/ecology_v0.1.12_design.md; abstract load per resource mass, load per processing unit,
-        inverse-load hazards; uncalibrated
+      source: Abstract effective detoxification over one larval feeding window, aggregating metabolism,
+        binding and excretion. Processed load is assumed fully neutralized for residual toxicity;
+        residual load carries toxicity, while antinutrition acts on total dose independently. Not a
+        P450/GST/UGT expression or enzyme-kinetic model; all coefficients empirically uncalibrated.
   contact_response:
     intercept: 0.0
     slope: 1.0
     provenance:
       kind: theoretical_placeholder
-      source: docs/ecology_v0.1.12_design.md; logistic response to signed GR-mediated functional weights,
-        not measured expression
+      source: Adult female contact response during oviposition; signed functional G weights are not
+        specific GR gene expression. Logistic acceptance is a simplified conditional behavioral
+        probability after contact, not normalized across hosts; no larval G-mediated rejection.
+        Coefficients empirically uncalibrated.
 batch:
   purpose: Current expression/tuning mechanism reference; illustrative parameters only.
   replicates: 1

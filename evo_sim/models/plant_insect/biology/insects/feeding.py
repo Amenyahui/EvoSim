@@ -8,9 +8,13 @@ from evo_sim.models.plant_insect.biology.plants import defense
 def chemical_survival(PSM, processing, intake, maximum, spec):
     """Post-ingestion loads in abstract mass units and dimensionless survival components.
 
-    Processing is a per-window capacity, independent of demand. Antinutrition
-    acts on the ingested dose independently of chemical processing. All weights
-    and the nutritional exponent are explicit theoretical configuration values.
+    I is aggregate effective detoxification capacity over one larval feeding
+    window, abstracting metabolism, binding and excretion rather than particular
+    P450/GST/UGT expression or enzyme kinetics. The processed load is assumed
+    fully neutralized for the residual-toxicity term; this closure does not assert
+    that natural metabolites are harmless. Capacity does not affect food demand.
+    Antinutrition still acts on total dose independently of processing. All weights
+    and the nutritional exponent are uncalibrated theoretical assumptions.
     """
     PSM, processing = np.broadcast_arrays(np.asarray(PSM, float), np.asarray(processing, float))
     intake, maximum = np.broadcast_arrays(np.asarray(intake, float), np.asarray(maximum, float))

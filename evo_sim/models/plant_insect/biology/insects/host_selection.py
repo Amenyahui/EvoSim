@@ -15,7 +15,12 @@ def draw_host(candidates, probabilities, rng):
 
 
 def contact_acceptance(PSM, traits, spec):
-    """GR-mediated aggregate response; signed weights are functional traits, not genes."""
+    """Adult female contact-response trait during oviposition, not a GR gene model.
+
+    Each plant has a conditional Bernoulli acceptance probability after contact.
+    These probabilities are not normalized across plants. G does not control
+    larval host rejection or feeding in the current model.
+    """
     PSM, traits = np.asarray(PSM, float), np.asarray(traits, float)
     if (
         PSM.ndim != 2
@@ -35,7 +40,7 @@ def contact_acceptance(PSM, traits, spec):
 def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_pools=None, PSM=None):
     """The pool is fixed during choice: acceptance never removes a plant."""
     host = np.full(len(A), -1, int)
-    reason = np.full(len(A), "rejected", dtype="<U12")
+    reason = np.full(len(A), "rejected", dtype="<U16")
     rank = np.empty(len(A), int)
     candidate_count = np.zeros(len(A), int)
     exposures = np.zeros((len(c.insect_sizes), len(p_labels)), int)
@@ -73,6 +78,7 @@ def choose_hosts(A, p_labels, h_labels, V_cue, c, w, rng_p, rng_H, candidate_poo
             )
             selected = rng.choice(len(probabilities), p=probabilities)
             if selected == len(remaining):
+                reason[i] = "outside_option"
                 break
             plant = int(remaining[selected])
             probability = float(contact_acceptance(PSM[[plant]], A[i], c.contact_response)[0])

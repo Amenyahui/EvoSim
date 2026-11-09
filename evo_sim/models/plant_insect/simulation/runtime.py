@@ -227,7 +227,7 @@ def finalize(state):
         snapshot_semantics="t=0 founder insects/plants; plants retain IDs and microsites across insect generations; round t larvae recruit insect cohort t+1; plant newborns established each round; terminal t is snapshot only",
         lifecycle_schema="dose-tolerance-lifecycle-2",
         count_semantics="plant N_next=N_retained+N_offspring; N_propagules counts pre-establishment proposals; plant offspring means established newborn only; insect N_next counts recruited adults; no terminal/failed event rows",
-        resource_semantics="positive capacity K and carried B, 0<=B<=K; actual defoliation=X/B_before, zero if B_before=0; survival=exp(-mu0-muD*defoliation); surviving plants recover at base_rate+Z*tolerance_rate; maternal output=chemical-cost factor*B_recovered/K; founder B=K, newborn B=fraction*K; growth is external production, not a closed carbon budget",
+        resource_semantics="positive capacity K and carried B, 0<=B<=K; actual defoliation=X/B_before, zero if B_before=0; survival=exp(-mu0-muD*defoliation); surviving plants recover at base_rate+Z*tolerance_rate*defoliation, responding only to current-round damage; maternal output=chemical-cost factor*B_recovered/K; founder B=K, newborn B=fraction*K; growth is external production, not a closed carbon budget",
     )
     if modules.enabled(runtime.c):
         runtime.result["metadata"].update(
@@ -269,9 +269,10 @@ def finalize(state):
         plant_defense_order=["PSM1", "PSM2"],
         odor_trait_order=["VOC1", "VOC2"],
         insect_contact_trait_order=["G1_raw", "G2_raw"],
-        contact_weight_mapping="G=2*raw-1; GR-mediated aggregate response, not gene expression",
-        chemical_load_semantics="dose=x*PSM*dose_scale; capacity=I*processing_scale; processed=min(dose,capacity); residual=dose-processed; antinutrient=dose; per-window abstract loads",
-        plant_resource_semantics="defoliation=X/B_before, zero at B_before=0; Z raises recovery rate; maternal output uses recovered resources after survival; no tolerance fixed cost",
+        contact_weight_mapping="G=2*raw-1; adult female oviposition contact response, not GR gene expression; no larval G-mediated rejection",
+        oviposition_reason_semantics="accepted; rejected after all candidate contacts fail; outside_option is terminal search exit, possibly after contact rejection; no_candidate when spatial pool is empty",
+        chemical_load_semantics="dose=x*PSM*dose_scale; capacity=I*processing_scale, abstract effective larval-window detoxification rather than specific enzyme kinetics; processed=min(dose,capacity), assumed neutralized for residual toxicity; residual=dose-processed; antinutrient=dose, independent of processing; uncalibrated theoretical loads",
+        plant_resource_semantics="defoliation=X/B_before, zero at B_before=0; recovery_rate=r0+rZ*Z*defoliation; undamaged recovery is independent of Z, with no cross-round induction memory; maternal output uses recovered resources after survival; no tolerance fixed cost",
         chemical_observation_window=runtime.c.feeding_window,
         slim_calls=runtime.genetic.engine_calls,
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),

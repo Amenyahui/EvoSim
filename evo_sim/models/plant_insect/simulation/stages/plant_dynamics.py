@@ -95,7 +95,9 @@ def update_plants(
         defoliation=defoliation,
         S=S,
         recovered=recovered,
-        recovery_rate=leaf_recovery_rate(plants.chemical_traits[:, 2], c.plant_demography),
+        recovery_rate=leaf_recovery_rate(
+            plants.chemical_traits[:, 2], defoliation, c.plant_demography
+        ),
         pcounts=pcounts,
         pcandidates=pcandidates,
         prows=prows,

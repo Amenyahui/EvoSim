@@ -335,6 +335,7 @@ def summarize_sensitivity(path):
                     diag.update(
                         females_without_mates=female - mates,
                         eggs_rejected=int(choices.reason.eq("rejected").sum()),
+                        eggs_outside_option=int(choices.reason.eq("outside_option").sum()),
                         eggs_without_candidates=int(choices.reason.eq("no_candidate").sum()),
                     )
                     selected = larvae[larvae.generation == g]
@@ -467,6 +468,7 @@ def summarize_sensitivity(path):
                 resource_deficit="start deficit + consumption/capacity = post resource deficit; defoliation is instead consumption/starting resource",
                 plant_reproduction="zero mean and positive-mean Poisson zeros among surviving mothers with mates",
                 larval_recruits="sum of recorded W_insect versus count of survived_to_adult; zero larvae gives NA fraction",
+                oviposition_reasons="rejected means all contacts rejected; outside_option is terminal search exit, possibly after contact rejection; no_candidate means no spatial candidates",
             ),
         ),
     )

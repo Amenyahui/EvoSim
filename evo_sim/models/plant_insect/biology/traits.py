@@ -52,7 +52,12 @@ def profile(tuning, features, width):
 
 
 def effective(values, spec):
-    """Conserved processing capacity and sensory expression profile on the fixed catalog."""
+    """Derive effective detoxification I and a sensory profile on the fixed catalog.
+
+    I aggregates neutralizing processes over one larval feeding window; it is
+    neither a particular enzyme's expression nor a measured catalytic flux.
+    The Gaussian allocation is a theoretical genotype-to-function mapping.
+    """
     values = np.asarray(values, float)
     if values.ndim != 2 or values.shape[1] != 10 or not np.isfinite(values).all():
         raise ValueError("insect module traits require N x 10 finite coordinates")
