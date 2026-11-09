@@ -27,7 +27,7 @@ def _fixture(root):
     folder = root / "data/case/rep01"
     (folder / "snapshots").mkdir(parents=True)
     (root / "audits").mkdir()
-    (root / "settings.json").write_text('{"version": "0.1.11"}', encoding="utf-8")
+    (root / "settings.json").write_text('{"version": "0.1.12"}', encoding="utf-8")
     (root / "audits/integrity_audit.json").write_text('{"runs": 1}', encoding="utf-8")
     pd.DataFrame([dict(case="case", replicate=1, generation=4, status="completed")]).to_csv(
         root / "data/run_status.csv", index=False
@@ -127,8 +127,8 @@ def _rehash(folder):
     (folder / "metadata.json").write_text(
         json.dumps(
             dict(
-                version="0.1.11",
-                genetics_version="slim-qtl-5",
+                version="0.1.12",
+                genetics_version="slim-qtl-6",
                 output_sha256=hashes,
             )
         ),
@@ -186,7 +186,7 @@ def test_v017_saved_split_merge_extinction_and_network_balance():
         # Current no-flowering protocol; other fixtures retain historical draft protocol 3.
         metadata_path = folder / "metadata.json"
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        metadata["genetics_version"] = "slim-qtl-5"
+        metadata["genetics_version"] = "slim-qtl-6"
         metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
         originals = {f: sha256(f) for f in folder.rglob("*") if f.is_file()}
         frames = summarize(root, DESIGN)
@@ -342,4 +342,4 @@ if __name__ == "__main__":
     test_v017_unphased_matching_and_single_link_bridge()
     test_v017_saved_split_merge_extinction_and_network_balance()
     test_v017_label_permutation_missing_detection_and_input_guards()
-    print("PASS v0.1.11 operational lineages")
+    print("PASS v0.1.12 operational lineages")

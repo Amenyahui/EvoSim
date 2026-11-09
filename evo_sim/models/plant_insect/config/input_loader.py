@@ -68,15 +68,15 @@ def load_inputs(files, directory, parameters):
     if (
         p.get("n") != 2
         or p.get("B") is not None
-        or p.get("mapping") != "shared_chemical_modules"
-        or p.get("genetics", {}).get("schema_version") != "slim-qtl-5"
+        or p.get("mapping") != "independent_psm_voc"
+        or p.get("genetics", {}).get("schema_version") != "slim-qtl-6"
     ):
-        raise ValueError("CSV inputs require current n=2/B=null shared modules and slim-qtl-5")
-    width = 8
+        raise ValueError("CSV inputs require current n=2/B=null shared modules and slim-qtl-6")
+    width = 10
 
     def coordinates(row, field, kind):
         values = [row.pop(f"{field}_{j}") for j in range(width)]
-        size = 3 if kind == "plant" else width
+        size = 5 if kind == "plant" else width
         if any(v is None for v in values[:size]) or any(v is not None for v in values[size:]):
             raise ValueError(f"{field}: required {size} values and empty unused cells for {kind}")
         return values[:size]
@@ -203,11 +203,11 @@ def load_inputs(files, directory, parameters):
 
     if "reference_traits" in files:
         columns = dict(species_id=nonempty)
-        columns.update({name: finite for name in ("x_N", "x_S", "x_V")})
+        columns.update({name: finite for name in ("PSM1", "PSM2", "Z", "VOC1", "VOC2")})
         rows = table("reference_traits", columns, ("species_id",))
         p["observation_reference_traits"] = {
             "plant_chemical_traits": [
-                [row[name] for name in ("x_N", "x_S", "x_V")] for row in rows
+                [row[name] for name in ("PSM1", "PSM2", "Z", "VOC1", "VOC2")] for row in rows
             ],
             "reference_ids": [row["species_id"] for row in rows],
         }

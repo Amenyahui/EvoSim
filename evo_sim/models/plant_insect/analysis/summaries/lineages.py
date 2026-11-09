@@ -131,8 +131,8 @@ def _source(mapping, ident):
 def _summarize_run(folder, design, ancestry_reference_generation=None):
     """Return tables from one saved run without calling simulation functions."""
     metadata = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-    if metadata["version"] != "0.1.11" or metadata.get("genetics_version") != "slim-qtl-5":
-        raise ValueError("lineages require current 0.1.11 / slim-qtl-5 saved ledgers")
+    if metadata["version"] != "0.1.12" or metadata.get("genetics_version") != "slim-qtl-6":
+        raise ValueError("lineages require current 0.1.12 / slim-qtl-6 saved ledgers")
     hashes = {}
 
     def checked(name):
@@ -536,10 +536,10 @@ def _summarize_run(folder, design, ancestry_reference_generation=None):
 
 
 def summarize(batch, design, ancestry_reference_generation=None):
-    """Summarize an audited v0.1.11 batch; return output tables for further inspection."""
+    """Summarize an audited v0.1.12 batch; return output tables for further inspection."""
     batch = batch if isinstance(batch, Batch) else Batch.open(Path(batch))
-    if read_settings(batch.path).get("version") != "0.1.11":
-        raise ValueError("lineages require a v0.1.11 batch")
+    if read_settings(batch.path).get("version") != "0.1.12":
+        raise ValueError("lineages require a v0.1.12 batch")
     settings = read_design(design)
     collected, inputs, processing = defaultdict(list), {}, []
     for run in batch.status.itertuples(index=False):

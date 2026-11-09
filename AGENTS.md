@@ -1097,3 +1097,16 @@ ordered stages in `simulation/stages/`, and independent checks in
 by `python -m tests`. The v0.1.11 scientific protocol and original release tag
 remain the baseline. Keep the thin historical analysis command entry points;
 they forward to current implementations and do not duplicate scientific logic.
+
+
+# 18. Scientific Protocol v0.1.12 (2026-11-09)
+
+The user explicitly authorized the ecological scientific modification documented in
+`docs/ecology_v0.1.12_design.md`. Current plant coordinates are PSM1, PSM2, Z,
+VOC1, VOC2; insect coordinates have ten axes including two raw contact responses.
+Processing acts after ingestion, never on food demand. Defoliation is actual
+consumption / pre-feeding stock; tolerance changes recovery, and recovered stock
+supports reproduction. Retain independent audit reconstruction and transactional
+publication. Preserve v0.1.11 commit fd9ba73, its inputs and historical semantics;
+new readers must not reinterpret its outputs. SLiM's core genetic algorithm and
+speciation/reproductive-isolation mechanisms remain unchanged.

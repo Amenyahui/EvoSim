@@ -111,7 +111,15 @@ COLUMNS = {
         "mutation_event_id"
     ),
 }
+COLUMNS["events"] += " " + " ".join(
+    f"{name}_{axis + 1}"
+    for name in ("dose", "processing_capacity", "processed", "residual", "antinutrient")
+    for axis in range(2)
+)
+COLUMNS["events"] += " nutrition_survival toxicity_survival antinutrition_survival"
 COLUMNS["larvae"] = COLUMNS["events"]
+COLUMNS["oviposition"] += " contact_plant_ids contact_probabilities contact_accepted"
+COLUMNS["plants"] += " tolerance_Z recovery_rate resource_after_recovery"
 COLUMNS["plant_proposals"] = (
     "event_id reproduction_round offspring_generation maternal_id propagule_index cell_row cell_col "
     "established microsite offspring_id"

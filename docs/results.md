@@ -1,155 +1,103 @@
 # 输出、审计与绘图
 
-当前协议为模型0.1.11 / `slim-qtl-5` / `expression-tuning-2` / `resource-coupled-plants-larval-recruitment-1`。模型公式见[模型](model.md)，默认值见[参数](parameters.md)。本版实施验收见[当前记录](#current-validation)；下面的0.1.9和0.1.10记录均为历史结果，不验证本版。历史结果保持原文件、元数据及源码哈希，使用[冻结包](../codex/history/before_simplification_0.1.11_20261106T034842Z/README.md)读取。
+当前协议为模型0.1.12 / slim-qtl-6 / expression-tuning-contact-3 / dose-tolerance-lifecycle-2。
+原始文件名及个体/事件/阶段键保留，但下述列的科学意义已经修改；
+旧0.1.11结果须使用冻结源码解释，不能以新读者重算。
+[模型](model.md)、[参数](parameters.md)和[科学修改设计](ecology_v0.1.12_design.md)给出定义。
 
-## 目录与审计
-
-开发、测试和验收默认写入 `codex/validation/v0.1.11/run<N>/`，显式输出目录必须不存在。仅用户明确安排的正式科研实验写入 `results/`。运行后以相同目录执行：
-
-```powershell
-python -m evo_sim --config evo_sim/models/plant_insect/configs/current.yaml --out codex/validation/resource_example
-python -m evo_sim.models.plant_insect.audit --input codex/validation/resource_example --require-success --min-transitions 1
-```
-
-完整性审计通过不等于达到请求期限或共同存续；计算保护停止不等于灭绝。派生汇总保存于批次 `data/summary/`，原始数据不回写。
-
-## 阶段与输出解释
-
-每轮成年昆虫交配、逐卵选择植物，出生幼虫取食及存活；植物按食后资源抽存活，幸存母株每轮产生提案并恢复，空位建立的新株加入下一状态。`plants.csv`记录轮初资源、消费、亏损、存活及恢复；`plant_proposals.csv`记录提案与建立；`offspring.csv`中植物仅包含建立新株，旧株留存另计。终点无下一轮事件表示未执行，不表示真实零事件。
-
-`B_post=B_start−X`，`defoliation=1−B_post/K`；不使用同龄无食害参照。新株资源为0.25K。恢复和新株资源是显式输入，死亡株残余移出；资源账不代表全株碳守恒。每格位点限制建立，不表示共享光水养分。
-
-植物与昆虫均由SLiM进行双亲遗传，母父贡献各半；`gamete_transmissions`记录双方实际位点传递、重组及启用时的突变。植物父本为全局其他幸存株，初始类型不限制交配；标签表示母系初始来源，不能替代个体化学性状。出生与成年补充的贡献分别计数。运行元数据记录协议和遗传语义。植物类型是初始化学标签，不是生殖隔离或物种确证。
-
-按植物标签汇总 `allele_contributions` 时，`p_parent` 是母系来源标签的参照群；`p_parent_weighted` 包含实际双亲，可以跨标签。因此 `delta_parent_contribution` 包含父源混合和繁殖贡献，不能单独解释为纯自然选择；没有跨标签交配时才适用原来的同标签解释。关闭突变时没有新等位变异，但选择和重组仍可改变群体。十种初始来源不维持为十个离散化学型，后代连续性状由重组及启用时突变重新生成。
-
-`summarize_lifecycle`只读汇总阶段账本，`summarize_qtl_run`汇总性状与遗传，`summarize_lineages`及`plot_diagnostics`提供只读谱系与诊断；具体字段和当前批次适用性以实际运行元数据和审计为准。参考面板、候选谱系和网络不改变模拟行为；固定期限存续不证明长期共存或共同演化。
-
-结构重构后的实现分别位于 `analysis/summaries/{lifecycle,qtl,lineages}.py` 和
-`analysis/plots/diagnostics.py`。下文旧命令保留兼容入口，也可使用新模块路径。
-原始输出文件名、列名、事件/个体 ID、来源字段名称和科学含义不变；源码路径及指纹
-随结构变化重新记录，历史元数据不改写。审计同时接受迁移前后的 SLiM 脚本来源键。
-本次重构的验证与额外发现的既有审计重放问题见[开发记录](development.md#本轮执行记录2026-11-06)。
-
-## 批次身份、阶段键与原始表
-
-批次根目录保存 `settings.json`、`data/run_status.csv`；各运行位于 `data/<case>/repNN/`，审计位于 `audits/`。`case/replicate` 标识运行，两类群个体ID不保证全局唯一，连接个体时还需 `kind/individual_id`。`reproduction_round=t` 是本轮繁殖，`adult_cohort=t+1` 是子代队列；不能仅按同名generation连接不同阶段：
-
-| 表 | generation | reproduction_round | adult_cohort |
-| --- | --- | --- | --- |
-| offspring、mutations、gamete_transmissions | t+1，出生队列 | t | t+1 |
-| larvae、events、networks | t，幼虫资源轮 | t | t+1 |
-| parents | t，亲本繁殖轮 | t | 不适用 |
-| snapshots、genetic_summary、host_groups | t，轮初状态 | 不适用 | 快照保存昆虫队列 |
-
-幼虫与昆虫子代以 `(case, replicate, reproduction_round, adult_cohort, insect_id/offspring_id)` 连接；位点传递另用 `kind`、`role`、`copy` 和 `locus_id`。`metadata.stage_key_schema`记录阶段键。`oviposition.event_id=round:mother_id:egg_index`，拒绝卵无offspring ID；`offspring/events/larvae`可通过`oviposition_event_id`和`egg_index`回链。植物提案`event_id=round:mother_id:propagule_index`，仅建立提案有位点及新生ID。
-
-| 文件 | 含义 |
-| --- | --- |
-| metadata.json、status.json | 展开配置、版本、协议、源码/输入/输出哈希、SLiM身份和停止状态 |
-| snapshots/gNNNNNN.npz、genotypes.npz、phenotypes.npz | 轮初及终点的植物和成年昆虫状态、位置、基因型、原发和派生性状；植物N×3化学坐标、昆虫N×8模块坐标 |
-| populations.csv | 轮初及下一状态数量；植物N_retained为幸存旧株，N_propagules为建立前提案，N_offspring为新建株；昆虫N_offspring为出生幼虫、N_next为成年补充 |
-| parents.csv、offspring.csv | 亲本资格、候选池、母源率和出生/补充贡献；昆虫记录全部出生幼虫，植物只记录已建立新株，不把留存旧株重记出生 |
-| oviposition.csv、larvae.csv、events.csv | 潜在卵选择与拒绝；实际幼虫的出生寄主、需求、摄入、资源利用和一次存活 |
-| plants.csv、plant_proposals.csv | 轮初植物资源、消费、亏损、存活、恢复及位点；每个扩散提案的目标和建立结果 |
-| genetic_loci.csv、allele_catalog.csv、mutations.csv | QTL、等位效应与全部出生者突变，包括未招募的幼虫 |
-| gamete_transmissions.csv | 每位点每份出生拷贝的双亲来源、标记切换与突变关联，不是完整树序列 |
-| genetic_summary.csv、haplotype_summary.csv、allele_contributions.csv | 轮初遗传统计、单倍型统计及按出生/补充分阶段的贡献分解 |
-| host_groups.csv、host_flows.csv、networks.csv、lagged_networks.csv | 昆虫出生寄主背景、双亲来源、实际消费/出生/补充及亲本出生背景贡献；unknown单列 |
-| diagnostics.csv | 成年基因型对参考植物的反事实p/q，不是当轮真实取食或完整适合度 |
-
-终点没有下一轮事件行表示未执行，不是该轮摄食或繁殖为零。`birth_host_id/species`是昆虫子代实际出生寄主，`maternal_birth_host_species`和`paternal_birth_host_species`分别是双亲出生背景；unknown不能当同背景。昆虫出生格和扩散后成年格可不同，植物旧株保留原ID和位置。
-
-## 植物资源、父本及贡献
-
-`plants.R=B_start`，`resource_capacity=K`，`resource_after_feeding=B_start−X`，`defoliation=1−B_post/K`；当轮消费比例`h=X/B_start`在B_start=0时定义为0。`survival_probability=exp(−μ₀−μD defoliation)`，`survived`为本轮唯一植物存活抽样；幸存旧株恢复至`K−(K−B_post)exp(−r)`，死株恢复与下一资源为NA。新株初始资源为0.25K；没有同龄无食害参照资源。资源账检查轮初=消费+食后，下一状态加上幸存恢复及新株资源并移出死亡残余；它不是全株碳收支。
-
-`parents.F_i=max(0,1−defense_cost−voc_cost)×B_post/K`是植物母源产出乘子，`conditional_mu=λP F_i`。每轮在其他幸存植物中全局均匀抽取父本，不按距离或初始类型限制，孤株不能异交；零母源乘数的幸存植物仍可作父本。`mate_probability`是根据轮初潜在父本存活率计算的至少一位父本概率；`expected_propagules`和`propagule_variance`是存活及配偶机会条件下建立前提案的无条件矩，不是已建立后代数的矩。`propagule_count`是实际提案数，空位抽签后才产生新株。
-
-`offspring_count_as_mother`和`offspring_count_sired`分别统计出生母/父次数，`realized_genetic_contribution`是二者之和的一半；`recruited_count_as_mother`、`recruited_count_sired`及`realized_recruitment_contribution`对应补充阶段。植物两阶段都只计已建立新株，旧株留存另计；昆虫出生含死亡幼虫，补充只计幸存成虫。全体植物母、父计数各等于已建立株数，但按母系来源标签分组时父本可以来自其他标签，不能要求每标签母父计数相等。零后代的归一化频率为NA。
-
-`gamete_transmissions.copy=0/1`分别对应母源/父源，`role`为maternal/paternal；`parent_id`指实际亲本，`transmitted_homolog_before_mutation`是该位点亲本同源拷贝，`switch_before_locus`标记相邻位点同源来源变化，`inherited_allele_id`及`child_allele_id`区分突变前后。`crossover_count`不可由标记切换数重建；逐位点记录用于核验实际来源，不等同全基因组祖源。
-
-## 汇总和绘图
-
-先对已有批次审计；以下路径是示例，须替换为实际已运行的批次：
+## 运行、审计和汇总
 
 ```powershell
-python -m evo_sim.models.plant_insect.audit --input codex/validation/resource_example --require-success --min-transitions 1
-python -m evo_sim.models.plant_insect.analysis.summarize_lifecycle --input codex/validation/resource_example
-python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input codex/validation/resource_example
-python -m evo_sim.models.plant_insect.analysis.summarize_lineages --input codex/validation/resource_example --design evo_sim/models/plant_insect/analysis/lineages.yaml --ancestry-reference-generation 1
-python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/validation/resource_example --lineages
-python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input codex/validation/resource_example --sensitivity
-```
-
-`summarize_lifecycle`写 `data/summary/` 下的`lifecycle_counts`、`plant_resource_cycles`、`plant_establishment_proposals`、`host_background_flows/groups`、`lifecycle_networks`和`parent_host_contributions`，保留case/replicate；`summarize_qtl_run`写种群、性状、遗传时间序列及运行汇总，只作描述。谱系汇总写`data/summary/lineages/`：候选群和跨代事件、交配及机会、网络和账本核对均为只读；指定参考代后另输出逐QTL拷贝祖源。unknown/unassigned保留，观察群不是确证物种，参考代来源份额不是新增基因流。
-
-A–E默认绘图命令为 `python -m evo_sim.models.plant_insect.analysis.plot_diagnostics --input <batch>`，分别展示人口、性状、寄主利用与繁殖、空间、遗传；它要求完整同期限、至少4轮且案例名为`mutation_off`和`qtl_mutating`，空间示例重复可用`--spatial-reps`指定。图只显示P1、P2及H1，不能代表十来源完整互作；默认`current.yaml`是`ten_types`/`ten_types_no_insects`，不满足A–E对照案例要求。F–H使用`--lineages`，先生成谱系汇总并在需要祖源图时指定参考代，分别显示匹配机会、参考代QTL来源及母本来源互作网络。`--sensitivity`为多情景轨迹、终点、阶段与植物资源图，并在`data/summary/`写敏感性表；图可用`--out`指定目录，输出PNG/PDF/SVG。零分母和不可估计量保留NA，不以零代替。分类标签是初始母系来源而非保持不变的化学型；任何P1/P2子集图都不能推断其余八类互作。
-
-完整性审计可验证失败账本：`integrity_status=passed`不代表运行成功。`execution_success`和`acceptance_passed`分别反映执行状态及额外验收条件；`--require-success --min-transitions 1`要求成功状态且至少一次已提交转移，并不证明达到固定期限。计算保护停止后的状态为未知，不当作灭绝。绘图和汇总检查输入指纹；不回写原始metadata。
-
-### Review 后的长期诊断入口
-
-`configs/review_diagnostics.yaml` 是独立的300轮、每情景4重复开发诊断设计，不改变
-`current.yaml` 的五轮默认设置。包含无突变基线、双方启用突变、各自匹配的无虫对照，
-以及分别扩大寄主搜索、昆虫交配、昆虫扩散半径的三个单因素情景。
-半径5覆盖当前周期10×10空间；扩大搜索半径仍只抽至多8株候选，不能解释为同时评估全部植物。
-这些设置是理论比较，不能解释为拟合共存、均衡遗传方差或冻结演化；关闭突变仍有选择与重组。
-
-```powershell
-python -m evo_sim.models.plant_insect.batch --config evo_sim/models/plant_insect/configs/review_diagnostics.yaml
+python -m evo_sim --config evo_sim/models/plant_insect/configs/current.yaml
+python -m evo_sim.models.plant_insect.audit --input <batch> --require-success --min-transitions 1
 python -m evo_sim.models.plant_insect.analysis.summarize_lifecycle --input <batch> --sensitivity
-python -m evo_sim.models.plant_insect.audit --input <batch>
 python -m evo_sim.models.plant_insect.analysis.summarize_qtl_run --input <batch>
 ```
 
-第一条命令默认创建新的 `codex/validation/v0.1.11/run<N>/`，不会写入正式科研结果目录。
-完整设计是否已执行须以实际运行状态为准。`--sensitivity` 可独立读取并审计已记录的运行，
-写 `sensitivity_runs/trajectories/diagnostics/survival.csv` 及 `sensitivity_audit.json`；
-未启动、审计失败和计算停止后的未知状态保留原有区别，固定期限存续不等于稳定共存。
+开发输出默认创建全新的 `codex/validation/v0.1.12/run<N>/`，不覆盖已有路径。
+正式科研实验仅在用户明确安排时写results/。原始记录由审计独立重建后用于分析，
+汇总位于data/summary，不修改metadata或原始文件。完成执行、达到期限、有限期限存续和
+稳定共存是不同判断；计算保护中止之后保持unknown，不能填零当作灭绝。
 
-阶段诊断新增以下口径（每次运行、每个已提交转移分别计算，不跨重复合并）：
+## 新生态记录
 
-- `eggs_rejected` 和 `eggs_without_candidates` 区分拒绝与没有局部候选；
-  `females_without_mates` 是无配偶雌虫数。它们不等于幼虫死亡。
-- `larval_expected_recruits` 为已记录 `g` 之和，`larval_realized_recruits` 为实际存活计数；
-  无出生幼虫时计数为0，`larval_survival_fraction` 为NA。
-- `plant_resource_exhausted_fraction` 的分母是轮初资源 `R>0` 的植株；
-  `plant_attacked_resource_exhausted_fraction` 进一步要求 `herbivore_load>0`。
-  耗尽按食后资源不超过 `1e-12 R` 判断。另列两个分母计数与 `plant_zero_stock_fraction`，
-  不把轮初已无资源的植物算成当轮被吃光；分母为0时比例为NA。
-- `plant_start_deficit_mean` 是平均 `1-R/K`；
-  `plant_consumption_capacity_fraction_mean` 是平均 `(R-B_post)/K`。
-  二者相加为原来的平均食后亏损，不能把初始小体型或先前亏损都归因于当轮食害。
-- `plant_survivors_without_mates` 单列存活但无配偶的植物；
-  `plant_mothers_with_mates` 是存活且有父本的母株数；在此集合内，
-  `plant_zero_mean_mothers` 统计母源Poisson均值为0，
-  `plant_stochastic_zero_propagules` 统计均值大于0却抽到0传播子的母株。
-  历史列 `plant_reproductive_mothers` 仍仅统计存活母本资格，不能代替有配偶计数。
+| 文件与字段 | v0.1.12意义 |
+| --- | --- |
+| snapshots.plant_chemical_traits | 五列PSM1、PSM2、Z、VOC1、VOC2 |
+| snapshots.insect_module_traits | 十列，末两列是[0,1]接触坐标；签名权重2*raw-1 |
+| oviposition.contact_plant_ids | 每卵实际接触植物的有序JSON列表，最多候选数次 |
+| contact_probabilities / contact_accepted | 对应接触接受概率及Bernoulli结果，拒绝后继续剩余候选 |
+| larvae/events.d、x、g | 实际食物需求dmax、分配量、x/dmax；I不参与需求计算 |
+| dose_1/2 | x*PSM*dose_scale，抽象负荷 |
+| processing_capacity_1/2 | I*processing_scale，摄入后处理能力 |
+| processed_1/2、residual_1/2 | min(dose,capacity)、dose-processed |
+| antinutrient_1/2 | 本版等于全部摄入剂量，独立于处理能力 |
+| nutrition_survival / toxicity_survival / antinutrition_survival | 三项无量纲存活分量 |
+| W_insect | 三项存活分量的乘积，不再等于g |
+| q / reference_q / q_unlimited | 足量食物、无竞争时的化学存活测定，不再是min(I/D)或需求乘子 |
+| plants.R、X、resource_after_feeding | 取食前资源、实际消费、取食后资源 |
+| defoliation | X/R，R=0时0；不再是1-post/K |
+| tolerance_Z、recovery_rate | 遗传耐受坐标及基础恢复率+Z系数*Z |
+| resource_after_recovery / resource_next | 幸存旧株恢复后资源，死亡株为NA |
+| W_plant、parents.F_i | 基于恢复后资源的植物繁殖代理/母源乘子 |
 
-QTL汇总另写 `trait_variance_partition.csv`。按各轮各类型的个体数加权，
-总体方差 = 类型内方差加权均值 + 类型均值的加权方差（均用 `ddof=0`）。
-包含原发性状坐标，以及直接读取快照的防御 `D` 和处理能力 `I`，不重新执行生物方程。
-类型内、类型间及总方差使用各自性状单位的平方；植物类型为母系初始来源、昆虫类型为预设兼容池。
-空类型不加权，全空原发性状行保留 `N=0`、均值和方差NA；快照中不存在的功能类型没有行。
-这不是加性遗传方差、遗传力、进化潜力或跨类群演化速度排名。
-输入快照与遗传汇总的SHA256、计算口径保存在 `summarize_qtl_run_metadata.json`。
+outside嗅觉外部选项可在接触前终止搜索；forced仍执行接触接受。
+contact_plant_ids与候选列表不同，不把未接触植物写成接触拒绝。
+拒绝卵无出生子代ID，不计算其虚构幼虫表现。
 
-2026-11-09 的首批开发验证：[七情景短程批次](../codex/validation/v0.1.11/run6/data/run_status.csv)
-每情景1重复、2轮，7次运行均完成；[阶段诊断审计](../codex/validation/v0.1.11/run6/data/summary/sensitivity_audit.json)
-覆盖14次转移，资源超用和相对收支误差均为0。
-[固定种子比较](../codex/validation/v0.1.11/run6/behavior_preservation.json)核对修改前后突变关闭与开启的
-46项原始CSV及快照，CSV逐字节相同、快照全部数组相同；
-[诊断核对](../codex/validation/v0.1.11/run6/diagnostic_verification.json)另检验无虫零分母与亏损分解。
-`ruff check` 和 `ruff format --check` 均通过（113个Python文件）；
-[完整测试日志](../codex/validation/v0.1.11/run6/tests.log)记录 `python -m tests` 的114组检查全部通过，
-包括真实快照的方差核对、汇总前后原始文件哈希不变和已有独立审计篡改检查。
-此处没有执行300轮完整设计，不作为长期共存或共同演化证据。
+阶段键维持：亲本/幼虫资源轮t，出生遗传记录generation=t+1，
+reproduction_round=t、adult_cohort=t+1。连接事件需case/replicate及个体类群/ID，
+两类群ID可能相同。植物offspring只包含建立成功新株；留存旧株另计。
+
+参考p为等机会固定面板中第一次嗅觉接近概率乘接触接受概率，
+不是完整重试后的最终产卵分布；不强制母虫偏好与后代表现匹配。
+谱系、亲本贡献、预设兼容池与生殖隔离分析规则不变，标签不等于新物种。
+
+## 诊断输出与解释
+
+`sensitivity_runs/trajectories/diagnostics/survival.csv`保留已有结果分类。
+幼虫预期招募为sum(W_insect)，实际为存活计数。无幼虫时比例为NA。
+资源耗尽率仅在R>0植物中计算，受攻击耗尽率再限制herbivore_load>0；分母单列，
+耗尽容差1e-12*R。未启动、审计失败和计算停止保持区别。
+plant_start_deficit_mean加plant_consumption_capacity_fraction_mean等于
+plant_post_resource_deficit_mean；它不再等于实际defoliation。
+
+`trait_variance_partition.csv`以各类型个体数加权，将原发坐标及已记录D/I的总体方差
+拆成类型内和类型间方差，ddof=0、单位为相应性状单位平方。
+不把这些描述性方差当作加性遗传方差、遗传力或跨物种进化速度。
+输入哈希和解释写入summarize_qtl_run_metadata.json。
+
+A–E绘图入口仍针对P1/P2及mutation_off/qtl_mutating对照；B图改用独立PSM/VOC轴、
+加入接触坐标，不能把第三植物轴Z画成VOC。F–H谱系分析与--sensitivity入口保留。
+新protocol不支持直接读取0.1.11历史输出。
+
+## 本版验证
+
+2026-11-09 已执行：
+
+- `python -m ruff check evo_sim tests example.py`：通过。
+- `python -m ruff format --check evo_sim tests example.py`：114个文件通过。
+- `python -m tests`：[完整日志](../codex/validation/v0.1.12/tests_complete.log)116组通过。
+  新增的 `tests/scientific/test_ecology_v012.py` 覆盖八项科学验收、接触重试边界、
+  固定种子重复和重新散列后的记录篡改拒绝；实际调用SLiM验证新增坐标遗传、重组与突变。
+- [最终小规模核验](../codex/validation/v0.1.12/run2/verification.json)：
+  基线、关闭突变、无虫和全接触拒绝四情景，各2重复、3轮，共8次运行全部完成。
+  [独立审计](../codex/validation/v0.1.12/run2/audits/integrity_audit.json)
+  通过24次转移、32个状态、104条幼虫事件、490条植物事件和690条新生记录，
+  核对118次突变；资源超用及相对收支误差均为0，`source_matches_current=true`。
+  重复运行的基因型与快照一致，接触次数有界、处理能力不改变食物需求，
+  分析前后原始记录哈希不变。
+- [隔离安装包核对](../codex/validation/v0.1.12/package_final/verification.json)：
+  wheel中的99项Python、YAML、CSV与SLiM资源逐项匹配最终源码；
+  隔离安装后版本及5/10维配置校验通过。SLiM后端与核心脚本的SHA256与基线相同。
+
+以上均为开发实现核验，未执行本版200/300轮实验、完整参数不确定性分析或经验校准。
+新增系数仍是理论假设；抗营养负荷本版等于摄入剂量，不假定处理模块消除该效应。
+不根据短程存续声称长期共存、共同适应或物种形成。
 
 <a id="current-validation"></a>
 
-## 0.1.11 实施验收
+## 历史0.1.11 实施验收
 
 [最终测试日志](../codex/validation/v0.1.11/tests_release_final.log)109组assert测试通过，包含全局跨初始标签双亲遗传、重组与突变、资源耦合繁殖、留存基因型不变及篡改拒绝；Ruff检查和格式检查覆盖74个Python文件。植物的`W_plant`诊断与亲本`W_i`均为`S×max(0,1−C)×B_post/K`，不把恢复后的资源用于本轮母源产出。
 

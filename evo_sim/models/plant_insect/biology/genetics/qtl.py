@@ -66,16 +66,16 @@ def validate(c, K):
     if not isinstance(g, dict) or set(g) != required:
         raise ValueError("genetics requires the complete inline qtl schema; unknown keys rejected")
     if (
-        c.model_version != "0.1.11"
-        or c.mapping != "shared_chemical_modules"
+        c.model_version != "0.1.12"
+        or c.mapping != "independent_psm_voc"
         or g["mode"] != "sexual_qtl"
-        or g["schema_version"] != "slim-qtl-5"
+        or g["schema_version"] != "slim-qtl-6"
         or type(g["ploidy"]) is not int
         or g["ploidy"] != 2
         or g["inheritance"] != "biparental_meiosis"
         or g["recombination_model"] != "slim_haldane_marker_map"
     ):
-        raise ValueError("current model requires the native slim-qtl-5 module protocol")
+        raise ValueError("current model requires the native slim-qtl-6 module protocol")
     settings = g["slim"]
     if not isinstance(settings, dict) or set(settings) != {"executable", "timeout_seconds"}:
         raise ValueError("slim requires executable and timeout_seconds")
@@ -84,7 +84,7 @@ def validate(c, K):
     numeric(settings["timeout_seconds"], "slim.timeout_seconds")
     if settings["timeout_seconds"] <= 0:
         raise ValueError("SLiM timeout must be positive")
-    widths = {"plant": 3, "insect": 8}
+    widths = {"plant": 5, "insect": 10}
     mapping = g["phenotype_map"]
     if not isinstance(mapping, dict) or set(mapping) != {"effect_scale", "bounds"}:
         raise ValueError("phenotype_map requires explicit effect_scale and bounds")
@@ -223,7 +223,7 @@ class Allele:
 
 class GeneticState:
     def __init__(self, c):
-        if c.genetics["schema_version"] != "slim-qtl-5":
+        if c.genetics["schema_version"] != "slim-qtl-6":
             raise ValueError("SLiM QTL execution requires a declared supported native protocol")
         self.spec = copy.deepcopy(c.genetics)
         self.n = c.n

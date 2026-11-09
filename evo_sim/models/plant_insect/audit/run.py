@@ -24,7 +24,7 @@ def audit_run(path):
     """Check saved records; a valid failure ledger does not imply successful execution."""
     path = Path(path)
     meta = json.loads((path / "metadata.json").read_text(encoding="utf-8"))
-    if meta["version"] != "0.1.11":
+    if meta["version"] != "0.1.12":
         raise ValueError("Use the frozen historical source to audit a superseded model protocol")
     status = meta["status"]["status"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]

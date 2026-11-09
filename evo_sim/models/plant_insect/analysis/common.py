@@ -49,9 +49,9 @@ class Batch:
     def open(cls, batch):
         """Load and check shared batch metadata once; create only the summary directory."""
         path = Path(batch).resolve()
-        if read_settings(path).get("version") != "0.1.11":
+        if read_settings(path).get("version") != "0.1.12":
             raise ValueError(
-                "Current analysis requires model protocol 0.1.11; use frozen history for old results"
+                "Current analysis requires model protocol 0.1.12; use frozen history for old results"
             )
         audit = read_audit(path)
         status = pd.read_csv(path / "data" / "run_status.csv")

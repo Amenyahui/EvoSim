@@ -101,8 +101,10 @@ def test_v015_cost_functions_and_maternal_mean():
         c,
         np.full(2, 10.0),
         np.ones(2),
-        chemical=np.column_stack((D, np.ones(2))),
-        module_traits=np.array([[1, 1, 0, 1, 0, 0, 0, 1], [0, 0, 0, 1, 0, 0, 0, 1]], float),
+        chemical=np.column_stack((D, np.full(2, 0.5), np.zeros(2), np.ones(2))),
+        module_traits=np.array(
+            [[1, 1, 0, 1, 0, 0, 0, 1, 0.5, 0.5], [0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.5]], float
+        ),
     )
     np.testing.assert_allclose(result["fp"], [0, 0.75])
     np.testing.assert_allclose(result["fi"], [0, 1])

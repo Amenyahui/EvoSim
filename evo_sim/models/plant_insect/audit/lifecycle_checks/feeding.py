@@ -1,4 +1,4 @@
-"""Independent feeding checks; equations preserved from v0.1.11 audit."""
+"""Independent feeding checks; equations preserved from v0.1.12 audit."""
 
 import numpy as np
 
@@ -42,3 +42,36 @@ def module_choice(V, x, c, forced=False):
     mass = np.exp(logits)
     probability = mass / mass.sum()
     return probability / probability.sum()
+
+
+def contact_probability(PSM, traits, c):
+    """Independently reconstruct the post-contact Bernoulli probability."""
+    utility = c.contact_response["intercept"] + c.contact_response["slope"] * (
+        np.asarray(PSM) @ (2 * traits[8:10] - 1)
+    )
+    return np.exp(-np.logaddexp(0, -utility))
+
+
+def chemical_outcomes(PSM, processing, intake, maximum, c):
+    """Independently reconstruct dose, processing, hazards and nutritional survival."""
+    spec = c.chemical_processing
+    dose = np.asarray(intake)[..., None] * PSM * np.asarray(spec["dose_scale"])
+    capacity = processing * np.asarray(spec["processing_scale"])
+    processed = np.minimum(dose, capacity)
+    residual = dose - processed
+    g = np.asarray(intake) / maximum
+    nutrition = np.zeros_like(g)
+    np.power(g, spec["nutrition_exponent"], out=nutrition, where=g > 0)
+    toxicity = np.exp(-(residual * np.asarray(spec["toxicity_weights"])).sum(axis=-1))
+    antinutrition = np.exp(-(dose * np.asarray(spec["antinutrition_weights"])).sum(axis=-1))
+    return dict(
+        dose=dose,
+        processing_capacity=capacity,
+        processed=processed,
+        residual=residual,
+        antinutrient=dose,
+        nutrition_survival=nutrition,
+        toxicity_survival=toxicity,
+        antinutrition_survival=antinutrition,
+        survival_probability=nutrition * toxicity * antinutrition,
+    )

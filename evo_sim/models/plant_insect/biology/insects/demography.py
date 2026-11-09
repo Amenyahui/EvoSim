@@ -1,4 +1,4 @@
-"""Demography mechanisms; equations preserved from v0.1.11."""
+"""Demography mechanisms; equations preserved from v0.1.12."""
 
 import numpy as np
 

@@ -41,7 +41,7 @@ def module_config(**changes):
 def test_expression_tuning_capacity_saturation_and_no_flowering():
     c = module_config()
     f = c.functional_modules
-    x = np.array([[0.6, 0.4, 0.0, 1.0, 0.5, 0.2, 0.0, 1.0]])
+    x = np.array([[0.6, 0.4, 0.0, 1.0, 0.5, 0.2, 0.0, 1.0, 0.5, 0.5]])
     I, _ = modules.effective(x, f)
     assert 0 < I.sum() < x[:, :2].sum()
     zero = x.copy()
@@ -63,9 +63,9 @@ def test_expression_tuning_capacity_saturation_and_no_flowering():
     np.testing.assert_allclose(fecundity, 1 - cp - cs)
     g = GeneticState(c)
     phenotype, raw = g.phenotype(g.founders(c.plant_sizes, "plant"), "plant")
-    assert raw.shape == (8, 3)
+    assert raw.shape == (8, 5)
     assert set(phenotype) == {"D", "plant_chemical_traits"}
-    assert len(g.loci["plant"]) == 6 and len(g.loci["insect"]) == 16
+    assert len(g.loci["plant"]) == 10 and len(g.loci["insect"]) == 20
     assert not any("flower" in locus["functional_module"] for locus in c.genetics["loci"])
     invalid = copy.deepcopy(c)
     invalid.functional_modules["flowering_kappa"] = 0.0
@@ -83,7 +83,7 @@ def test_expression_tuning_capacity_saturation_and_no_flowering():
 
 def test_v017_sensory_processing_and_zero_expression_cost_causal_controls():
     c = module_config()
-    x = np.array([[0.6, 0.4, 0.0, 1.0, 0.5, 0.2, 0.0, 1.0]] * 3)
+    x = np.array([[0.6, 0.4, 0.0, 1.0, 0.5, 0.2, 0.0, 1.0, 0.5, 0.5]] * 3)
     x[1, 6:8] = x[1, 6:8][::-1]  # Sensory tuning only.
     x[2, :2] = x[2, :2][::-1]  # Processing allocation only; same total expression.
     V = np.array([[0.1, 0.8], [0.8, 0.1]])
@@ -102,12 +102,12 @@ def test_v017_sensory_processing_and_zero_expression_cost_causal_controls():
         c,
         np.array([10.0]),
         np.ones(3),
-        chemical=np.array([[1.0, 0.0, 0.0]]),
+        chemical=np.array([[1.0, 0.0, 0.5, 0.0, 0.0]]),
         module_traits=x,
     )
     np.testing.assert_array_equal(I[0], I[1])
-    assert feeding["q"][0] == feeding["q"][1] == feeding["g"][0] == feeding["g"][1]
-    assert feeding["q"][0] != feeding["q"][2] and feeding["g"][0] != feeding["g"][2]
+    assert feeding["q"][0] == feeding["q"][1] and feeding["g"][0] == feeding["g"][1]
+    assert feeding["q"][0] != feeding["q"][2] and feeding["g"][0] == feeding["g"][2]
     costly, cp, cs = modules.maternal_fecundity(x, c)
     assert (cp > 0).all() and (cs > 0).all() and (costly < 1).all()
     c.insect_cost = c.functional_modules["sensory_cost"] = 0.0
@@ -150,7 +150,7 @@ def test_v017_current_contract_rejects_removed_settlement_and_preserves_formal_d
     assert loaded["batch"]["replicates"] == 4
     base = loaded["parameters"]
     assert base["plant_sizes"] == [20] * 10 and base["insect_sizes"] == [200]
-    assert base["genetics"]["schema_version"] == "slim-qtl-5"
+    assert base["genetics"]["schema_version"] == "slim-qtl-6"
     assert "adult_settlement_enabled" not in base["functional_modules"]
     assert "flowering_kappa" not in base["functional_modules"]
     assert [case["name"] for case in loaded["batch"]["cases"]] == [
@@ -167,11 +167,11 @@ def test_v017_native_lifecycle_independent_audit_and_tamper_rejection():
     c = module_config(generations=2)
     result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
-    assert result["metadata"]["version"] == "0.1.11"
-    assert result["metadata"]["functional_schema"] == "expression-tuning-2"
+    assert result["metadata"]["version"] == "0.1.12"
+    assert result["metadata"]["functional_schema"] == "expression-tuning-contact-3"
     first = result["snapshots"][0]
-    assert first["insect_module_traits"].shape == (16, 8)
-    assert result["metadata"]["genetics_version"] == "slim-qtl-5"
+    assert first["insect_module_traits"].shape == (16, 10)
+    assert result["metadata"]["genetics_version"] == "slim-qtl-6"
     assert not any("flower" in key or "theta" in key for key in result["metadata"])
     assert not any("flower" in key or "theta" in key for key in first)
     assert "flowering_kappa" not in c.functional_modules

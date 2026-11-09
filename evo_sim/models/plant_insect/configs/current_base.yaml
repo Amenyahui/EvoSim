@@ -14,9 +14,8 @@ parameters:
   candidate_size: 8
   olfaction_mode: template
   shuffle_voc: false
-  mapping: shared_chemical_modules
+  mapping: independent_psm_voc
   B: null
-  eta_shared: 1.0
   weights:
   - 0.5
   - 0.5
@@ -34,7 +33,7 @@ parameters:
   demand_unit: normalized_edible_dry_biomass
   feeding_window: one_generation_larval_feeding
   demand_window: one_generation_larval_feeding
-  model_version: 0.1.11
+  model_version: 0.1.12
   life_history: resource_coupled_plants_larval_insects
   demography:
     plant_survival: bernoulli
@@ -58,8 +57,8 @@ parameters:
       source: docs/model.md; theoretical resource and chemistry reference, not empirically calibrated
     plant_demography:
       kind: theoretical_placeholder
-      source: docs/model.md; researcher-selected resource-coupled mortality, recovery and shared establishment capacity;
-        no empirical calibration
+      source: docs/model.md; researcher-selected resource-coupled mortality, recovery and shared establishment
+        capacity; no empirical calibration
   record_observations: true
   spatial:
     grid_shape:
@@ -78,7 +77,7 @@ parameters:
       - 0.0
       - 1.0
     mode: sexual_qtl
-    schema_version: slim-qtl-5
+    schema_version: slim-qtl-6
     slim:
       executable: slim
       timeout_seconds: 120
@@ -89,7 +88,11 @@ parameters:
       - 0.0
       - 0.0
       - 0.0
+      - 0.0
+      - 0.0
       insect:
+      - 0.0
+      - 0.0
       - 0.0
       - 0.0
       - 0.0
@@ -106,19 +109,18 @@ parameters:
     provenance:
       mapping:
         source_kind: theoretical_placeholder
-        description: Three plant chemical and eight insect additive coordinates, clipped to configured
-          bounds. Fixed Gaussian expression/tuning modules are project assumptions; plant reproduction
-          uses uniformly sampled global surviving donors, excluding self; insects use local same-pool male donors.
+        description: Five plant coordinates PSM1, PSM2, Z, VOC1, VOC2; ten insect coordinates including
+          two signed contact responses. Pleiotropic QTL targets permitted, no imposed correlation. Theoretical
+          mapping.
       mutation:
         source_kind: theoretical_placeholder
         description: Independent per-copy per-locus per-generation probability 0.01; normal SD 0.02 in
           declared coordinate; distinct from legacy trait rates.
       founders:
         source_kind: theoretical_placeholder
-        description: Independent polymorphic founder copies; processing-expression centers solve P^T E=(0.35,0.55)
-          at fixed original tuning centers, width and idle, with original allele deviation +/-0.025; theoretical
-          mechanism reference, not ancestral adaptation or empirical calibration. Costs remain the original
-          coefficients, so lower processing expression also raises maternal output.
+        description: Preserved PSM and eight insect coordinate centers; new Z, VOC1 and raw G centers
+          0.5 with allele deviations +/-0.025. Independent founder draws, not calibrated or optimized
+          for coexistence.
       limits:
         source_kind: implementation_choice
         description: Conservative allele reservation and retained genotype scalar count; computational
@@ -155,6 +157,32 @@ parameters:
     resource_recovery_rate: 0.6931471805599453
     newborn_resource_fraction: 0.25
     microsites_per_cell: 3
+    tolerance_recovery_rate: 0.6931471805599453
+  chemical_processing:
+    dose_scale:
+    - 1.0
+    - 1.0
+    processing_scale:
+    - 1.0
+    - 1.0
+    toxicity_weights:
+    - 1.0
+    - 1.0
+    antinutrition_weights:
+    - 0.1
+    - 0.1
+    nutrition_exponent: 1.0
+    provenance:
+      kind: theoretical_placeholder
+      source: docs/ecology_v0.1.12_design.md; abstract load per resource mass, load per processing unit,
+        inverse-load hazards; uncalibrated
+  contact_response:
+    intercept: 0.0
+    slope: 1.0
+    provenance:
+      kind: theoretical_placeholder
+      source: docs/ecology_v0.1.12_design.md; logistic response to signed GR-mediated functional weights,
+        not measured expression
 batch:
   purpose: Current expression/tuning mechanism reference; illustrative parameters only.
   replicates: 1

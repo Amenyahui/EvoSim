@@ -61,7 +61,6 @@ class _TraitConfig:
     tau: float
     outside_utility: float
     unmatched_insect_fitness: float
-    eta_shared: object = None  # Validation requires an explicit normalized mapping factor.
 
     def validate(self):
         for name in ("insect_pop", "n", "generations", "record_every", "candidate_size"):
@@ -88,15 +87,8 @@ class _TraitConfig:
             raise ValueError("positive sigma and template/neutral mode required")
         if type(self.shuffle_voc) is not bool:
             raise ValueError("shuffle_voc must be boolean")
-        if (
-            self.mapping != "shared_chemical_modules"
-            or self.n != 2
-            or self.B is not None
-            or type(self.eta_shared) not in (int, float)
-            or not np.isfinite(self.eta_shared)
-            or not 0 <= self.eta_shared <= 1
-        ):
-            raise ValueError("current shared modules require n=2, B=null and eta_shared in [0,1]")
+        if self.mapping != "independent_psm_voc" or self.n != 2 or self.B is not None:
+            raise ValueError("independent PSM/VOC modules require n=2 and B=null")
         B = np.empty((2, 0))  # Shape carrier; the current mapping has no defense-to-odor matrix.
         w = np.asarray(self.weights, float)
         if (
@@ -162,7 +154,7 @@ class _ResourceConfig(_CommunityConfig):
         if self.insect_life_history != "adult_oviposition_larval_feeding":
             raise ValueError("current life history requires adult oviposition and larval feeding")
         if type(self.sI0) not in (int, float) or not np.isfinite(self.sI0) or self.sI0 != 0:
-            raise ValueError("larval survival requires sI0=0; survival equals feeding gain")
+            raise ValueError("larval survival requires sI0=0; no additive survival floor")
         units = ("normalized_edible_dry_biomass", "g_edible_dry_biomass", "mg_edible_dry_biomass")
         if self.resource_unit not in units or self.demand_unit != self.resource_unit:
             raise ValueError("resource/demand require the same recognized edible dry mass unit")
@@ -234,6 +226,8 @@ def species_map(value, keys, name, positive=False):
 @dataclass(kw_only=True)
 class Config(_ResourceConfig):
     functional_modules: object = None
+    chemical_processing: object
+    contact_response: object
     model_version: object
     life_history: object
     plant_offspring_lambda: object
@@ -265,13 +259,13 @@ class Config(_ResourceConfig):
                 "nonnegative generations and record_every=1 required for full demographic audit"
             )
         if (
-            self.model_version != "0.1.11"
+            self.model_version != "0.1.12"
             or self.life_history != "resource_coupled_plants_larval_insects"
             or not isinstance(self.genetics, dict)
-            or self.genetics.get("schema_version") != "slim-qtl-5"
+            or self.genetics.get("schema_version") != "slim-qtl-6"
         ):
             raise ValueError(
-                "current model_version=0.1.11 and slim-qtl-5 resource-coupled plant life history required"
+                "current model_version=0.1.12 and slim-qtl-6 resource-coupled plant life history required"
             )
         if self.demography != DEMOGRAPHY or any(
             type(self.demography[k]) is not type(v) for k, v in DEMOGRAPHY.items()
@@ -293,6 +287,7 @@ class Config(_ResourceConfig):
         ps, hs = names("P", self.plant_sizes), names("H", self.insect_sizes)
         self.resolved_demography()
         self.validate_plant_demography()
+        self.validate_ecology()
         provenance = self.parameter_provenance
         required = {
             "plant_offspring_lambda": ps,
@@ -358,7 +353,7 @@ class Config(_ResourceConfig):
             values = np.asarray(panel["plant_chemical_traits"])
             if (
                 values.dtype.kind not in "iuf"
-                or values.shape != (len(ids), 3)
+                or values.shape != (len(ids), 5)
                 or not np.isfinite(values).all()
                 or ((values < 0) | (values > 1)).any()
             ):
@@ -385,6 +380,7 @@ class Config(_ResourceConfig):
             "background_mortality_rate",
             "defoliation_mortality_rate",
             "resource_recovery_rate",
+            "tolerance_recovery_rate",
         )
         required = set(rates) | {
             "newborn_resource_fraction",
@@ -400,6 +396,44 @@ class Config(_ResourceConfig):
         numeric(spec["newborn_resource_fraction"], "newborn_resource_fraction")
         if spec["newborn_resource_fraction"] > 1:
             raise ValueError("newborn_resource_fraction must be in [0,1]")
+
+    def validate_ecology(self):
+        """Require explicit theoretical dose, nutritional and contact parameters."""
+        processing = self.chemical_processing
+        vectors = {"dose_scale", "processing_scale", "toxicity_weights", "antinutrition_weights"}
+        if not isinstance(processing, dict) or set(processing) != vectors | {
+            "nutrition_exponent",
+            "provenance",
+        }:
+            raise ValueError("complete chemical_processing parameters required")
+        for name in vectors:
+            values = np.asarray(processing[name])
+            if (
+                values.shape != (2,)
+                or values.dtype.kind not in "iuf"
+                or not np.isfinite(values).all()
+                or (values < 0).any()
+            ):
+                raise ValueError(
+                    f"chemical_processing.{name} requires two nonnegative finite coefficients"
+                )
+        numeric(processing["nutrition_exponent"], "nutrition_exponent")
+        contact = self.contact_response
+        if not isinstance(contact, dict) or set(contact) != {"intercept", "slope", "provenance"}:
+            raise ValueError("contact_response requires intercept, slope and provenance")
+        if type(contact["intercept"]) not in (int, float) or not np.isfinite(contact["intercept"]):
+            raise ValueError("finite contact intercept required")
+        numeric(contact["slope"], "contact slope")
+        for spec in (processing, contact):
+            provenance = spec["provenance"]
+            if (
+                not isinstance(provenance, dict)
+                or provenance.get("kind") != "theoretical_placeholder"
+                or not isinstance(provenance.get("source"), str)
+                or not provenance["source"].strip()
+                or not self.illustrative_only
+            ):
+                raise ValueError("new ecological equations require explicit theoretical provenance")
 
 
 def config_payload(c):

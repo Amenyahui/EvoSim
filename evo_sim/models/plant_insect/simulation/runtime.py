@@ -177,6 +177,7 @@ def initialize_community(config, initial=None):
             community.insects.resistance,
             resource_vector(runtime.c.resource_capacity, runtime.c.plant_sizes, pl, "P"),
             resource_vector(runtime.c.max_feeding_demand, runtime.c.insect_sizes, hl, "H"),
+            runtime.c.chemical_processing,
         )
         runtime.next_ids = [len(pl), len(hl)]
     except (ComputationalLimit, MemoryError, ArithmeticError, ValueError) as error:
@@ -224,13 +225,13 @@ def finalize(state):
         numpy=np.__version__,
         pandas=pd.__version__,
         snapshot_semantics="t=0 founder insects/plants; plants retain IDs and microsites across insect generations; round t larvae recruit insect cohort t+1; plant newborns established each round; terminal t is snapshot only",
-        lifecycle_schema="resource-coupled-plants-larval-recruitment-1",
+        lifecycle_schema="dose-tolerance-lifecycle-2",
         count_semantics="plant N_next=N_retained+N_offspring; N_propagules counts pre-establishment proposals; plant offspring means established newborn only; insect N_next counts recruited adults; no terminal/failed event rows",
-        resource_semantics="positive plant capacity K and carried stock B, 0<=B<=K; resource deficit=1-B_post/K after feeding; survival=exp(-mu0-muD*deficit); maternal output=chemical-cost factor*B_post/K; surviving B regrows toward K; founder B=K, newborn B=fraction*K; regrowth and newborn biomass are external production, not closed biomass conservation",
+        resource_semantics="positive capacity K and carried B, 0<=B<=K; actual defoliation=X/B_before, zero if B_before=0; survival=exp(-mu0-muD*defoliation); surviving plants recover at base_rate+Z*tolerance_rate; maternal output=chemical-cost factor*B_recovered/K; founder B=K, newborn B=fraction*K; growth is external production, not a closed carbon budget",
     )
     if modules.enabled(runtime.c):
         runtime.result["metadata"].update(
-            functional_schema="expression-tuning-2",
+            functional_schema="expression-tuning-contact-3",
             module_assumptions="fixed chemical features independent of concentration; fixed Gaussian widths; conserved processing capacity with idle channel; expression outside sensory saturation",
             compatibility_semantics="plant species fields track maternal founder-group origin, not current chemical phenotype or mating barriers; insect species fields are fixed ancestral compatibility pools, never dynamically inferred species",
             insect_module_order=[
@@ -242,6 +243,8 @@ def finalize(state):
                 "sense_E2",
                 "sense_mu1",
                 "sense_mu2",
+                "G1_raw",
+                "G2_raw",
             ],
             A_semantics="derived unsigned sensory expression profile on fixed chemical catalog, not an odor template",
         )
@@ -251,20 +254,24 @@ def finalize(state):
     runtime.result["metadata"].update(
         software_version=__version__,
         contribution_semantics="offspring_* and realized_genetic_contribution count all births; recruited_* and realized_recruitment_contribution count recruited adults; parents at round t; children adult_cohort t+1",
-        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers; plant W_i=S*F is a proposal proxy, not survival-plus-reproduction lifetime fitness; larval W_insect=g is survival only; realized plant genetic contribution counts established newborn, never surviving adults or rejected propagules",
+        fitness_proxy_semantics="F_i/fp/fi are maternal output multipliers; plant W_i=S*F uses recovered resources; larval W_insect is nutritional survival times toxicity and antinutrition survival; q is full-demand chemical assay survival, never an intake multiplier; established plant births count genetic contribution",
         maternal_expectation_semantics="plants: global surviving nonself donor required; expected_propagules and propagule_variance before shared microsite lottery; expected_maternal_offspring and maternal_offspring_variance missing because lottery couples establishment; insects: potential egg Poisson for females with adult mates, before oviposition rejection; no-mate females zero, males missing; no larval-survival or historical feeding factor in maternal egg expectation",
         allele_contribution_semantics="stage=birth or recruitment; each uses its own parental role-count weights and observed child genotypes; for plant maternal founder-group summaries, weighted parents may include fathers from other groups, so the contribution term includes mixing; recruitment transmission residual also includes larval viability selection",
         insect_lambda_semantics="Poisson lambda_egg * maternal F_m(I_m); no past maternal feeding gain; retained numeric examples are not old-model demographic equivalents",
         host_background_semantics="birth host species; founders unknown; directed parental source to child destination at half each nuclear role; not independent populations or effective migration",
         network_semantics="networks: larval resource and successful recruitment; lagged_networks: parent birth-host actual reproductive contribution; host_groups: reversible ecological categories; offspring: biparental DAG for both plants and insects, no candidate lineage/speciation",
         genetic_summary_mutation_semantics="snapshot allele/trait summaries describe recruited adults/plants; mutation_count counts all births in the cohort, including dead larvae",
-        reference_panel_semantics="reference_p/reference_q snapshot rows align with insect_ids; columns align with reference_plant_species; p is conditional choice without rejection",
+        reference_panel_semantics="rows align with insect_ids; columns with reference_plant_species; p is first olfactory approach probability times contact acceptance on equal panel, not eventual acceptance after retries; q is survival at full demand without competition",
         ecology_rule_version=runtime.c.model_version,
         genetics_version=runtime.c.genetics["schema_version"],
-        chemical_schema="shared-chemical-1",
-        plant_trait_order=["x_N", "x_S", "x_V"],
-        plant_defense_order=["D_N", "D_S"],
-        odor_trait_order=["V_S", "V_V"],
+        chemical_schema="independent-chemical-2",
+        plant_trait_order=["PSM1", "PSM2", "Z", "VOC1", "VOC2"],
+        plant_defense_order=["PSM1", "PSM2"],
+        odor_trait_order=["VOC1", "VOC2"],
+        insect_contact_trait_order=["G1_raw", "G2_raw"],
+        contact_weight_mapping="G=2*raw-1; GR-mediated aggregate response, not gene expression",
+        chemical_load_semantics="dose=x*PSM*dose_scale; capacity=I*processing_scale; processed=min(dose,capacity); residual=dose-processed; antinutrient=dose; per-window abstract loads",
+        plant_resource_semantics="defoliation=X/B_before, zero at B_before=0; Z raises recovery rate; maternal output uses recovered resources after survival; no tolerance fixed cost",
         chemical_observation_window=runtime.c.feeding_window,
         slim_calls=runtime.genetic.engine_calls,
         genetic_architecture_sha256=hashlib.sha256(architecture.encode()).hexdigest(),

@@ -51,6 +51,11 @@ class CommunityState:
     insects: InsectPopulation
 
     def validate(self):
+        if self.plants.chemical_traits.shape != (
+            len(self.plants),
+            5,
+        ) or self.insects.module_traits.shape != (len(self.insects), 10):
+            raise ValueError("v0.1.12 requires five plant and ten insect coordinates")
         for pop in (self.plants, self.insects):
             if (
                 len(np.unique(pop.ids)) != len(pop)

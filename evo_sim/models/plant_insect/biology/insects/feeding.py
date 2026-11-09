@@ -1,97 +1,92 @@
-"""Feeding mechanisms; equations preserved from v0.1.11."""
+"""Actual food sharing followed by explicit post-ingestion chemical processing."""
 
 import numpy as np
 
 from evo_sim.models.plant_insect.biology.plants import defense
 
 
-def consumption(D, I):
-    """Most limiting positive-defense component; absent defenses impose no limit."""
-    D, I = np.broadcast_arrays(np.asarray(D, float), np.asarray(I, float))
-    if D.ndim == 0 or D.shape[-1] == 0:
-        raise ValueError("defense and processing require a nonempty component axis")
-    if not np.isfinite(D).all() or not np.isfinite(I).all() or (D < 0).any() or (I < 0).any():
-        raise ValueError("defense and processing must be finite and nonnegative")
-    # A finite capacity divided by a tiny defense may overflow: q still saturates at 1.
+def chemical_survival(PSM, processing, intake, maximum, spec):
+    """Post-ingestion loads in abstract mass units and dimensionless survival components.
+
+    Processing is a per-window capacity, independent of demand. Antinutrition
+    acts on the ingested dose independently of chemical processing. All weights
+    and the nutritional exponent are explicit theoretical configuration values.
+    """
+    PSM, processing = np.broadcast_arrays(np.asarray(PSM, float), np.asarray(processing, float))
+    intake, maximum = np.broadcast_arrays(np.asarray(intake, float), np.asarray(maximum, float))
+    if (
+        PSM.shape != intake.shape + (2,)
+        or not np.isfinite(PSM).all()
+        or not np.isfinite(processing).all()
+        or (PSM < 0).any()
+        or (processing < 0).any()
+    ):
+        raise ValueError("two aligned finite nonnegative chemical axes required")
+    if (
+        not np.isfinite(intake).all()
+        or not np.isfinite(maximum).all()
+        or (maximum <= 0).any()
+        or (intake < 0).any()
+        or (intake > maximum).any()
+    ):
+        raise ValueError("intake must satisfy 0 <= intake <= positive maximum")
+    dose = intake[..., None] * PSM * np.asarray(spec["dose_scale"])
+    capacity = processing * np.asarray(spec["processing_scale"])
+    if not np.isfinite(dose).all() or not np.isfinite(capacity).all():
+        raise ValueError("chemical load exceeds floating-point range")
+    processed = np.minimum(dose, capacity)
+    residual = dose - processed
+    antinutrient = dose.copy()
+    g = intake / maximum
+    nutrition = np.zeros_like(g)
+    np.power(g, spec["nutrition_exponent"], out=nutrition, where=g > 0)
     with np.errstate(over="ignore"):
-        ratios = np.divide(I, D, out=np.full_like(D, np.inf, dtype=float), where=D > 0)
-    return np.minimum(1, ratios.min(axis=-1))
-
-
-def larval_survival_probability(g):
-    """Baseline survival is x/dmax, with no maternal expression cost applied again."""
-    probability = np.asarray(g, dtype=float)
-    if not np.isfinite(probability).all() or ((probability < 0) | (probability > 1)).any():
-        raise ValueError("larval resource fraction must be finite and in [0,1]")
-    return probability
-
-
-def founder_feeding_diagnostics(D, I, capacity, dmax):
-    """Probe validated internal founder arrays, without encounters, competition or RNG."""
-    D, I, capacity, dmax = (np.asarray(value, float) for value in (D, I, capacity, dmax))
-    count = len(D) * len(I)
-    result = dict(scope="all_initial_pairs_without_encounter_or_choice", pair_count=count)
-    if not count:
-        return dict(result, status="no_initial_pairs")
-    delta, tolerance = 1e-4, 1e-12
-    perturbations = []
-    for axis in range(D.shape[1]):
-        lower, upper = D.copy(), D.copy()
-        lower[:, axis] = np.maximum(0, lower[:, axis] - delta)
-        upper[:, axis] = np.minimum(1, upper[:, axis] + delta)
-        perturbations.append((lower, upper))
-    q_min, q_max, q_sum, unsaturated, limited = 1.0, 0.0, 0.0, 0, 0
-    q_sensitive = np.zeros(D.shape[1], dtype=np.int64)
-    g_sensitive = np.zeros_like(q_sensitive)
-    resource_masked = np.zeros_like(q_sensitive)
-    # ponytail: one insect against all plants bounds memory by the initial plant count.
-    for response, demand in zip(I, dmax, strict=True):
-        q = consumption(D, response)
-        q_min, q_max = min(q_min, float(q.min())), max(q_max, float(q.max()))
-        q_sum += float(q.sum())
-        unsaturated += int(np.count_nonzero(q < 1 - tolerance))
-        with np.errstate(over="ignore"):
-            resource_ceiling = capacity / demand
-        limited += int(np.count_nonzero(resource_ceiling < q))
-        for axis, (lower, upper) in enumerate(perturbations):
-            q_lower = consumption(lower, response)
-            q_upper = consumption(upper, response)
-            q_changed = q_lower - q_upper > tolerance
-            g_changed = (
-                np.minimum(q_lower, resource_ceiling) - np.minimum(q_upper, resource_ceiling)
-                > tolerance
-            )
-            q_sensitive[axis] += np.count_nonzero(q_changed)
-            g_sensitive[axis] += np.count_nonzero(g_changed)
-            resource_masked[axis] += np.count_nonzero(q_changed & ~g_changed)
+        toxicity = np.exp(-(residual * np.asarray(spec["toxicity_weights"])).sum(axis=-1))
+        antinutrition = np.exp(
+            -(antinutrient * np.asarray(spec["antinutrition_weights"])).sum(axis=-1)
+        )
     return dict(
-        result,
-        status="counterfactual_initial_pairs",
-        q_min=q_min,
-        q_max=q_max,
-        q_mean=q_sum / count,
-        q_unsaturated_fraction=unsaturated / count,
-        defense_delta=delta,
-        response_tolerance=tolerance,
-        q_sensitive_fraction=(q_sensitive / count).tolist(),
-        single_larva_g_sensitive_fraction=(g_sensitive / count).tolist(),
-        single_larva_resource_masked_q_sensitive_fraction=(resource_masked / count).tolist(),
-        single_larva_resource_limited_fraction=limited / count,
+        dose=dose,
+        processing_capacity=capacity,
+        processed=processed,
+        residual=residual,
+        antinutrient=antinutrient,
+        nutrition_survival=nutrition,
+        toxicity_survival=toxicity,
+        antinutrition_survival=antinutrition,
+        survival_probability=nutrition * toxicity * antinutrition,
     )
 
 
-def allocate_resources(host, q, capacity, dmax):
-    """Deterministic proportional sharing. Rejected q is NaN, its demand/x/g are zero."""
+def founder_feeding_diagnostics(D, I, capacity, dmax, spec):
+    """Counterfactual single-larva exposure, without encounters, competition or RNG."""
+    probabilities = []
+    for processing, maximum in zip(I, dmax, strict=True):
+        intake = np.minimum(capacity, maximum)
+        probabilities.extend(
+            chemical_survival(D, processing, intake, np.full(len(D), maximum), spec)[
+                "survival_probability"
+            ]
+        )
+    return dict(
+        scope="initial_single_larva_pairs_without_choice",
+        pair_count=len(probabilities),
+        status="counterfactual_initial_pairs" if probabilities else "no_initial_pairs",
+        survival_mean=float(np.mean(probabilities)) if probabilities else None,
+    )
+
+
+def allocate_resources(host, capacity, dmax):
+    """Proportional sharing of actual food demand; chemical traits do not affect demand."""
     host = np.asarray(host)
-    q, capacity, dmax = (np.asarray(x, dtype=float) for x in (q, capacity, dmax))
+    capacity, dmax = (np.asarray(x, dtype=float) for x in (capacity, dmax))
     if (
         host.ndim != 1
         or host.dtype.kind not in "iu"
-        or q.shape != host.shape
         or dmax.shape != host.shape
         or capacity.ndim != 1
     ):
-        raise ValueError("host must be integer vector; q/dmax match it; capacity is a plant vector")
+        raise ValueError("host must be integer vector; dmax matches it; capacity is a plant vector")
     if (
         not np.isfinite(capacity).all()
         or (capacity < 0).any()
@@ -102,14 +97,8 @@ def allocate_resources(host, q, capacity, dmax):
     if ((host < -1) | (host >= len(capacity))).any():
         raise ValueError("host indices outside [-1,n_plants)")
     found = host >= 0
-    if (
-        not np.isfinite(q[found]).all()
-        or ((q[found] < 0) | (q[found] > 1)).any()
-        or not np.isnan(q[~found]).all()
-    ):
-        raise ValueError("accepted q must be in [0,1]; unmatched q must be NaN")
     demand = np.zeros(len(host))
-    demand[found] = dmax[found] * q[found]
+    demand[found] = dmax[found]
     with np.errstate(over="ignore"):
         total = np.bincount(host[found], weights=demand[found], minlength=len(capacity))
     if not np.isfinite(total).all():
@@ -174,9 +163,16 @@ def settle_feeding(
 ):
     """Return larval survival plus separate maternal output and plant fitness diagnostics."""
     found = host >= 0
+    allocation = allocate_resources(host, capacity, dmax)
+    concentrations = np.zeros((len(I), 2))
+    concentrations[found] = D[host[found]]
+    exposure = chemical_survival(concentrations, I, allocation["x"], dmax, c.chemical_processing)
+    unlimited = chemical_survival(
+        D[host[found]], I[found], dmax[found], dmax[found], c.chemical_processing
+    )["survival_probability"]
     q = np.full(len(I), np.nan)
-    q[found] = consumption(D[host[found]], I[found])
-    allocation = allocate_resources(host, q, capacity, dmax)
+    q[found] = unlimited
+    chemical = np.asarray(chemical)
     fp, defense_cost, voc_cost = defense.fecundity(D, V_emit, c, chemical)
     from evo_sim.models.plant_insect.biology.traits import maternal_fecundity
 
@@ -203,7 +199,7 @@ def settle_feeding(
     )
     return dict(
         allocation,
-        survival_probability=larval_survival_probability(allocation["g"]),
+        **exposure,
         q=q,
         fp=fp,
         fi=fi,

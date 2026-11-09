@@ -77,7 +77,7 @@ def test_single_sex_singleton_and_extinction():
             for x in r["parents"]
             if x["kind"] == "insect"
         )
-        assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 16)
+        assert r["snapshots"][1]["insect_genotypes"].shape == (0, 2, 20)
     c = config(plant_sizes=[1, 0], insect_sizes=[0])
     c.plant_offspring_lambda["P1"] = 100.0
     r = simulate(c)
@@ -86,7 +86,7 @@ def test_single_sex_singleton_and_extinction():
     assert r["metadata"]["status"]["generation"] == 0
     r = simulate(config(plant_sizes=[0, 0]))
     assert all(x["x"] == 0 for x in r["events"])
-    assert r["snapshots"][-1]["insect_genotypes"].shape == (0, 2, 16)
+    assert r["snapshots"][-1]["insect_genotypes"].shape == (0, 2, 20)
 
 
 def test_default_sexual_founders_can_reproduce():

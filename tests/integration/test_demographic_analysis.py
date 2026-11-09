@@ -81,7 +81,7 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
         (root / "settings.json").write_text(
             json.dumps(
                 dict(
-                    version="0.1.11",
+                    version="0.1.12",
                     spec=dict(
                         base=parameters,
                         cases=[dict(name="baseline", overrides={})],
@@ -145,6 +145,7 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
                 dmax=[1.0] * 3,
                 x=[0.5] * 3,
                 g=[0.5] * 3,
+                W_insect=[0.4, 0.3, 0.2],
                 survived_to_adult=[True, False, True],
             )
         ).to_csv(folder / "larvae.csv", index=False)
@@ -163,7 +164,7 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
                 resource_after_feeding=[2.5, 0.0, 0.0],
                 resource_recovery=[3.75, 5.0, 5.0],
                 resource_next=[6.25, 5.0, 5.0],
-                defoliation=[0.75, 1.0, 1.0],
+                defoliation=[0.0, 0.0, 1.0],
                 gamma=[1.0, 1.0, 0.5],
                 herbivore_load=[0, 0, 1],
             )
@@ -187,7 +188,8 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
             tables, _ = summarize_sensitivity(root)
         assert tables["runs"].iloc[0].coexistence_outcome == "coexistence_at_horizon"
         before, pulse = tables["diagnostics"].iloc[0], tables["diagnostics"].iloc[1]
-        assert before.plant_resource_fraction == 0.125 and before.plant_defoliation_mean == 0.875
+        assert before.plant_resource_fraction == 0.125 and before.plant_defoliation_mean == 0
+        assert before.plant_post_resource_deficit_mean == 0.875
         assert before.plant_losses == before.plant_cycle_losses == 1
         assert before.plant_resource_limited_fraction == 0.0
         assert before.larval_q_saturated_fraction == 0.5 and before.larval_q_mean == 0.75
@@ -196,7 +198,7 @@ def test_demographic_summary_separates_reference_deficit_from_size_and_counts_cy
         assert pulse.plant_resource_limited_fraction == 1.0
         assert before.eggs_rejected == 1 and before.eggs_without_candidates == 0
         assert pulse.eggs_rejected == 0 and pulse.eggs_without_candidates == 1
-        assert before.larval_expected_recruits == 1 and before.larval_realized_recruits == 1
+        assert before.larval_expected_recruits == 0.7 and before.larval_realized_recruits == 1
         assert before.larval_survival_fraction == 0.5
         assert before.plant_resource_exhausted_fraction == 0
         assert before.plant_positive_stock_count == 1 and before.plant_zero_stock_fraction == 0.5

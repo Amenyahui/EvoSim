@@ -1,4 +1,4 @@
-"""Independent population checks; equations preserved from v0.1.11 audit."""
+"""Independent population checks; equations preserved from v0.1.12 audit."""
 
 import json
 from itertools import combinations
@@ -12,7 +12,7 @@ from .events import (
     compare,
     distance,
 )
-from .feeding import module_choice, module_profiles
+from .feeding import chemical_outcomes, contact_probability, module_choice, module_profiles
 from .resources import vector
 
 
@@ -155,21 +155,23 @@ def audit_snapshot_summaries(path, c, states, catalog, phenotype):
     expected = {}
     ref = np.asarray(c.observation_reference_traits["plant_chemical_traits"], float)
     D = ref[:, :2]
-    V = np.column_stack((c.eta_shared * ref[:, 1], ref[:, 2]))
+    V = ref[:, 3:5]
     reference_ids = c.observation_reference_traits["reference_ids"]
     for state in states:
         t = int(state["generation"])
         I = state["I"]
         probability = np.array(
-            [module_choice(V, x, c, forced=True)[:-1] for x in state["insect_module_traits"]]
+            [
+                module_choice(V, x, c, forced=True)[:-1] * contact_probability(D, x, c)
+                for x in state["insect_module_traits"]
+            ]
         ).reshape(len(I), len(D))
-        ratios = np.divide(
-            I[:, None, :],
-            D[None, :, :],
-            out=np.full((len(I), *D.shape), np.inf),
-            where=D[None, :, :] > 0,
+        maximum = np.broadcast_to(
+            vector(c.max_feeding_demand, state["insect_species"], "H")[:, None], (len(I), len(D))
         )
-        q = np.minimum(1, ratios.min(axis=2))
+        q = chemical_outcomes(D[None, :, :], I[:, None, :], maximum, maximum, c)[
+            "survival_probability"
+        ]
         close(state["reference_p"], probability, ("reference choice", t))
         close(state["reference_q"], q, ("reference performance", t))
         assert state["reference_plant_species"].tolist() == reference_ids
@@ -392,7 +394,7 @@ def check_population(path, c, states, loci, catalog, phenotype, spec):
             if kind == "plant":
                 close(
                     state["plant_chemical_traits"],
-                    values[:, :3],
+                    values[:, :5],
                     (state["generation"], kind, "phenotype"),
                 )
                 close(state["D"], values[:, :2], "plant defense")

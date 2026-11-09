@@ -51,9 +51,10 @@ def test_resource_equations_and_invalid_stock():
         [0.0, 2.0, 0.0],
         [10.0, 8.0, 10.0],
         spec,
+        np.zeros_like([10.0, 4.0, 0.0], dtype=float),
     )
     np.testing.assert_allclose(post, [10, 2, 0])
-    np.testing.assert_allclose(deficit, [0, 0.75, 1])
+    np.testing.assert_allclose(deficit, [0, 0.5, 0])
     np.testing.assert_allclose(survival, 0.5 * 4**-deficit)
     np.testing.assert_allclose(recovered, [10, 5, 5])
     for stock, consumed, capacity in (
@@ -62,7 +63,11 @@ def test_resource_equations_and_invalid_stock():
         ([1], [2], [2]),
         ([0], [0], [0]),
     ):
-        raises(lambda: plant_resource_update(stock, consumed, capacity, spec))
+        raises(
+            lambda: plant_resource_update(
+                stock, consumed, capacity, spec, np.zeros_like(stock, dtype=float)
+            )
+        )
     for key in ("sP0", "plant_competition_alpha"):
         values = dict(get_runner().config["parameters"], generations=1, **{key: 1})
         from evo_sim.models.plant_insect import Config
@@ -73,15 +78,12 @@ def test_resource_equations_and_invalid_stock():
     raises(bad.validate)
 
 
-def test_resource_deficit_depends_only_on_current_stock_and_recovers():
+def test_low_resource_without_feeding_is_not_damage_and_recovers():
     spec = plant_config().plant_demography
-    spec.update(background_mortality_rate=-np.log(0.99), defoliation_mortality_rate=0.3)
-    post, deficit, survival, recovered = plant_resource_update([2.5], [0], [10], spec)
-    np.testing.assert_allclose(deficit, 0.75)
-    np.testing.assert_allclose(survival, 0.99 * np.exp(-0.3 * 0.75))
+    _, damage, survival, recovered = plant_resource_update([2.5], [0], [10], spec, [0])
+    np.testing.assert_array_equal(damage, [0])
+    np.testing.assert_allclose(survival, np.exp(-spec["background_mortality_rate"]))
     np.testing.assert_allclose(recovered, 6.25)
-    _, following, _, _ = plant_resource_update(recovered, [0], [10], spec)
-    assert following[0] < deficit[0]
 
 
 def test_initial_sites_are_unique_and_explicit_overflow_is_rejected():
@@ -151,7 +153,7 @@ def test_shared_lottery_is_unbiased_and_never_fills_untargeted_sites():
 def test_survivor_snapshot_budget_and_failure_rollback():
     c = plant_config(generations=4)
     c.plant_demography["microsites_per_cell"] = 2
-    initial = 2 * sum(c.plant_sizes) * 6
+    initial = 2 * sum(c.plant_sizes) * 10
     c.genetics["max_genotype_values_safety"] = initial * 5
     passed = simulate(c)
     assert passed["metadata"]["status"]["status"] == "completed"
@@ -183,7 +185,7 @@ def test_only_established_seedlings_get_native_genotypes():
     assert len(result["offspring"]) == 1
     assert len(result["plant_proposals"]) > 1
     assert sum(row["established"] for row in result["plant_proposals"]) == 1
-    assert len(result["gamete_transmissions"]) == 12
+    assert len(result["gamete_transmissions"]) == 20
     assert [call["offspring_count"] for call in result["metadata"]["slim_calls"]] == [1]
     assert result["snapshots"][1]["plant_ids"].tolist() == [0, 1, 2]
 
@@ -206,15 +208,14 @@ def test_feeding_uses_carried_stock_then_survivors_regrow():
     }
     for row in first:
         expected_f = max(0, 1 - row["defense_cost"] - row["voc_cost"])
-        expected_f *= row["resource_after_feeding"] / row["resource_capacity"]
+        expected_f *= row["resource_after_recovery"] / row["resource_capacity"]
         assert np.isclose(parents[row["plant_id"]]["F_i"], expected_f)
         assert np.isclose(row["W_plant"], parents[row["plant_id"]]["W_i"])
-        if row["resource_after_feeding"] == 0:
-            assert parents[row["plant_id"]]["propagule_count"] == 0
-    for before, after in zip(first, second, strict=True):
-        expected = 1 - (1 - before["resource_after_feeding"]) * np.exp(
-            -c.plant_demography["resource_recovery_rate"]
-        )
+        assert row["resource_after_recovery"] >= row["resource_after_feeding"]
+    following = {row["plant_id"]: row for row in second}
+    for before in first:
+        after = following[before["plant_id"]]
+        expected = 1 - (1 - before["resource_after_feeding"]) * np.exp(-before["recovery_rate"])
         assert before["resource_next"] == after["R"] == expected
     assert any(row["R"] < row["resource_capacity"] for row in second)
 

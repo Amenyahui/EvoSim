@@ -2,10 +2,12 @@
 
 import numpy as np
 
-from evo_sim.models.plant_insect.biology.insects.feeding import consumption
+from evo_sim.models.plant_insect.biology.insects.feeding import chemical_survival
+from evo_sim.models.plant_insect.biology.insects.host_selection import contact_acceptance
 from evo_sim.models.plant_insect.biology.insects.sensory import conditional_probabilities
 from evo_sim.models.plant_insect.biology.plants import chemistry
 from evo_sim.models.plant_insect.biology.plants.chemistry import reference
+from evo_sim.models.plant_insect.config.schema import resource_values
 
 from .events import host_name
 
@@ -16,11 +18,19 @@ def standardized(state, c, B, w, generation):
     probability = np.empty((len(state.insects), len(D)))
     ids = c.observation_reference_traits["reference_ids"]
     for i, preference in enumerate(state.insects.module_traits):
-        probability[i] = conditional_probabilities(V, preference, c, w)
-    q = consumption(
+        probability[i] = conditional_probabilities(V, preference, c, w) * contact_acceptance(
+            D, preference, c.contact_response
+        )
+    per_pool = resource_values(c.max_feeding_demand, [1] * len(c.insect_sizes), "H")
+    maximum = np.broadcast_to(per_pool, (len(c.insect_sizes),))[state.insects.species]
+    maximum = np.broadcast_to(maximum[:, None], (len(state.insects), len(D)))
+    q = chemical_survival(
         np.broadcast_to(D, (len(state.insects), *D.shape)),
         state.insects.resistance[:, None, :],
-    )
+        maximum,
+        maximum,
+        c.chemical_processing,
+    )["survival_probability"]
     rows = []
     for h in range(len(c.insect_sizes)):
         mask = state.insects.species == h

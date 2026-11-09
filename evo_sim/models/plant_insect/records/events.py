@@ -134,6 +134,11 @@ def generation_records(
                     plants.ids[oviposition.choice["candidate_rows"][j]].tolist()
                 ),
                 choice_order=int(oviposition.choice["choice_order"][j]),
+                contact_plant_ids=json.dumps(
+                    plants.ids[oviposition.choice["contact_rows"][j]].tolist()
+                ),
+                contact_probabilities=json.dumps(oviposition.choice["contact_probabilities"][j]),
+                contact_accepted=json.dumps(oviposition.choice["contact_accepted"][j]),
             )
         )
     accepted_indices = np.flatnonzero(oviposition.accepted)
@@ -200,6 +205,11 @@ def generation_records(
             same_species_others=int(larvae.e["same_species_others"][i]),
             other_species_others=int(larvae.e["other_species_others"][i]),
         )
+        for name in ("dose", "processing_capacity", "processed", "residual", "antinutrient"):
+            for axis in range(2):
+                event[f"{name}_{axis + 1}"] = float(larvae.e[name][i, axis])
+        for name in ("nutrition_survival", "toxicity_survival", "antinutrition_survival"):
+            event[name] = float(larvae.e[name][i])
         new["events"].append(event)
         new["larvae"].append(dict(event))
     for i, record in enumerate(plant_births.precords):
@@ -234,11 +244,14 @@ def generation_records(
                 V_emit_mean=float(oviposition.V[i].mean()),
                 defense_cost=float(larvae.e["defense_cost"][i]),
                 voc_cost=float(larvae.e["voc_cost"][i]),
-                W_plant=float(
-                    plant_update.S[i] * larvae.e["fp"][i] * plant_update.post[i] / larvae.maximum[i]
-                ),
+                W_plant=float(plant_update.prows[i]["W_i"]),
                 resource_capacity=float(larvae.maximum[i]),
                 resource_after_feeding=float(plant_update.post[i]),
+                tolerance_Z=float(plants.chemical_traits[i, 2]),
+                recovery_rate=float(plant_update.recovery_rate[i]),
+                resource_after_recovery=float(plant_update.recovered[i])
+                if plant_update.psurvived[i]
+                else None,
                 defoliation=float(plant_update.defoliation[i]),
                 survival_probability=float(plant_update.S[i]),
                 survived=bool(plant_update.psurvived[i]),

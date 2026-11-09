@@ -1,4 +1,4 @@
-"""Offspring genetics stage; preserve v0.1.11 draw and execution order."""
+"""Offspring genetics stage; preserve v0.1.12 draw and execution order."""
 
 import copy
 from dataclasses import dataclass

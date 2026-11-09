@@ -1,4 +1,4 @@
-"""Plant dynamics stage; preserve v0.1.11 draw and execution order."""
+"""Plant dynamics stage; preserve v0.1.12 draw and execution order."""
 
 from dataclasses import dataclass
 
@@ -7,7 +7,10 @@ import numpy as np
 from evo_sim.core.runner import ComputationalLimit
 from evo_sim.models.plant_insect.biology import spatial
 from evo_sim.models.plant_insect.biology.agents import CommunityState
-from evo_sim.models.plant_insect.biology.plants.demography import plant_resource_update
+from evo_sim.models.plant_insect.biology.plants.demography import (
+    leaf_recovery_rate,
+    plant_resource_update,
+)
 
 from .adult_reproduction import sample_parents
 from .larval_development import LarvalDevelopment
@@ -22,6 +25,7 @@ class PlantDynamics:
     defoliation: np.ndarray
     S: np.ndarray
     recovered: np.ndarray
+    recovery_rate: np.ndarray
     pcounts: np.ndarray
     pcandidates: list[np.ndarray]
     prows: list[dict]
@@ -46,10 +50,14 @@ def update_plants(
     plants = current.plants
     runtime.stage = "plant_survival_and_reproduction"
     post, defoliation, S, recovered = plant_resource_update(
-        larvae.capacity, larvae.e["X"], larvae.maximum, c.plant_demography
+        larvae.capacity,
+        larvae.e["X"],
+        larvae.maximum,
+        c.plant_demography,
+        plants.chemical_traits[:, 2],
     )
     pcounts, pcandidates, prows, psurvived = sample_parents(
-        plants, "plant", S, larvae.e["fp"] * post / larvae.maximum, runtime, t
+        plants, "plant", S, larvae.e["fp"] * recovered / larvae.maximum, runtime, t
     )
     npropagules = sum(map(int, pcounts))
     if npropagules + len(offspring.hids) > c.max_individuals_safety:
@@ -87,6 +95,7 @@ def update_plants(
         defoliation=defoliation,
         S=S,
         recovered=recovered,
+        recovery_rate=leaf_recovery_rate(plants.chemical_traits[:, 2], c.plant_demography),
         pcounts=pcounts,
         pcandidates=pcandidates,
         prows=prows,

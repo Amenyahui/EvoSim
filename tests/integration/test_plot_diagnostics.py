@@ -124,7 +124,7 @@ def test_summary_batch_has_no_figure_side_effect():
     with TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "data").mkdir()
-        (root / "settings.json").write_text(json.dumps({"version": "0.1.11"}))
+        (root / "settings.json").write_text(json.dumps({"version": "0.1.12"}))
         (root / "audits").mkdir()
         (root / "audits/integrity_audit.json").write_text(json.dumps({"runs": 1}))
         (root / "data/run_status.csv").write_text("case,replicate,status\nx,1,completed\n")
@@ -186,7 +186,7 @@ def test_v016_plot_tables_include_terminal_adults_and_larval_resource():
                 "host_resource_by_generation",
             )
         }
-        data["lifecycle_schema"] = "resource-coupled-plants-larval-recruitment-1"
+        data["lifecycle_schema"] = "dose-tolerance-lifecycle-2"
         assert data["host_resource_by_generation"].generation.max() == 3
         captured = []
         with patch(
@@ -223,8 +223,8 @@ def test_v017_module_panels_and_surviving_recruitment():
     from evo_sim.models.plant_insect.analysis.plots import diagnostics as plot
 
     traits = (
-        [f"plant_chemical_traits_{i}" for i in range(1, 4)]
-        + [f"insect_module_traits_{i}" for i in range(1, 9)]
+        [f"plant_chemical_traits_{i}" for i in range(1, 6)]
+        + [f"insect_module_traits_{i}" for i in range(1, 11)]
         + ["I_1", "I_2", "A_1", "A_2"]
     )
     frame = pd.DataFrame(
@@ -278,23 +278,24 @@ def test_v017_module_panels_and_surviving_recruitment():
                 population_timeseries=pop,
                 species_extinction=ext,
                 host_resource_by_generation=resource,
-                lifecycle_schema="resource-coupled-plants-larval-recruitment-1",
+                lifecycle_schema="dose-tolerance-lifecycle-2",
             ),
             Path(tmp),
             60,
         )
         plot.figure_A(dict(population_timeseries=pop, species_extinction=ext), Path(tmp), 60)
     fig = captured[0][0]
-    assert len(fig.axes) == 12
+    assert len(fig.axes) == 14
     assert all(not ax.texts for ax in fig.axes)
     assert [ax.get_xlabel() for ax in fig.axes[::2]][2:] == [
         "Δ met E₁ (model units)",
         "Δ met μ₁ (model units)",
         "Δ sense E₁ (model units)",
         "Δ sense μ₁ (model units)",
+        "Δ G1 raw (model units)",
     ]
     # Endpoint diamonds must follow the eight inherited module axes, never derived I/A.
-    for ax, index in zip(fig.axes[4::2], (4, 6, 8, 10), strict=True):
+    for ax, index in zip(fig.axes[4::2], (6, 8, 10, 12, 14), strict=True):
         diamonds = [line for line in ax.lines if line.get_marker() == "D"]
         assert diamonds
         np.testing.assert_allclose(diamonds[0].get_xdata(), [index * 0.2])

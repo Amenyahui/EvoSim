@@ -2,7 +2,14 @@
 
 ## 范围与基线
 
-本次任务分类为 **Refactoring**。基线为 v0.1.11，提交
+2026-11-09：当前任务为 **Scientific Modification**，以main提交fd9ba73为基线，
+科学版本升级为0.1.12。五维植物、十维昆虫继续使用既有QTL/SLiM与分层包。
+行为、取食、资源方程分别属于biology/insects和biology/plants；simulation和records接收结果，
+audit/lifecycle_checks独立重建，analysis使用新版本语义。植物阶段内部改为
+实际食害存活→Z恢复→按恢复资源繁殖，保持原子提交及阶段顺序。
+冻结源码和输入清单见[科学设计](ecology_v0.1.12_design.md)。
+
+下文记录2026-11-06已完成的 **Refactoring**。当时基线为 v0.1.11，提交
 `20d2496f6e85efe37c02cbf495ea50613f0ec0f8`。2026-11-06 检查时远端
 `main` 指向同一提交；工作区已有用户更新的 `AGENTS.md`。
 

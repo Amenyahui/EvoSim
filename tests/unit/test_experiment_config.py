@@ -33,7 +33,7 @@ def test_ten_plant_type_design():
     centers = []
     for i in range(1, 11):
         loci = genetics["founder_frequencies"][f"P{i}"]
-        mean = np.zeros(3)
+        mean = np.zeros(5)
         for entries in loci.values():
             assert len(entries) == 2 and all(e["frequency"] == 0.5 for e in entries)
             effects = [np.array(alleles[e["allele_id"]]["effect"]) for e in entries]

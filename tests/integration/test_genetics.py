@@ -88,7 +88,7 @@ def test_terminal_and_atomic_failure():
     with TemporaryDirectory() as tmp:
         save_result(runner.result, Path(tmp) / "injected")
         assert audit_run(Path(tmp) / "injected")["status"] == "computational_limit"
-    for field, value in (("max_alleles_safety", 44), ("max_genotype_values_safety", 736)):
+    for field, value in (("max_alleles_safety", 60), ("max_genotype_values_safety", 736)):
         c = config(insect_sizes=[40], choice_mode="forced")
         c.spatial["initial_plant_cells"] = [[0, 0]] * 40
         c.spatial["initial_insect_cells"] = [[0, 0]] * 40

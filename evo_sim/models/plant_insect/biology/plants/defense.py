@@ -1,4 +1,4 @@
-"""Defense mechanisms; equations preserved from v0.1.11."""
+"""Defense mechanisms; equations preserved from v0.1.12."""
 
 import numpy as np
 
@@ -8,10 +8,10 @@ def fecundity(D, V_emit, c, chemical=None):
     from evo_sim.models.plant_insect.biology.plants.chemistry import outputs
 
     chemical = np.asarray(chemical, float)
-    defense, _ = outputs(chemical, c.eta_shared)
+    defense, _ = outputs(chemical)
     if not np.array_equal(defense, D):
-        raise ValueError("shared chemical costs require aligned genetic modules and defense")
-    voc_cost = c.voc_cost * chemical[:, 2]
+        raise ValueError("PSM costs require aligned genetic concentrations and defense")
+    voc_cost = c.voc_cost * chemical[:, 3:5].sum(axis=1)
     # Preserve exact arithmetic order of v1.1 when the extra cost is disabled.
     fp = (
         np.maximum(0, 1 - defense_cost)

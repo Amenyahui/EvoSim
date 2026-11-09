@@ -16,7 +16,7 @@ def prepare_diagnostics(batch):
     """Reuse stage-neutral trait/genetic summaries; add adult endpoints and larval resource shares."""
     from evo_sim.models.plant_insect.analysis.summaries.qtl import summarize as summarize_genetics
 
-    assert read_settings(batch.path)["version"] == "0.1.11"
+    assert read_settings(batch.path)["version"] == "0.1.12"
     assert batch.audit["genetically_audited_runs"] == len(batch.status)
     if batch.status.generation.lt(1).any():
         raise ValueError(
@@ -96,7 +96,7 @@ def prepare_diagnostics(batch):
 
 def summarize(batch):
     settings = read_settings(batch)
-    if settings.get("version") != "0.1.11":
+    if settings.get("version") != "0.1.12":
         raise ValueError("summarize_lifecycle requires the current adult/larval ledgers")
     status = pd.read_csv(batch / "data/run_status.csv")
     assert read_audit(batch)["runs"] == len(status)
@@ -207,7 +207,7 @@ def summarize_sensitivity(path):
 
     path = Path(path)
     settings = read_settings(path)
-    if settings.get("version") != "0.1.11":
+    if settings.get("version") != "0.1.12":
         raise ValueError("summarize_sensitivity requires the current model protocol")
     spec = settings["spec"]
     horizon = int(spec["base"]["generations"])
@@ -345,7 +345,7 @@ def summarize_sensitivity(path):
                         consumed=consumed,
                         resource_gain=consumed / demand if demand else np.nan,
                         larval_count=len(selected),
-                        larval_expected_recruits=selected.g.sum(),
+                        larval_expected_recruits=selected.W_insect.sum(),
                         larval_realized_recruits=int(selected.survived_to_adult.eq(True).sum()),
                         larval_survival_fraction=selected.survived_to_adult.eq(True).mean()
                         if len(selected)
@@ -404,6 +404,9 @@ def summarize_sensitivity(path):
                         plant_resource_next_retained=plants.resource_next.sum(),
                         plant_resource_fraction=b_total / k_total if k_total else np.nan,
                         plant_defoliation_mean=plants.defoliation.mean(),
+                        plant_post_resource_deficit_mean=(
+                            1 - plants.resource_after_feeding / plants.resource_capacity
+                        ).mean(),
                         plant_start_deficit_mean=(1 - plants.R / plants.resource_capacity).mean(),
                         plant_consumption_capacity_fraction_mean=(
                             (plants.R - plants.resource_after_feeding) / plants.resource_capacity
@@ -461,9 +464,9 @@ def summarize_sensitivity(path):
                 generations="committed transitions only; no extrapolation of stage diagnostics",
                 exhaustion="post-feeding resource <= 1e-12 * starting stock; denominator excludes zero starting stock",
                 attacked_exhaustion="same threshold; denominator is positive-stock plants with herbivore_load > 0",
-                resource_deficit="start deficit + consumption/capacity = post-feeding deficit; not all herbivore damage",
+                resource_deficit="start deficit + consumption/capacity = post resource deficit; defoliation is instead consumption/starting resource",
                 plant_reproduction="zero mean and positive-mean Poisson zeros among surviving mothers with mates",
-                larval_recruits="sum of recorded g versus count of survived_to_adult; zero larvae gives NA fraction",
+                larval_recruits="sum of recorded W_insect versus count of survived_to_adult; zero larvae gives NA fraction",
             ),
         ),
     )

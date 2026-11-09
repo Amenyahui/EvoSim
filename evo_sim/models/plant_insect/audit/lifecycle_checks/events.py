@@ -1,4 +1,4 @@
-"""Independent events checks; equations preserved from v0.1.11 audit."""
+"""Independent events checks; equations preserved from v0.1.12 audit."""
 
 import hashlib
 import json
@@ -96,12 +96,12 @@ def read_records(path, meta):
     assert __debug__, "scientific audits require assertions"
     c = Config(**meta["config"])
     c.validate()
-    assert c.model_version == meta["version"] == "0.1.11"
+    assert c.model_version == meta["version"] == "0.1.12"
     assert meta["genetics_version"] == c.genetics["schema_version"]
-    assert meta["genetics_version"] == "slim-qtl-5"
+    assert meta["genetics_version"] == "slim-qtl-6"
     assert meta["ecology_rule_version"] == c.model_version
-    assert meta["functional_schema"] == "expression-tuning-2"
-    assert meta["lifecycle_schema"] == "resource-coupled-plants-larval-recruitment-1"
+    assert meta["functional_schema"] == "expression-tuning-contact-3"
+    assert meta["lifecycle_schema"] == "dose-tolerance-lifecycle-2"
     payload = json.dumps(config_payload(c), sort_keys=True, separators=(",", ":")).encode()
     assert hashlib.sha256(payload).hexdigest() == meta["config_sha256"]
     assert json.loads((path / "status.json").read_text(encoding="utf-8")) == meta["status"]

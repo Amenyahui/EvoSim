@@ -1,4 +1,4 @@
-"""Shared chemical axes: analytical paths, real QTL widths and checked persistence."""
+"""Independent PSM/VOC axes, costs, QTL widths and CSV boundaries."""
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -9,105 +9,92 @@ from evo_sim.models.plant_insect import simulate
 from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
 from evo_sim.models.plant_insect.biology.genetics.qtl import GeneticState
-from evo_sim.models.plant_insect.biology.insects.feeding import consumption
 from evo_sim.models.plant_insect.biology.plants import chemistry
 from evo_sim.models.plant_insect.biology.plants import defense as _defense
 from evo_sim.models.plant_insect.config.input_loader import load_inputs
 from tests.support import config, raises
 
 
-def test_shared_module_paths_and_hand_calculation():
-    c = config(eta_shared=0.5)
-    x = np.array([[0.2, 0.6, 0.4]])
-    D, V = chemistry.outputs(x, c.eta_shared)
-    np.testing.assert_array_equal(D, [[0.2, 0.6]])
-    np.testing.assert_allclose(V, [[0.3, 0.4]])
-    fm, cd, cv = _defense.fecundity(D, V, c, x)
-    np.testing.assert_allclose([fm[0], cd[0], cv[0]], [0.88, 0.10, 0.02])
-    for j in range(3):
-        changed = x.copy()
-        changed[:, j] += 0.1
-        d, v = chemistry.outputs(changed, c.eta_shared)
-        new_fm = _defense.fecundity(d, v, c, changed)[0]
-        np.testing.assert_allclose(fm - new_fm, 0.1 * (c.plant_cost if j < 2 else c.voc_cost))
-        np.testing.assert_allclose(d - D, [[0.1 if j == 0 else 0, 0.1 if j == 1 else 0]])
-        np.testing.assert_allclose(v - V, [[0.05 if j == 1 else 0, 0.1 if j == 2 else 0]])
-    for eta in (0.0, 1.0):
-        d, v = chemistry.outputs(x, eta)
-        np.testing.assert_array_equal(d, D)
-        np.testing.assert_allclose(v, [[eta * 0.6, 0.4]])
-        np.testing.assert_array_equal(_defense.fecundity(d, v, config(eta_shared=eta), x)[0], fm)
+def test_independent_module_paths_and_costs():
+    c = config()
+    values = np.array([[0.2, 0.6, 0.5, 0.3, 0.4]])
+    defense, odor = chemistry.outputs(values)
+    np.testing.assert_array_equal(defense, [[0.2, 0.6]])
+    np.testing.assert_array_equal(odor, [[0.3, 0.4]])
+    fecundity = _defense.fecundity(defense, odor, c, values)[0]
+    np.testing.assert_allclose(fecundity, [0.865])
+    for axis in range(5):
+        altered = values.copy()
+        altered[:, axis] += 0.1
+        new_defense, new_odor = chemistry.outputs(altered)
+        cost = _defense.fecundity(new_defense, new_odor, c, altered)[0]
+        np.testing.assert_allclose(
+            fecundity - cost, 0.1 * (c.plant_cost if axis < 2 else 0 if axis == 2 else c.voc_cost)
+        )
+        if axis < 3:
+            np.testing.assert_array_equal(odor, new_odor)
+        else:
+            np.testing.assert_array_equal(defense, new_defense)
 
 
-def test_shared_module_boundaries_and_configuration_contract():
+def test_chemical_boundaries_and_configuration_contract():
     c = config()
     for value in (0.0, 1.0):
-        x = np.full((2, 3), value)
-        D, V = chemistry.outputs(x, c.eta_shared)
-        assert np.isfinite(D).all() and np.isfinite(V).all()
-        expected = max(0, 1 - 2 * c.plant_cost * value - c.voc_cost * value)
-        np.testing.assert_allclose(_defense.fecundity(D, V, c, x)[0], expected)
-    x = np.ones((1, 3))
-    D, V = chemistry.outputs(x, 1.0)
-    assert _defense.fecundity(D, V, config(plant_cost=1.0), x)[0][0] == 0
-    np.testing.assert_array_equal(consumption(np.zeros((1, 2)), np.zeros((1, 2))), [1.0])
+        values = np.full((2, 5), value)
+        defense, odor = chemistry.outputs(values)
+        np.testing.assert_allclose(
+            _defense.fecundity(defense, odor, c, values)[0],
+            max(0, 1 - 2 * (c.plant_cost + c.voc_cost) * value),
+        )
     for bad in (
-        np.full((1, 4), 0.5),
-        [[np.nan, 0, 0]],
-        [[np.inf, 0, 0]],
-        [[-0.1, 0, 0]],
-        [[0, 1.1, 0]],
+        np.zeros((1, 3)),
+        np.full((1, 5), np.nan),
+        np.full((1, 5), -0.1),
+        np.full((1, 5), 1.1),
     ):
-        raises(lambda: chemistry.outputs(bad, 1.0))
-    for bad in (-0.1, 1.1, np.nan, np.inf, True, None):
-        raises(config(eta_shared=bad).validate)
+        raises(lambda: chemistry.outputs(bad))
     raises(config(rho_voc=0.5).validate)
     raises(config(B=[[1.0, 0.0], [0.0, 1.0]]).validate)
     c.genetics["alleles"][0]["effect"].append(0.0)
     raises(c.validate)
 
 
-def test_shared_qtl_shapes_native_inheritance_and_chemical_audit():
+def test_qtl_shapes_native_inheritance_and_chemical_audit():
     c = config(generations=1)
     genetic = GeneticState(c)
     for kind, sizes, width, count in (
-        ("plant", c.plant_sizes, 3, 6),
-        ("insect", c.insect_sizes, 8, 16),
+        ("plant", c.plant_sizes, 5, 10),
+        ("insect", c.insect_sizes, 10, 20),
     ):
-        g = genetic.founders(sizes, kind)
-        values, raw = genetic.phenotype(g, kind)
-        assert g.shape == (sum(sizes), 2, count) and raw.shape == (sum(sizes), width)
-        if kind == "plant":
-            assert values["plant_chemical_traits"].shape[1] == 3
+        genome = genetic.founders(sizes, kind)
+        _, raw = genetic.phenotype(genome, kind)
+        assert genome.shape == (sum(sizes), 2, count) and raw.shape == (sum(sizes), width)
     result = simulate(c)
-    assert result["metadata"]["genetics_version"] == "slim-qtl-5"
-    assert result["metadata"]["plant_trait_order"] == ["x_N", "x_S", "x_V"]
+    assert result["metadata"]["plant_trait_order"] == ["PSM1", "PSM2", "Z", "VOC1", "VOC2"]
     for state in result["snapshots"]:
-        assert "plant_voc_independent_trait" not in state
-        D, V = chemistry.outputs(state["plant_chemical_traits"], c.eta_shared)
-        np.testing.assert_array_equal(D, state["D"])
-        np.testing.assert_array_equal(V, state["V_emit"])
-        assert state["I"].shape[1] == D.shape[1] == state["A"].shape[1] == V.shape[1] == 2
-    with TemporaryDirectory() as tmp:
-        path = Path(tmp) / "run"
+        defense, odor = chemistry.outputs(state["plant_chemical_traits"])
+        np.testing.assert_array_equal(defense, state["D"])
+        np.testing.assert_array_equal(odor, state["V_emit"])
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "run"
         save_result(result, path)
         checked = audit_run(path)
-        assert checked["genetic_audit"] and checked["contribution_audit"]
-        assert checked["max_overrun"] == 0
-
-
-def test_chemical_csv_requires_empty_unused_plant_coordinate():
-    c = config()
-    parameters = dict(n=2, B=None, mapping="shared_chemical_modules", genetics=c.genetics)
-    locus = c.genetics["loci"][0]["locus_id"]
-    with TemporaryDirectory() as tmp:
-        path = Path(tmp) / "a.csv"
-        path.write_text(
-            "allele_id,locus_id,"
-            + ",".join(f"effect_{i}" for i in range(8))
-            + f"\n0,{locus},0.1,0,0,,,,,\n"
+        assert (
+            checked["genetic_audit"]
+            and checked["contribution_audit"]
+            and checked["max_overrun"] == 0
         )
+
+
+def test_chemical_csv_requires_empty_unused_plant_coordinates():
+    c = config()
+    parameters = dict(n=2, B=None, mapping="independent_psm_voc", genetics=c.genetics)
+    locus = c.genetics["loci"][0]["locus_id"]
+    with TemporaryDirectory() as temporary:
+        path = Path(temporary) / "a.csv"
+        header = "allele_id,locus_id," + ",".join(f"effect_{axis}" for axis in range(10)) + "\n"
+        path.write_text(header + f"0,{locus},0.1,0,0,0,0,,,,,\n")
         loaded, _ = load_inputs(dict(alleles="a.csv"), path.parent, parameters)
-        assert loaded["genetics"]["alleles"][0]["effect"] == [0.1, 0.0, 0.0]
-        path.write_text(path.read_text().replace("0.1,0,0,,,,,\n", "0.1,0,0,0,,,,\n"))
+        assert loaded["genetics"]["alleles"][0]["effect"] == [0.1, 0, 0, 0, 0]
+        path.write_text(header + f"0,{locus},0.1,0,0,0,0,0,,,,\n")
         raises(lambda: load_inputs(dict(alleles="a.csv"), path.parent, parameters))

@@ -4,7 +4,7 @@ import numpy as np
 
 
 def enabled(c):
-    return c.genetics["schema_version"] == "slim-qtl-5"
+    return c.genetics["schema_version"] == "slim-qtl-6"
 
 
 def validate(spec):
@@ -54,8 +54,8 @@ def profile(tuning, features, width):
 def effective(values, spec):
     """Conserved processing capacity and sensory expression profile on the fixed catalog."""
     values = np.asarray(values, float)
-    if values.ndim != 2 or values.shape[1] != 8 or not np.isfinite(values).all():
-        raise ValueError("insect module traits require N x 8 finite coordinates")
+    if values.ndim != 2 or values.shape[1] != 10 or not np.isfinite(values).all():
+        raise ValueError("insect module traits require N x 10 finite coordinates")
     # Assumption: two fixed-width Gaussian modules allocate a fixed expression capacity,
     # including an idle channel; this allocation rule is not an empirical law.
     processing = profile(values[:, 2:4], spec["chemical_features"], spec["processing_width"])

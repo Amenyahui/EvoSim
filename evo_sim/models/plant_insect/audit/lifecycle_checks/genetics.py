@@ -1,4 +1,4 @@
-"""Independent genetics checks; equations preserved from v0.1.11 audit."""
+"""Independent genetics checks; equations preserved from v0.1.12 audit."""
 
 import hashlib
 import json

@@ -1,4 +1,4 @@
-"""Oviposition stage; preserve v0.1.11 draw and execution order."""
+"""Oviposition stage; preserve v0.1.12 draw and execution order."""
 
 from dataclasses import dataclass
 
@@ -46,6 +46,7 @@ def oviposit(runtime, current: CommunityState, *, adults: AdultReproduction) -> 
         runtime.rng[1][0][0],
         runtime.rng[1][1],
         candidate_pools=spatial.candidate_pools(plants.cells, insects.cells[egg_mothers], c),
+        PSM=plants.defense,
     )
     accepted = choice["host"] >= 0
     mothers, host = egg_mothers[accepted], choice["host"][accepted]

@@ -17,7 +17,12 @@ from .lifecycle_checks.events import (
     read_records,
     unique_keys,
 )
-from .lifecycle_checks.feeding import module_choice, module_profiles
+from .lifecycle_checks.feeding import (
+    chemical_outcomes,
+    contact_probability,
+    module_choice,
+    module_profiles,
+)
 from .lifecycle_checks.genetics import audit_children, read_genetics
 from .lifecycle_checks.population import audit_parents, audit_snapshot_summaries, check_population
 from .lifecycle_checks.resources import resource_shares, vector
@@ -119,7 +124,7 @@ def audit_run_lifecycle(path, meta):
         transitions += 1
         D = state["D"]
         chemical = state["plant_chemical_traits"]
-        V = np.column_stack((c.eta_shared * chemical[:, 1], chemical[:, 2]))
+        V = chemical[:, 3:5]
         processing_cost = c.insect_cost * state["insect_module_traits"][:, :2].sum(axis=1)
         sensory_cost = c.functional_modules["sensory_cost"] * state["insect_module_traits"][
             :, 4:6
@@ -162,11 +167,28 @@ def audit_run_lifecycle(path, meta):
                 available, min(c.candidate_size, len(available)), replace=False
             )
             reason = "no_candidate"
+            visited, acceptance_probabilities, contact_results = [], [], []
             if len(candidates):
-                probabilities = module_choice(cue[candidates], state["insect_module_traits"][m], c)
-                selected = stream.choice(len(probabilities), p=probabilities)
-                if selected < len(candidates):
-                    hosts[j] = candidates[selected]
+                remaining = candidates.copy()
+                while len(remaining):
+                    probabilities = module_choice(
+                        cue[remaining], state["insect_module_traits"][m], c
+                    )
+                    selected = stream.choice(len(probabilities), p=probabilities)
+                    if selected == len(remaining):
+                        break
+                    plant = int(remaining[selected])
+                    probability = float(
+                        contact_probability(D[[plant]], state["insect_module_traits"][m], c)[0]
+                    )
+                    contact_ok = bool(stream.random() < probability)
+                    visited.append(plant)
+                    acceptance_probabilities.append(probability)
+                    contact_results.append(contact_ok)
+                    if contact_ok:
+                        hosts[j] = plant
+                        break
+                    remaining = np.delete(remaining, selected)
                 reason = "accepted" if hosts[j] >= 0 else "rejected"
             p = hosts[j]
             add(
@@ -182,6 +204,20 @@ def audit_run_lifecycle(path, meta):
                 candidate_count=len(candidates),
                 choice_order=rank,
                 candidate_plant_ids=json.dumps(pids[candidates].tolist()),
+                contact_plant_ids=json.dumps(pids[np.asarray(visited, int)].tolist()),
+                contact_accepted=json.dumps(contact_results),
+            )
+            recorded = tables["oviposition"]
+            recorded = recorded[
+                (recorded.reproduction_round == t)
+                & (recorded.maternal_id == hids[m])
+                & (recorded.egg_index == egg_indices[j])
+            ]
+            assert len(recorded) == 1
+            close(
+                json.loads(recorded.iloc[0].contact_probabilities),
+                acceptance_probabilities,
+                "contact probabilities",
             )
         accepted = hosts >= 0
         for i, j in enumerate(np.flatnonzero(accepted)):
@@ -220,17 +256,19 @@ def audit_run_lifecycle(path, meta):
         R = state["plant_resource"]
         K = vector(c.resource_capacity, pl, "P")
         dmax = vector(c.max_feeding_demand, child_hl, "H")
-        ratios = np.divide(child_I, D[hosts], out=np.full_like(child_I, np.inf), where=D[hosts] > 0)
-        q = np.minimum(1, ratios.min(axis=1))
-        demand = q * dmax
+        demand = dmax.copy()
         total, gamma, x, X = resource_shares(hosts, demand, R)
         h = np.divide(X, R, out=np.zeros_like(X, dtype=float), where=R > 0)
         g = x / dmax
+        exposure = chemical_outcomes(D[hosts], child_I, x, dmax, c)
+        q = chemical_outcomes(D[hosts], child_I, dmax, dmax, c)["survival_probability"]
         live = np.zeros(len(hchildren), bool)
         sex = np.empty(len(hchildren), np.int8)
         for s in range(len(c.insect_sizes)):
             selected = child_hl == s
-            live[selected] = rng[2, 1, s].random(selected.sum()) < g[selected]
+            live[selected] = (
+                rng[2, 1, s].random(selected.sum()) < exposure["survival_probability"][selected]
+            )
             sex[selected] = (
                 rng[7, 1, s].random(selected.sum())
                 >= c.sexual_reproduction["insect_offspring_female_probability"]
@@ -319,7 +357,7 @@ def audit_run_lifecycle(path, meta):
                 gamma=gamma[p],
                 host_h=h[p],
                 I_sum=child_I[i].sum(),
-                W_insect=g[i],
+                W_insect=exposure["survival_probability"][i],
                 survived_to_adult=bool(live[i]),
                 insect_life_stage="larva",
                 same_species_others=same,
@@ -327,18 +365,30 @@ def audit_run_lifecycle(path, meta):
                 oviposition_event_id=row.oviposition_event_id,
                 egg_index=int(egg_indices[egg]),
             )
+            for name in ("dose", "processing_capacity", "processed", "residual", "antinutrient"):
+                for axis in range(2):
+                    event[f"{name}_{axis + 1}"] = exposure[name][i, axis]
+            for name in ("nutrition_survival", "toxicity_survival", "antinutrition_survival"):
+                event[name] = exposure[name][i]
             add("events", (t, row.offspring_id), **event)
             add("larvae", (t, row.offspring_id), **event)
         live_masks["insect"] = live
-        fp = np.maximum(0, 1 - c.plant_cost * D.sum(axis=1) - c.voc_cost * chemical[:, 2])
+        fp = np.maximum(
+            0, 1 - c.plant_cost * D.sum(axis=1) - c.voc_cost * chemical[:, 3:5].sum(axis=1)
+        )
         post = np.maximum(0, R - X)
-        defoliation = 1 - post / K
+        defoliation = np.divide(X, R, out=np.zeros_like(X, dtype=float), where=R > 0)
         spec_plant = c.plant_demography
         Sp = np.exp(
             -spec_plant["background_mortality_rate"]
             - spec_plant["defoliation_mortality_rate"] * defoliation
         )
-        pcounts, ppools, psurvived = parents("plant", Sp, fp * post / K, np.ones(len(pids)))
+        recovery_rate = (
+            spec_plant["resource_recovery_rate"]
+            + spec_plant["tolerance_recovery_rate"] * chemical[:, 2]
+        )
+        replenished = K - (K - post) * np.exp(-recovery_rate)
+        pcounts, ppools, psurvived = parents("plant", Sp, fp * replenished / K, np.ones(len(pids)))
         proposal_mothers = np.repeat(np.arange(len(pids)), pcounts)
         proposal_indices = (
             np.concatenate([np.arange(n) for n in pcounts])
@@ -383,7 +433,6 @@ def audit_run_lifecycle(path, meta):
                 microsite=int(proposal_sites[i]) if proposal_sites[i] >= 0 else None,
                 offspring_id=int(child_ids[i]) if i in child_ids else None,
             )
-        replenished = K - (K - post) * np.exp(-spec_plant["resource_recovery_rate"])
         recovery = replenished - post
         live_masks["plant"] = np.ones(len(pchildren), bool)
         for i, ident in enumerate(pids):
@@ -400,10 +449,13 @@ def audit_run_lifecycle(path, meta):
                 D_sum=D[i].sum(),
                 V_emit_mean=V[i].mean(),
                 defense_cost=c.plant_cost * D[i].sum(),
-                voc_cost=c.voc_cost * chemical[i, 2],
-                W_plant=Sp[i] * fp[i] * post[i] / K[i],
+                voc_cost=c.voc_cost * chemical[i, 3:5].sum(),
+                W_plant=Sp[i] * fp[i] * replenished[i] / K[i],
                 resource_capacity=K[i],
                 resource_after_feeding=post[i],
+                tolerance_Z=chemical[i, 2],
+                recovery_rate=recovery_rate[i],
+                resource_after_recovery=replenished[i] if psurvived[i] else None,
                 defoliation=defoliation[i],
                 survival_probability=Sp[i],
                 survived=bool(psurvived[i]),

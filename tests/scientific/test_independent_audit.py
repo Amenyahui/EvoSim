@@ -18,7 +18,7 @@ from tests.support import config, raises
 
 
 def test_audit_accepts_original_slim_source_key():
-    """Pre-migration v0.1.11 records retain their original script-source path."""
+    """Pre-migration v0.1.12 records retain their original script-source path."""
     result = simulate(config(generations=1))
     with TemporaryDirectory() as temporary:
         path = Path(temporary) / "run"
@@ -135,7 +135,10 @@ def test_v016_audit_dead_larvae_and_rehashed_tampering():
 def test_v016_audit_empty_stages_terminal_and_failure():
     depleted = fixture(plant_sizes=[1, 0])
     depleted.plant_demography.update(
-        background_mortality_rate=0.0, defoliation_mortality_rate=0.0, resource_recovery_rate=0.0
+        background_mortality_rate=0.0,
+        defoliation_mortality_rate=0.0,
+        resource_recovery_rate=0.0,
+        tolerance_recovery_rate=0.0,
     )
     cases = (
         fixture(generations=0),
@@ -157,8 +160,15 @@ def test_v016_audit_empty_stages_terminal_and_failure():
                 assert result["larvae"]
                 later = [r for r in result["larvae"] if r["generation"] == 1]
                 assert not any(r["survived_to_adult"] for r in later)
-                assert all(row["R"] == 0 for row in result["plants"] if row["generation"] == 1)
-                assert result["snapshots"][-1]["plant_resource"].tolist() == [0.0]
+                np.testing.assert_allclose(
+                    [row["R"] for row in result["plants"] if row["generation"] == 1],
+                    0,
+                    rtol=0,
+                    atol=1e-14,
+                )
+                np.testing.assert_allclose(
+                    result["snapshots"][-1]["plant_resource"], 0, rtol=0, atol=1e-14
+                )
             path = Path(tmp) / str(i)
             save_result(result, path)
             checked = audit_run(path)

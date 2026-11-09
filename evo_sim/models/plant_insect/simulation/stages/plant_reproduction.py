@@ -1,4 +1,4 @@
-"""Plant reproduction stage; preserve v0.1.11 draw and execution order."""
+"""Plant reproduction stage; preserve v0.1.12 draw and execution order."""
 
 from dataclasses import dataclass
 

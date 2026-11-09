@@ -1,4 +1,4 @@
-"""Independent resources checks; equations preserved from v0.1.11 audit."""
+"""Independent resources checks; equations preserved from v0.1.12 audit."""
 
 import numpy as np
 
@@ -6,11 +6,10 @@ from .events import close
 
 
 def vector(value, labels, prefix):
-    return (
-        np.array([value[f"{prefix}{s + 1}"] for s in labels], float)
-        if isinstance(value, dict)
-        else np.full(len(labels), value, float)
-    )
+    if isinstance(value, dict):
+        return np.array([value[f"{prefix}{s + 1}"] for s in labels], float)
+    values = np.asarray(value, float)
+    return np.full(len(labels), float(values)) if values.ndim == 0 else values[labels]
 
 
 def resource_shares(host, demand, stock):

@@ -52,10 +52,10 @@ def test_cross_label_parents_and_retained_genotypes():
 def test_resource_limits_plant_reproduction():
     c = config()
     post, deficit, survival, recovered = plant_resource_update(
-        [10, 4, 0], [0, 2, 0], [10] * 3, c.plant_demography
+        [10, 4, 0], [0, 2, 0], [10] * 3, c.plant_demography, np.zeros_like([10, 4, 0], dtype=float)
     )
     np.testing.assert_allclose(post, [10, 2, 0])
-    np.testing.assert_allclose(deficit, [0, 0.8, 1])
+    np.testing.assert_allclose(deficit, [0, 0.5, 0])
     assert np.all(recovered >= post) and np.all(survival <= 1)
 
     class Population(SimpleNamespace):

@@ -1,7 +1,6 @@
 """Ecological probability, parental roles and native genetic replay contracts."""
 
 import copy
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -12,105 +11,27 @@ import numpy as np
 from evo_sim.models.plant_insect import get_runner, simulate
 from evo_sim.models.plant_insect.audit.run import audit_run
 from evo_sim.models.plant_insect.batch import save_result
-from evo_sim.models.plant_insect.biology import traits as modules
 from evo_sim.models.plant_insect.biology.insects import feeding as _feeding
 from evo_sim.models.plant_insect.simulation.stages.adult_reproduction import (
     draw_fathers,
     sample_parents,
 )
 from tests.scientific.test_functional_modules import CONFIG, module_config
-from tests.support import raises
-
-
-def test_larval_survival_probability_boundaries_and_cost_separation():
-    probability = _feeding.larval_survival_probability
-    np.testing.assert_array_equal(probability([0, 0.25, 1]), [0, 0.25, 1])
-    assert probability([]).shape == (0,)
-    for invalid in (-0.01, 1.01, np.nan, np.inf, -np.inf):
-        raises(lambda: probability([invalid]))
-    c = module_config()
-    values = np.array([[0.6, 0.4, 0, 1, 0.5, 0.2, 0, 1]] * 2)
-    I = modules.effective(values, c.functional_modules)[0]
-    for resource, expected in ((0.0, 0.0), (2.0, 1.0)):
-        result = _feeding.settle_feeding(
-            np.zeros((1, 2)),
-            I,
-            np.zeros(1, int),
-            np.zeros(2, int),
-            np.zeros((1, 2)),
-            np.zeros(2, int),
-            c,
-            np.array([resource]),
-            np.ones(2),
-            chemical=np.zeros((1, 3)),
-            module_traits=values,
-        )
-        np.testing.assert_array_equal(result["survival_probability"], [expected] * 2)
-        np.testing.assert_array_equal(result["survival_probability"], result["x"])
-        assert (result["fi"] < 1).all()
-        if resource:
-            assert (result["fi"] < result["survival_probability"]).all()
 
 
 def test_competing_larvae_conserve_resources_and_fraction():
     host = np.repeat(np.arange(3), [42, 61, 1000])
     capacity = np.array([30.0, 30.0, 300.0])
     for order in (np.arange(len(host)), np.arange(len(host))[::-1]):
-        selected = host[order]
-        result = _feeding.allocate_resources(
-            selected, np.ones(len(host)), capacity, np.ones(len(host))
-        )
+        result = _feeding.allocate_resources(host[order], capacity, np.ones(len(host)))
         assert (result["X"] <= capacity).all()
         np.testing.assert_allclose(result["X"], capacity, rtol=1e-12)
-        for plant in range(len(capacity)):
-            values = result["x"][selected == plant]
-            assert np.all(values == values[0])
-    for count in (10, 15):
-        result = _feeding.allocate_resources(
-            np.zeros(count, dtype=int), np.ones(count), np.array([10.0]), np.ones(count)
-        )
-        np.testing.assert_allclose(result["g"], np.ones(count) if count == 10 else 10 / 15)
-        np.testing.assert_allclose(result["g"].sum(), 10)
-    host = np.array([0, 0, 1, 1, -1])
-    q = np.array([1.0, 0.5, 1.0, 0.0, np.nan])
-    capacity, dmax = np.array([1.0, 0.0]), np.array([2.0, 2.0, 1.0, 1.0, 1.0])
-    e = _feeding.allocate_resources(host, q, capacity, dmax)
-    np.testing.assert_allclose(e["x"], [2 / 3, 1 / 3, 0, 0, 0])
-    np.testing.assert_array_equal(e["g"], e["x"] / dmax)
-    np.testing.assert_array_equal(_feeding.larval_survival_probability(e["g"]), e["g"])
-    assert (e["X"] <= capacity).all() and e["x"].sum() <= capacity.sum()
-    rng = np.random.default_rng(18)
-    for _ in range(30):
-        host = rng.integers(0, 4, 100)
-        q, capacity, dmax = rng.random(100), rng.random(4), rng.uniform(0.01, 2, 100)
-        e = _feeding.allocate_resources(host, q, capacity, dmax)
-        assert (e["X"] <= capacity).all()
-        np.testing.assert_array_equal(e["X"], np.bincount(host, weights=e["x"], minlength=4))
-        np.testing.assert_array_equal(e["g"], e["x"] / dmax)
-        assert (e["g"] <= q).all()
-
-
-def test_limiting_component_boundaries_and_processing_monotonicity():
-    np.testing.assert_array_equal(_feeding.consumption([[0, 0], [1, 0]], [[0, 0], [0, 1]]), [1, 0])
-    np.testing.assert_array_equal(
-        _feeding.consumption([[0, 1], [1, 1]], [[0, 0.5], [1, 0]]), [0.5, 0]
-    )
-    assert _feeding.consumption([[1e-320, 0]], [[1, 0]])[0] == 1
-    assert _feeding.consumption(np.empty((0, 2)), np.empty((0, 2))).shape == (0,)
-    for bad in (-1.0, np.nan, np.inf):
-        raises(lambda: _feeding.consumption([[bad, 1]], [[1, 1]]))
-        raises(lambda: _feeding.consumption([[1, 1]], [[bad, 1]]))
-    raises(lambda: _feeding.consumption([], []))
-    c = module_config()
-    rng = np.random.default_rng(18)
-    values, D = rng.random((100, 8)), rng.random((100, 2))
-    enhanced = values.copy()
-    enhanced[:, :2] = (enhanced[:, :2] + 1) / 2
-    I = modules.effective(values, c.functional_modules)[0]
-    more = modules.effective(enhanced, c.functional_modules)[0]
-    assert (I.sum(axis=1) <= values[:, :2].sum(axis=1)).all()
-    assert (more >= I).all()
-    assert (_feeding.consumption(D, more) >= _feeding.consumption(D, I)).all()
+        for plant in range(3):
+            shares = result["x"][host[order] == plant]
+            assert (shares == shares[0]).all()
+    result = _feeding.allocate_resources(np.array([0, -1]), [1], [2, 2])
+    np.testing.assert_array_equal(result["d"], [2, 0])
+    np.testing.assert_array_equal(result["x"], [1, 0])
 
 
 def test_mating_roles_distance_compatibility_and_per_egg_fathers():
@@ -158,8 +79,14 @@ def test_native_survival_rng_event_consistency_and_replay():
         rows = [r for r in runner.result["events"] if r["generation"] == generation]
         assert rows
         probabilities = np.array([r["W_insect"] for r in rows])
-        np.testing.assert_array_equal(probabilities, [r["g"] for r in rows])
-        np.testing.assert_array_equal(probabilities, [r["x"] / r["dmax"] for r in rows])
+        np.testing.assert_allclose(
+            probabilities,
+            [
+                r["nutrition_survival"] * r["toxicity_survival"] * r["antinutrition_survival"]
+                for r in rows
+            ],
+        )
+        assert all(r["g"] == r["x"] / r["dmax"] for r in rows)
         np.testing.assert_array_equal(
             [r["survived_to_adult"] for r in rows], expected_rng.random(len(rows)) < probabilities
         )
@@ -196,14 +123,17 @@ def test_native_survival_rng_event_consistency_and_replay():
 
 
 def test_lifecycle_consumes_explicit_probability_and_records_it():
-    # Wiring test: a replacement kernel must drive both the draw and event field.
     c = module_config(choice_mode="forced")
-    with patch.object(
-        _feeding, "larval_survival_probability", side_effect=lambda g: np.zeros_like(g)
-    ):
+    original = _feeding.chemical_survival
+
+    def no_survival(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result["survival_probability"] = np.zeros_like(result["survival_probability"])
+        return result
+
+    with patch.object(_feeding, "chemical_survival", side_effect=no_survival):
         result = simulate(c)
     assert result["metadata"]["status"]["status"] == "completed"
-    assert result["events"] and any(r["g"] > 0 for r in result["events"])
-    assert all(r["W_insect"] == 0 and not r["survived_to_adult"] for r in result["events"])
+    assert result["events"] and any(row["g"] > 0 for row in result["events"])
+    assert all(row["W_insect"] == 0 and not row["survived_to_adult"] for row in result["events"])
     assert not len(result["snapshots"][-1]["insect_ids"])
-    assert all(json.loads(r["genotype"]) for r in result["offspring"] if r["kind"] == "insect")

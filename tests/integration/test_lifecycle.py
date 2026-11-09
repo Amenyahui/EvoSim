@@ -53,6 +53,10 @@ def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
         resource_capacity={"P1": 3.0, "P2": 1.0},
         insect_cost=1.0,
     )
+    runner.config["parameters"]["contact_response"]["intercept"] = 1000.0
+    runner.config["parameters"]["chemical_processing"].update(
+        toxicity_weights=[0, 0], antinutrition_weights=[0, 0]
+    )
     runner.config["parameters"]["spatial"].update(
         initial_plant_cells=[[0, 0]],
         initial_insect_cells=[[0, 0], [0, 0]],
@@ -85,7 +89,7 @@ def test_ten_births_three_recruits_keep_all_transmissions_and_ids():
     assert sum(r["realized_genetic_contribution"] for r in parents) == 10
     assert sum(r["realized_recruitment_contribution"] for r in parents) == 3
     tx = [r for r in result["gamete_transmissions"] if r["kind"] == "insect"]
-    assert len(tx) == 10 * 2 * 16
+    assert len(tx) == 10 * 2 * 20
     assert {r["offspring_id"] for r in tx} == {r["offspring_id"] for r in children}
     assert len({r["event_id"] for r in result["oviposition"]}) == 10
     assert {r["event_id"] for r in result["oviposition"]} == {
@@ -160,19 +164,11 @@ def test_native_two_rounds_use_maternal_A_child_I_and_no_adult_resampling():
 
 
 def test_zero_resource_no_mates_rejection_terminal_and_atomicity():
-    allocation = _feeding.allocate_resources(
-        np.array([0]), np.array([1.0]), np.array([0.0]), np.array([1.0])
-    )
+    allocation = _feeding.allocate_resources(np.array([0]), np.array([0.0]), np.array([1.0]))
     assert allocation["x"].tolist() == allocation["g"].tolist() == allocation["h"].tolist() == [0.0]
-    empty = _feeding.allocate_resources(
-        np.array([], int), np.array([]), np.array([0.0]), np.array([])
-    )
+    empty = _feeding.allocate_resources(np.array([], int), np.array([0.0]), np.array([]))
     assert empty["h"].tolist() == [0.0]
-    raises(
-        lambda: _feeding.allocate_resources(
-            np.array([0]), np.array([1.0]), np.array([-1.0]), np.array([1.0])
-        )
-    )
+    raises(lambda: _feeding.allocate_resources(np.array([0]), np.array([-1.0]), np.array([1.0])))
     c = config(
         generations=1,
         insect_sizes=[10],

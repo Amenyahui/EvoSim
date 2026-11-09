@@ -213,18 +213,18 @@ def figure_B(d, out, dpi):
     t = d["trait_timeseries"].query("record_type=='trait'")
     panels = [
         (
-            "Shared / VOC-only chemical modules",
-            ("plant_chemical_traits_2", "plant_chemical_traits_3"),
+            "Independent volatile signals",
+            ("plant_chemical_traits_4", "plant_chemical_traits_5"),
             ("P1", "P2"),
-            "Δ x_S",
-            "Δ x_V",
+            "Δ VOC1",
+            "Δ VOC2",
         ),
         (
-            "Defense-only / shared chemical modules",
+            "Leaf PSM concentrations",
             ("plant_chemical_traits_1", "plant_chemical_traits_2"),
             ("P1", "P2"),
-            "Δ x_N",
-            "Δ x_S",
+            "Δ PSM1",
+            "Δ PSM2",
         ),
     ] + [
         (name, tuple(f"insect_module_traits_{i}" for i in pair), ("H1",), xlab, ylab)
@@ -233,6 +233,7 @@ def figure_B(d, out, dpi):
             ("Processing tuning", (3, 4), "Δ met μ₁", "Δ met μ₂"),
             ("Sensory expression", (5, 6), "Δ sense E₁", "Δ sense E₂"),
             ("Sensory tuning", (7, 8), "Δ sense μ₁", "Δ sense μ₂"),
+            ("Contact response coordinates", (9, 10), "Δ G1 raw", "Δ G2 raw"),
         )
     ]
     fig, axes = plt.subplots(len(panels), 2, figsize=(9.5, 3.0 + 2.05 * len(panels)))
@@ -276,6 +277,7 @@ def figure_B(d, out, dpi):
                 "Metabolic tuning",
                 "Sensory expression",
                 "Sensory tuning",
+                "Contact response",
             )[i]
             ax.set_title(
                 f"{CASE_NAMES[case]}\n{short}" if i == 0 else short,
@@ -399,7 +401,7 @@ def figure_C(d, out, dpi):
 
     # Final generation's numbers; categories differ biologically (survivors vs mated mothers).
     ax = axes[1, 1]
-    if d.get("lifecycle_schema") != "resource-coupled-plants-larval-recruitment-1":
+    if d.get("lifecycle_schema") != "dose-tolerance-lifecycle-2":
         raise ValueError("Current recruitment diagnostics require stage-explicit larval ledgers")
     stages = ["N_start", "N_mothers_with_mates", "N_potential_eggs", "N_offspring", "N_next"]
     x = np.arange(len(stages))
@@ -1078,9 +1080,9 @@ def main():
         plot_lineages(batch, a.out or batch.path / "figures/lineages", a.dpi)
         return
     version = read_settings(a.input).get("version")
-    if version != "0.1.11":
+    if version != "0.1.12":
         raise ValueError(
-            "Current diagnostics require model protocol 0.1.11; use frozen history for old results"
+            "Current diagnostics require model protocol 0.1.12; use frozen history for old results"
         )
     batch = Batch.open(a.input)
     out = a.out or batch.path / "figures"
@@ -1102,13 +1104,13 @@ def main():
     )
     GRID = tuple(meta["config"]["spatial"]["grid_shape"])
     raw_inputs = {}
-    if version == "0.1.11":
+    if version == "0.1.12":
         for run in batch.status.itertuples(index=False):
             folder = run_path(batch.path, run.case, run.replicate)
             metadata = folder / "metadata.json"
             recorded = json.loads(metadata.read_text(encoding="utf-8"))
-            assert recorded["functional_schema"] == "expression-tuning-2"
-            assert recorded["genetics_version"] == "slim-qtl-5"
+            assert recorded["functional_schema"] == "expression-tuning-contact-3"
+            assert recorded["genetics_version"] == "slim-qtl-6"
             assert "adult_settlement_enabled" not in recorded["config"]["functional_modules"]
             assert "flowering_kappa" not in recorded["config"]["functional_modules"]
             names = [
@@ -1132,7 +1134,7 @@ def main():
 
     prepare_diagnostics(batch)
     d = load_data(batch.summary_dir)
-    d["lifecycle_schema"] = "resource-coupled-plants-larval-recruitment-1"
+    d["lifecycle_schema"] = "dose-tolerance-lifecycle-2"
     for key in ["population_timeseries", "trait_timeseries"]:
         frame = d[key]
         columns = ["case", "replicate", "generation", "species"]

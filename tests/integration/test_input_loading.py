@@ -153,11 +153,11 @@ def test_csv_vector_columns_follow_current_trait_width():
         path = folder / "alleles.csv"
         path.write_text(
             "allele_id,locus_id,"
-            + ",".join(f"effect_{i}" for i in range(8))
-            + f"\n0,{locus},0.1,0,0,0,0,0,0,0\n"
+            + ",".join(f"effect_{i}" for i in range(10))
+            + f"\n0,{locus},0.1,0,0,0,0,0,0,0,0,0\n"
         )
         loaded, _ = load_inputs(dict(alleles="alleles.csv"), folder, parameters)
-        assert loaded["genetics"]["alleles"][0]["effect"] == [0.1] + [0.0] * 7
+        assert loaded["genetics"]["alleles"][0]["effect"] == [0.1] + [0.0] * 9
         path.write_text(path.read_text().replace(",effect_7", "").replace(",0\n", "\n"))
         raises(lambda: load_inputs(dict(alleles="alleles.csv"), folder, parameters))
         raises(lambda: load_inputs(dict(unknown="alleles.csv"), folder, parameters))
@@ -170,4 +170,4 @@ def test_builtin_csv_inputs_are_complete_and_resolved():
         assert hashlib.sha256(Path(source["path"]).read_bytes()).hexdigest() == source["sha256"]
     p = loaded["parameters"]
     assert p["plant_sizes"] == [20] * 10 and p["insect_sizes"] == [200]
-    assert len(p["genetics"]["loci"]) == 22 and len(p["genetics"]["alleles"]) == 152
+    assert len(p["genetics"]["loci"]) == 30 and len(p["genetics"]["alleles"]) == 168
