@@ -64,6 +64,9 @@ def test_unmated_female_is_zero_not_excluded_from_potential_egg_mean():
     c = config(plant_sizes=[0, 0], insect_sizes=[8], generations=1)
     c.sexual_reproduction["insect_founder_female_probability"] = 1.0
     result = simulate(c)
+    semantics = result["metadata"]["insect_lambda_semantics"]
+    assert "sum(met_E)" in semantics and "sum(sense_E)" in semantics
+    assert "not derived I" in semantics and "males have no egg output" in semantics
     females = [r for r in result["parents"] if r["generation"] == 0]
     assert len(females) == 8
     assert all(r["is_maternal_role"] and r["reason"] == "no_compatible_mate" for r in females)
