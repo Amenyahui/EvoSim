@@ -13,6 +13,7 @@ from evo_sim.models.plant_insect.analysis.common import (
     sha256,
     write_json,
 )
+from evo_sim.models.plant_insect.analysis.summaries.allele_change import decompose_run
 
 
 def partition_trait_variance(traits: pd.DataFrame) -> pd.DataFrame:
@@ -89,11 +90,16 @@ def summarize(batch: Batch, *, print_summary=True):
     genetic = []
     input_hashes = {}
     columns = "case generation kind species N locus_id observed_heterozygosity gene_diversity mutation_count".split()
-    summaries, populations, traits, partitions = [], [], [], []
+    summaries, populations, traits, partitions, changes = [], [], [], [], []
     for row in batch.status.itertuples():
         path = run_path(batch.path, row.case, row.replicate)
         pop = pd.read_csv(path / "populations.csv")
         populations.append(pop.assign(case=row.case, replicate=row.replicate))
+        change, hashes = decompose_run(path)
+        changes.append(change.assign(case=row.case, replicate=row.replicate))
+        input_hashes.update(
+            {str((path / name).relative_to(batch.path)): digest for name, digest in hashes.items()}
+        )
         catalog = pd.read_csv(path / "allele_catalog.csv")
         mutations = pd.read_csv(path / "mutations.csv")
         input_hashes[str((path / "genetic_summary.csv").relative_to(batch.path))] = sha256(
@@ -143,6 +149,9 @@ def summarize(batch: Batch, *, print_summary=True):
     pd.concat(partitions, ignore_index=True).to_csv(
         batch.summary_dir / "trait_variance_partition.csv", index=False
     )
+    pd.concat(changes, ignore_index=True).to_csv(
+        batch.summary_dir / "allele_change_decomposition.csv", index=False
+    )
     write_json(
         batch.summary_dir / "summarize_qtl_run_metadata.json",
         dict(
@@ -159,6 +168,19 @@ def summarize(batch: Batch, *, print_summary=True):
                 traits="inherited coordinates plus recorded defense D and processing capacity I",
                 empty_types="N=0 has zero weight; absent functional types have no snapshot rows",
                 limitation="not additive genetic variance, evolvability or a cross-trait speed ranking",
+            ),
+            allele_change=dict(
+                identity="six delta columns sum to p_next-p_parent; each is in allele-frequency units",
+                scope="all: pooled taxon; type: maternal-origin plants or preset insect compatibility pools",
+                source_mixing="realized parental-role source shares times pre-reproduction source frequencies; not within-source selection",
+                parent_reweighting="within-source realized reproductive weighting, including demographic sampling, mating and establishment",
+                meiosis="pre-mutation gamete frequency minus weighted diploid parents; finite transmission sampling, not a crossover count",
+                mutation="post-mutation birth frequency minus pre-mutation gamete frequency",
+                viability="recruit frequency minus birth frequency; includes stochastic larval survival",
+                retention="retained old-plant frequency minus starting frequency",
+                weighting="first five deltas multiplied by N_recruit/N_next; retention by N_retained/N_next",
+                empty="empty cohort frequencies and extinct next-population changes are NA; zero-weight components are zero",
+                limitation="descriptive accounting, not a causal selection estimate; plant birth already means established new plants",
             ),
         ),
     )
